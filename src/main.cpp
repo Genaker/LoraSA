@@ -1,7 +1,7 @@
  /**
    RadioLib SX126x Spectrum Scan 
 
-   This example shows how to perform a spectrum power scan using SX126x.
+   This code perform a spectrum power scan using SX126x.
    The output is in the form of scan lines, each line has 33 power bins.
    First power bin corresponds to -11 dBm, the second to -15 dBm and so on.
    Higher number of samples in a bin corresponds to more power received
