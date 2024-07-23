@@ -224,7 +224,6 @@ void loop() {
     while(radio.spectralScanGetStatus() != RADIOLIB_ERR_NONE) {
       heltec_delay(1);
     }
-    digitalWrite(25, HIGH);
     // read the results Array to which the results will be saved
     radio.spectralScanGetResult(result);
     for (y = 0; y < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE; y++) {
