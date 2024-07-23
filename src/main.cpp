@@ -49,11 +49,13 @@ unsigned int median_freqancy = FREQ_BEGIN + range_freqancy / 2;
 // Prints the scan measurement bins from the SX1262 in hex
 #define PRINT_SCAN_VALUES
 #define PRINT_PROFILE_TIME
+//Change spectrum plot values at once or by line 
+#define ANIMATED_RELOAD true
 
 // numbers of the spectrum screan lines = width of screan 
 #define STEPS 128
-// Number of samples for each scan. Fewer samples = better temporal resolution.
-#define SAMPLES 256 //(scan time = 1294)
+// Number of samples for each freqancy scan. Fewer samples = better temporal resolution.
+#define SAMPLES 35 //(scan time = 1294)
 #define MAJOR_TICK_LENGTH 3
 #define MINOR_TICK_LENGTH 1
 #define X_AXIS_WEIGHT 2
@@ -71,6 +73,7 @@ unsigned short int scan_var = 0;
 // initialized flag
 bool initialized = false;
 bool led_flag = true;
+bool first_run = false;
 // drone tetection flag
 unsigned short int drone_detected = 0;
 
@@ -81,6 +84,8 @@ unsigned int scan_time = 0;
 uint64_t start = 0;
 
 unsigned int x,y = 0;
+
+float freq = 0;
 
 
 /**
@@ -201,14 +206,22 @@ void loop() {
   #ifdef PRINT_PROFILE_TIME
     start = millis();
   #endif
+
+  if (!ANIMATED_RELOAD) {
   // clear the scan plot rectangle
-  display.setColor(BLACK);
-  display.fillRect(0, 0, STEPS, HEIGHT);
-  display.setColor(WHITE);
+    display.setColor(BLACK);
+    display.fillRect(0, 0, STEPS, HEIGHT);
+    display.setColor(WHITE);
+  }
 
   // do the scan
   for (x = 0; x < STEPS; x++) {
-    float freq = FREQ_BEGIN + (RANGE * ((float) x / STEPS));
+    if (ANIMATED_RELOAD) {
+        display.setColor(BLACK);
+        display.drawVerticalLine(x, 0, HEIGHT);
+        display.setColor(WHITE);
+    }
+    freq = FREQ_BEGIN + (RANGE * ((float) x / STEPS));
     radio.setFrequency(freq);
     #ifdef PRINT_SCAN_VALUES
         Serial.println();
@@ -237,6 +250,9 @@ void loop() {
     #ifdef PRINT_SCAN_VALUES
       Serial.println();
     #endif
+    if (first_run || ANIMATED_RELOAD){
+      display.display();
+    }
     // wait a little bit before the next scan, otherwise the SX1262 hangs
     heltec_delay(1);
   }
