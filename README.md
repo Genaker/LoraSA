@@ -43,6 +43,8 @@ Note: It is theoretically possible to program via WiFi and BTH.
     Usually takes 1 minute. The first run is slower. It needs to compile all libraries. 
     ![image](https://github.com/user-attachments/assets/6796eb5d-6e3f-45bc-b88c-251499f1ad47)
 You will have the UCOG SA logo and spectrum analyzing scanning screen when done.
+![image](https://github.com/user-attachments/assets/f86ab32a-cab1-461e-ade9-7021136a0af7)
+
  
 # Hardware
 Heltec ESP32 Lora V3:
