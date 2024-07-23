@@ -22,8 +22,11 @@
 */
 
 // frequency range in MHz to scan
-#define FREQ_BEGIN 400.00
-#define FREQ_END 500.00
+#define FREQ_BEGIN 750
+#define FREQ_END 900
+
+unsigned int range_freqancy = FREQ_END - FREQ_BEGIN;
+unsigned int median_freqancy = FREQ_BEGIN + range_freqancy / 2;
 
 // Measurement bandwidth. Allowed bandwidth values (in kHz) are:
 // 4.8, 5.8, 7.3, 9.7, 11.7, 14.6, 19.5, 23.4, 29.3, 39.0, 46.9, 58.6,
@@ -32,7 +35,7 @@
 
 // (optional) major and minor tickmarks at x MHz
 #define MAJOR_TICKS 10
-// #define MINOR_TICKS 5
+//#define MINOR_TICKS 4
 
 // Turns the 'PRG' button into the power button, long press is off 
 #define HELTEC_POWER_BUTTON   // must be before "#include <heltec_unofficial.h>"
@@ -109,15 +112,21 @@ void displayDecorate() {
     // frequencies
     display.setTextAlignment(TEXT_ALIGN_LEFT);
     display.drawString(0, SCALE_TEXT_TOP, String(FREQ_BEGIN));
+
+    display.setTextAlignment(TEXT_ALIGN_CENTER);
+    display.drawString(128/2, SCALE_TEXT_TOP, String(median_freqancy));
+    //Draw Central line
+    display.drawLine(128/2, HEIGHT + X_AXIS_WEIGHT, 128 / 2 , HEIGHT + X_AXIS_WEIGHT + 4);
+
     display.setTextAlignment(TEXT_ALIGN_RIGHT);
-    display.drawString(127, SCALE_TEXT_TOP, String(FREQ_END));
+    display.drawString(128, SCALE_TEXT_TOP, String(FREQ_END));
     }
   
-  if(led_flag == true){
-    digitalWrite(35, HIGH);
+  if(led_flag == true) {
+    digitalWrite(LED, HIGH);
     led_flag = false;
   } else {
-    digitalWrite(35, LOW);
+    digitalWrite(LED, LOW);
     led_flag = true;
   }
   // Status text block
@@ -157,7 +166,7 @@ void displayDecorate() {
 
 
 void setup() {
-  pinMode(35, OUTPUT);
+  pinMode(LED, OUTPUT);
   heltec_setup();
   display.clear();
   // draw the logo
@@ -180,8 +189,8 @@ void setup() {
   RADIOLIB_OR_HALT(radio.setDataShaping(RADIOLIB_SHAPING_NONE));
   both.println("Starting scaning...");
   float vbat = heltec_vbat();
-  both.printf("Vbat: %.2fV (%d%%)\n", vbat, heltec_battery_percent(vbat));
-  heltec_delay(800);
+  both.printf("V battrry: %.2fV (%d%%)\n", vbat, heltec_battery_percent(vbat));
+  heltec_delay(100);
  
   display.clear();
   displayDecorate();
@@ -230,7 +239,7 @@ void loop() {
       Serial.println();
     #endif
     // wait a little bit before the next scan, otherwise the SX1262 hangs
-    heltec_delay(4);
+    heltec_delay(1);
   }
   #ifdef PRINT_SCAN_VALUES
     Serial.println();
