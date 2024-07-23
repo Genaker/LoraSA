@@ -46,11 +46,15 @@ at that level.
 32	-135
 33	-139
 
+Example:
+step-13 Frequancy:816.25
+Power Bins: 0000,0000,0000,0000,0000,0000,0000,0000,0000,0000,  0000,0000,0000,0000,0000,0000,0000,0000,0000,0400,  0000,0000,0000,0000,0000,0000,0006,001B,000E,0005,   0006,0002,0000,
+
 The spectrum analyzer performs power measurements in the configured bandwidth.
 
-The X axis represents frequency in MHZ and Y axis display actual received power in 33 dBm.
+The X axis represents frequency in MHZ and Y axis display actual received power.
 In this example above, the frequency span goes from 850 MHz to 950 MHz (that is a 100MHz range), and
-the visual amplitude goes from -11 dBm to -110(-139) dBm.
+the visual amplitude goes from -11 dBm to -110(-139) according to the datasheet(High sensitivity: down to -148dBm) dBm.
 
 To show the results in a plot, run the Python script
 RadioLib/extras/SX126x_Spectrum_Scan/SpectrumScan.py
