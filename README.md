@@ -11,7 +11,7 @@ The first power bin corresponds to -11 dBm, the second to -15 dBm, and so on.
 The higher number of samples in a bin corresponds to more power received
 at that level.
 
-# in Bin / dBm
+N in Bin / dBm
 1	-11
 2	-15
 3	-19
