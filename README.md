@@ -6,12 +6,51 @@ RF Spectrum Analyzer using Lora Radio
 RadioLib SX126x Spectrum Scan 
 
 Perform a spectrum power scan using SX126x.
-The output is in the form of scan lines, each line has 33 power bins.
-First power bin corresponds to -11 dBm, the second to -15 dBm and so on.
-Higher number of samples in a bin corresponds to more power received
+The output is in the form of scan lines; each line has 33 power bins.
+The first power bin corresponds to -11 dBm, the second to -15 dBm, and so on.
+The higher number of samples in a bin corresponds to more power received
 at that level.
 
-The spectrum analyzer perform power measurements in the configured bandwidth.
+# in Bin / dBm
+1	-11
+2	-15
+3	-19
+4	-23
+5	-27
+6	-31
+7	-35
+8	-39
+9	-43
+10	-47
+11	-51
+12	-55
+13	-59
+14	-63
+15	-67
+16	-71
+17	-75
+18	-79
+19	-83
+20	-87
+21	-91
+22	-95
+23	-99
+24	-103
+25	-107
+26	-111
+27	-115
+28	-119
+29	-123
+30	-127
+31	-131
+32	-135
+33	-139
+
+The spectrum analyzer performs power measurements in the configured bandwidth.
+
+The X axis represents frequency in MHZ and Y axis display actual received power in 33 dBm.
+In this example above, the frequency span goes from 850 MHz to 950 MHz (that is a 100MHz range), and
+the visual amplitude goes from -11 dBm to -110(-139) dBm.
 
 To show the results in a plot, run the Python script
 RadioLib/extras/SX126x_Spectrum_Scan/SpectrumScan.py
