@@ -1,6 +1,8 @@
 # Lora SA(Spectrum Analyzer)
 RF Spectrum Analyzer using Lora Radio
 
+![IMG_5267](https://github.com/user-attachments/assets/4caeb467-1964-4184-ab20-ba68b97144aa)
+
 RadioLib SX126x Spectrum Scan 
 
 Perform a spectrum power scan using SX126x.
