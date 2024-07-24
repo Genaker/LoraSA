@@ -55,7 +55,7 @@ unsigned int median_freqancy = FREQ_BEGIN + range_freqancy / 2;
 // numbers of the spectrum screan lines = width of screan 
 #define STEPS 128
 // Number of samples for each freqancy scan. Fewer samples = better temporal resolution.
-#define SAMPLES 50 //(scan time = 1294)
+#define SAMPLES 190 //(scan time = 1294)
 #define MAJOR_TICK_LENGTH 3
 #define MINOR_TICK_LENGTH 1
 #define X_AXIS_WEIGHT 2
@@ -194,7 +194,7 @@ void setup() {
   heltec_setup();
   display.clear();
   // draw the logo
-  display.drawXbm(0, 0, 128, 64, epd_bitmap_ucog);
+  display.drawXbm(0, 2, 128, 64, epd_bitmap_ucog);
   display.display();
   heltec_delay(4000);
   // initialize SX1262 FSK modem at the initial frequency
@@ -214,7 +214,7 @@ void setup() {
   both.println("Starting scaning...");
   float vbat = heltec_vbat();
   both.printf("V battrry: %.2fV (%d%%)\n", vbat, heltec_battery_percent(vbat));
-  heltec_delay(100);
+  heltec_delay(200);
  
   display.clear();
   displayDecorate();
@@ -242,6 +242,7 @@ void loop() {
     if (ANIMATED_RELOAD) {
         display.setColor(BLACK);
         display.drawVerticalLine(x, 0, HEIGHT);
+        display.drawVerticalLine(x + 1, 0, HEIGHT);
         display.setColor(WHITE);
     }
     freq = FREQ_BEGIN + (RANGE * ((float) x / STEPS));
@@ -289,9 +290,14 @@ void loop() {
           display.setPixel(x, 2);
           display.setPixel(x, 3);
         }
-          if(filtered_result[y] == 1 || y == DRONE_DETECTION_LEVEL){
+          if(filtered_result[y] == 1){
             display.setPixel(x, y);
           }
+
+          //Detection Level line 
+          if(y == DRONE_DETECTION_LEVEL && x%2 == 0) {
+              display.setPixel(x, y);
+            }
       }
     }
     #ifdef PRINT_SCAN_VALUES
