@@ -91,6 +91,7 @@ You will have the UCOG SA logo and spectrum analyzing scanning screen when done.
 # Hardware
 Heltec ESP32 Lora V3:
 https://www.amazon.com/Heltec-Development-863-870MHz-ESP32-S3FN8-902-928MHz/dp/B0D1H1FN9Y/ref=asc_df_B0D1H1FN9Y/?tag=hyprod-20&linkCode=df0&hvadid=692875362841&hvpos=&hvnetw=g&hvrand=5065402673437807142&hvpone=&hvptwo=&hvqmt=&hvdev=c&hvdvcmdl=&hvlocint=&hvlocphy=9031318&hvtargid=pla-2281435177418&psc=1&mcid=00370fce72f93747a79b8b147a2aa8f1&hvocijid=5065402673437807142-B0D1H1FN9Y-&hvexpln=73&gad_source=1
+
 Battery with Wire JT connector : 
 https://www.amazon.com/EEMB-2000mAh-Battery-Rechargeable-Connector/dp/B08214DJLJ?psc=1&pd_rd_w=mU7Pe&content-id=amzn1.sym.3c1bdb31-a20d-42d0-a8cf-ddadf63cd1a8&pf_rd_p=3c1bdb31-a20d-42d0-a8cf-ddadf63cd1a8&pf_rd_r=55CKD999WT1GWQ396J0K&pd_rd_wg=3ydoN&pd_rd_r=715cbd78-a843-4972-a5d5-e26e2716b910&ref_=sspa_dk_detail_2
 
