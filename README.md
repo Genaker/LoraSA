@@ -87,7 +87,6 @@ Note: It is theoretically possible to program via WiFi and BTH.
     ![image](https://github.com/user-attachments/assets/6796eb5d-6e3f-45bc-b88c-251499f1ad47)
 You will have the UCOG SA logo and spectrum analyzing scanning screen when done.
 ![image](https://github.com/user-attachments/assets/f86ab32a-cab1-461e-ade9-7021136a0af7)
-
  
 # Hardware
 Heltec ESP32 Lora V3:
@@ -99,3 +98,7 @@ https://www.amazon.com/EEMB-2000mAh-Battery-Rechargeable-Connector/dp/B08214DJLJ
 https://www.thingiverse.com/thing:3125854
 or buy : 
 https://www.amazon.com/DIYmalls-ESP32-OLED-WiFi-Type-C/dp/B0BR3MQ9BG
+
+# Heltec ESP32 Lora v3 Pin Map
+![image](https://github.com/user-attachments/assets/a1e00b51-5566-4ff5-98fe-67eaeb5bc81f)
+We are using pin 41 as a Buzzer trigger. Connect buzzer + leg with pin 41 and - leg with the ground (GND). You can change the buzzer pin in the code. 
