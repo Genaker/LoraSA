@@ -55,7 +55,7 @@ unsigned int median_freqancy = FREQ_BEGIN + range_freqancy / 2;
 // numbers of the spectrum screan lines = width of screan 
 #define STEPS 128
 // Number of samples for each freqancy scan. Fewer samples = better temporal resolution.
-#define SAMPLES 35 //(scan time = 1294)
+#define SAMPLES 50 //(scan time = 1294)
 #define MAJOR_TICK_LENGTH 3
 #define MINOR_TICK_LENGTH 1
 #define X_AXIS_WEIGHT 2
@@ -66,16 +66,23 @@ unsigned int median_freqancy = FREQ_BEGIN + range_freqancy / 2;
 #define RANGE (float)(FREQ_END - FREQ_BEGIN)
 #define SINGLE_STEP (float)(RANGE / STEPS)
 
+#define DRONE_DETECTION_LEVEL 20
+
+#define BUZZZER_PIN 41
+
 // Array to store the scan results
 uint16_t result[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
+uint16_t filtered_result[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
 // global variable 
 unsigned short int scan_var = 0;
 // initialized flag
 bool initialized = false;
-bool led_flag = true;
+bool led_flag = false;
 bool first_run = false;
 // drone tetection flag
-unsigned short int drone_detected = 0;
+bool drone_detected = false;
+unsigned int drone_detected_freqancy_start = 0;
+unsigned int drone_detected_freqancy_end = 0;
 
 unsigned int start_scan_text = (128 / 2) - 3;
 
@@ -86,7 +93,6 @@ uint64_t start = 0;
 unsigned int x,y = 0;
 
 float freq = 0;
-
 
 /**
  * @brief Draws ticks on the display at regular whole intervals.
@@ -105,7 +111,6 @@ void drawTicks(float every, int length) {
   }
 }
 
-
 /**
  * @brief Decorates the display: everything but the plot itself.
  */
@@ -117,6 +122,9 @@ void displayDecorate() {
     // frequencies
     display.setTextAlignment(TEXT_ALIGN_LEFT);
     display.drawString(0, SCALE_TEXT_TOP, String(FREQ_BEGIN));
+    //drone detection level
+    display.setTextAlignment(TEXT_ALIGN_RIGHT);
+    display.drawString(128, 0, String(DRONE_DETECTION_LEVEL));
 
     display.setTextAlignment(TEXT_ALIGN_CENTER);
     display.drawString(128/2, SCALE_TEXT_TOP, String(median_freqancy));
@@ -129,10 +137,10 @@ void displayDecorate() {
   
   if(led_flag == true) {
     digitalWrite(LED, HIGH);
+    tone(BUZZZER_PIN, 104, 500);
     led_flag = false;
   } else {
     digitalWrite(LED, LOW);
-    led_flag = true;
   }
   // Status text block
   if (drone_detected == 0) {
@@ -153,6 +161,16 @@ void displayDecorate() {
       }
       scan_var++;
       if (scan_var == 3) scan_var = 0;
+    } else {
+      display.setTextAlignment(TEXT_ALIGN_CENTER);
+      //clear status line 
+      display.setColor(BLACK);
+      display.fillRect(0, STATUS_TEXT_TOP, 128, 16);
+      display.setColor(WHITE);
+      
+      display.drawString(start_scan_text, STATUS_TEXT_TOP, String(drone_detected_freqancy_start) + "->!UAV!<- " + String(drone_detected_freqancy_end));
+      drone_detected_freqancy_start = 0;
+      drone_detected = 0;
     }
 
   if (!initialized) {
@@ -172,6 +190,7 @@ void displayDecorate() {
 
 void setup() {
   pinMode(LED, OUTPUT);
+  pinMode(BUZZZER_PIN, OUTPUT);
   heltec_setup();
   display.clear();
   // draw the logo
@@ -214,6 +233,10 @@ void loop() {
     display.setColor(WHITE);
   }
 
+    display.setTextAlignment(TEXT_ALIGN_RIGHT);
+    //drone detection level 
+    display.drawString(128, 0, String(DRONE_DETECTION_LEVEL));
+
   // do the scan
   for (x = 0; x < STEPS; x++) {
     if (ANIMATED_RELOAD) {
@@ -239,12 +262,36 @@ void loop() {
     }
     // read the results Array to which the results will be saved
     radio.spectralScanGetResult(result);
+    //Filter Elements without neabors 
+    for (y = 1; y < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE; y++) {
+      if(result[y] && (result[y + 1] > 0 || result[y - 1] > 0 )){
+        filtered_result[y] = 1;
+      } else {
+        filtered_result[y] = 0;
+      }
+    }
+
     for (y = 0; y < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE; y++) {
     #ifdef PRINT_SCAN_VALUES
         Serial.printf("%04X,", result[y]);
     #endif
-      if (result[y]) {
-        display.setPixel(x, y);
+      if (result[y] || y == DRONE_DETECTION_LEVEL) {
+        // check if we shuld alarm the dron
+        if (filtered_result[y] == 1 && y <= DRONE_DETECTION_LEVEL) {
+          drone_detected = true;
+          if(drone_detected_freqancy_start == 0) {
+            drone_detected_freqancy_start = freq; 
+          }
+          drone_detected_freqancy_end = freq;
+          led_flag = true;
+          tone(BUZZZER_PIN, 205, 10);
+          display.setPixel(x, 1);
+          display.setPixel(x, 2);
+          display.setPixel(x, 3);
+        }
+          if(filtered_result[y] == 1 || y == DRONE_DETECTION_LEVEL){
+            display.setPixel(x, y);
+          }
       }
     }
     #ifdef PRINT_SCAN_VALUES
