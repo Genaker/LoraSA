@@ -67,7 +67,7 @@ unsigned int median_freqancy = FREQ_BEGIN + range_freqancy / 2;
 #define SINGLE_STEP (float)(RANGE / STEPS)
 
 // Detection level from the 33 levels. Higher number is more sensative
-#define DRONE_DETECTION_LEVEL 21
+#define DEFAULT_DRONE_DETECTION_LEVEL 21
 
 #define BUZZZER_PIN 41
 
@@ -83,7 +83,7 @@ bool led_flag = false;
 bool first_run = false;
 // drone tetection flag
 bool drone_detected = false;
-unsigned int drone_detection_level = DRONE_DETECTION_LEVEL;
+unsigned int drone_detection_level = DEFAULT_DRONE_DETECTION_LEVEL;
 unsigned int drone_detected_freqancy_start = 0;
 unsigned int drone_detected_freqancy_end = 0;
 
@@ -147,7 +147,7 @@ void displayDecorate()
   if (led_flag == true)
   {
     digitalWrite(LED, HIGH);
-    tone(BUZZZER_PIN, 104, 500);
+    tone(BUZZZER_PIN, 104, 250);
     led_flag = false;
   }
   else
@@ -320,7 +320,14 @@ scan_start_time = millis();
           }
           drone_detected_freqancy_end = freq;
           led_flag = true;
-          tone(BUZZZER_PIN, 205, 10);
+          //if level to sensetive doing beep every 10th freaqancy and shorter
+          //TODO: make every 10th detection...
+          if (drone_detection_level < 25){
+            tone(BUZZZER_PIN, 205, 10);
+          } else {
+            if (x % 10 == 0)
+            tone(BUZZZER_PIN, 205, 5);
+          }
           display.setPixel(x, 1);
           display.setPixel(x, 2);
           display.setPixel(x, 3);
@@ -351,13 +358,13 @@ scan_start_time = millis();
       display.setTextAlignment(TEXT_ALIGN_RIGHT);
       // erase old value
       display.setColor(BLACK);
-      display.fillRect(128-12, 0, 12, 12);
+      display.fillRect(128-13, 0, 13, 13);
       display.setColor(WHITE);
       drone_detection_level++;
       // print new value
       display.drawString(128, 0, String(drone_detection_level));
       if (drone_detection_level > 30) {
-        drone_detection_level = 0;
+        drone_detection_level = 1;
       }
   }
     // wait a little bit before the next scan, otherwise the SX1262 hangs
