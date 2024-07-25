@@ -22,7 +22,7 @@
 */
 
 // frequency range in MHz to scan
-#define FREQ_BEGIN 750
+#define FREQ_BEGIN 820
 #define FREQ_END 900
 
 unsigned int range_freqancy = FREQ_END - FREQ_BEGIN;
@@ -66,8 +66,8 @@ unsigned int median_freqancy = FREQ_BEGIN + range_freqancy / 2;
 #define RANGE (float)(FREQ_END - FREQ_BEGIN)
 #define SINGLE_STEP (float)(RANGE / STEPS)
 
-// Detection level from the 33 levels
-#define DRONE_DETECTION_LEVEL 19
+// Detection level from the 33 levels. Higher number is more sensative
+#define DRONE_DETECTION_LEVEL 21
 
 #define BUZZZER_PIN 41
 
@@ -83,12 +83,14 @@ bool led_flag = false;
 bool first_run = false;
 // drone tetection flag
 bool drone_detected = false;
+unsigned int drone_detection_level = DRONE_DETECTION_LEVEL;
 unsigned int drone_detected_freqancy_start = 0;
 unsigned int drone_detected_freqancy_end = 0;
 
 unsigned int start_scan_text = (128 / 2) - 3;
 
 unsigned int scan_time = 0;
+unsigned int scan_start_time = 0;
 
 uint64_t start = 0;
 
@@ -131,7 +133,7 @@ void displayDecorate()
     display.drawString(0, SCALE_TEXT_TOP, String(FREQ_BEGIN));
     // drone detection level
     display.setTextAlignment(TEXT_ALIGN_RIGHT);
-    display.drawString(128, 0, String(DRONE_DETECTION_LEVEL));
+    display.drawString(128, 0, String(drone_detection_level));
 
     display.setTextAlignment(TEXT_ALIGN_CENTER);
     display.drawString(128 / 2, SCALE_TEXT_TOP, String(median_freqancy));
@@ -214,7 +216,7 @@ void setup()
   // draw the logo
   display.drawXbm(0, 2, 128, 64, epd_bitmap_ucog);
   display.display();
-  heltec_delay(4000);
+  delay(4000);
   // initialize SX1262 FSK modem at the initial frequency
   both.println("Init radio");
   RADIOLIB_OR_HALT(radio.beginFSK(FREQ_BEGIN));
@@ -232,7 +234,7 @@ void setup()
   both.println("Starting scaning...");
   float vbat = heltec_vbat();
   both.printf("V battery: %.2fV (%d%%)\n", vbat, heltec_battery_percent(vbat));
-  heltec_delay(300);
+  delay(300);
 
   display.clear();
   displayDecorate();
@@ -255,7 +257,7 @@ void loop()
 
   display.setTextAlignment(TEXT_ALIGN_RIGHT);
   // drone detection level
-  display.drawString(128, 0, String(DRONE_DETECTION_LEVEL));
+  display.drawString(128, 0, String(drone_detection_level));
 
   // do the scan
   for (x = 0; x < STEPS; x++)
@@ -277,6 +279,8 @@ void loop()
     Serial.print(freq);
     Serial.println();
 #endif
+
+scan_start_time = millis();
     // start spectral scan
     radio.spectralScanStart(SAMPLES, 1);
     // wait for spectral scan to finish
@@ -304,10 +308,10 @@ void loop()
 #ifdef PRINT_SCAN_VALUES
       Serial.printf("%04X,", result[y]);
 #endif
-      if (result[y] || y == DRONE_DETECTION_LEVEL)
+      if (result[y] || y == drone_detection_level)
       {
         // check if we shuld alarm the dron
-        if (filtered_result[y] == 1 && y <= DRONE_DETECTION_LEVEL)
+        if (filtered_result[y] == 1 && y <= drone_detection_level)
         {
           drone_detected = true;
           if (drone_detected_freqancy_start == 0)
@@ -320,6 +324,7 @@ void loop()
           display.setPixel(x, 1);
           display.setPixel(x, 2);
           display.setPixel(x, 3);
+          display.setPixel(x, 4);
         }
         if (filtered_result[y] == 1)
         {
@@ -327,7 +332,7 @@ void loop()
         }
 
         // Detection Level line
-        if (y == DRONE_DETECTION_LEVEL && x % 2 == 0)
+        if (y == drone_detection_level && x % 2 == 0)
         {
           display.setPixel(x, y);
         }
@@ -340,8 +345,29 @@ void loop()
     {
       display.display();
     }
+
+    // Detection level button short press
+    if (button.pressedFor(100)) {
+      display.setTextAlignment(TEXT_ALIGN_RIGHT);
+      // erase old value
+      display.setColor(BLACK);
+      display.fillRect(128-12, 0, 12, 12);
+      display.setColor(WHITE);
+      drone_detection_level++;
+      // print new value
+      display.drawString(128, 0, String(drone_detection_level));
+      if (drone_detection_level > 30) {
+        drone_detection_level = 0;
+      }
+  }
     // wait a little bit before the next scan, otherwise the SX1262 hangs
     heltec_delay(1);
+
+#ifdef PRINT_PROFILE_TIME
+  scan_time = millis() - scan_start_time;
+  Serial.printf("Single Scan took %lld ms\n", scan_time);
+#endif
+
   }
 #ifdef PRINT_SCAN_VALUES
   Serial.println();
