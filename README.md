@@ -105,6 +105,8 @@ https://thangs.com/designer/Snake0017/3d-model/Heltec%20LoRa%2032%20Desktop%20%2
 or buy : 
 https://www.amazon.com/DIYmalls-ESP32-OLED-WiFi-Type-C/dp/B0BR3MQ9BG
 
+https://www.thingiverse.com/thing:6522462
+
 # Heltec ESP32 Lora v3 Pin Map
 ![image](https://github.com/user-attachments/assets/a1e00b51-5566-4ff5-98fe-67eaeb5bc81f)
 We are using pin 41 as a Buzzer trigger. Connect buzzer + leg with pin 41 and - leg with the ground (GND). You can change the buzzer pin in the code. 
