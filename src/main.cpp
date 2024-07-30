@@ -22,14 +22,16 @@
 */
 
 // frequency range in MHz to scan
-#define FREQ_BEGIN 860
+#define FREQ_BEGIN 830
 // TODO: if % RANGE_PER_PAGE  1= 0
 #define FREQ_END 960
 
+//TODO: Ignore power lines
 #define UP_FILTER = 5;
 #define LOW_FILTER = 3;
 
 // numbers of the spectrum screen lines = width of screen
+// resolution of the scan limited by 128 pixel screan
 #define STEPS 128
 // Number of samples for each frequency scan. Fewer samples = better temporal resolution.
 #define SAMPLES 60 //(scan time = 1294)
@@ -37,7 +39,7 @@
 #define RANGE (int)(FREQ_END - FREQ_BEGIN)
 // MHZ per page
 // to put everething into one page set RANGE_PER_PAGE = FREQ_END - 800
-unsigned int RANGE_PER_PAGE = 100;
+unsigned int RANGE_PER_PAGE = 130;
 #define SINGLE_STEP (float)(RANGE / STEPS)
 
 unsigned int single_step = SINGLE_STEP;
@@ -338,68 +340,78 @@ void setup()
   delay(300);
 
   display.clear();
+
+ 
+  float resolution = RANGE / STEPS;
+  if (RANGE_PER_PAGE == range)
+  {
+    single_page_scan = true;
+  }
+  else
+  {
+    single_page_scan = false;
+  }
+
+   // Adjust range if it is not even to RANGE_PER_PAGE
+  if (!single_page_scan && range % RANGE_PER_PAGE != 0)
+  {
+    //range = range + range % RANGE_PER_PAGE;
+  }
+
+  if (single_page_scan)
+  {
+    both.println("Single Page Screen MODE");
+    both.println("Multi Screen View Press P - button");
+    both.println("Single Screen Resolution: " + String(resolution) + "Mhz/tick");
+    both.println("Curent Resolution: " + String((float)RANGE_PER_PAGE / STEPS) + "Mhz/tick");
+
+    for (int i = 0; i < 500; i++)
+    {
+      button.update();
+      delay(10);
+      both.print(".");
+      if (button.pressed())
+      {
+        Serial.print("Button pressed");
+        RANGE_PER_PAGE = 50;
+        single_page_scan = false;
+        tone(BUZZZER_PIN, 205, 100);
+        delay(50);
+        tone(BUZZZER_PIN, 205, 100);
+        break;
+      }
+    }
+  }
+  else
+  {
+    both.println("Multi Page Screen MODE");
+    both.println("Single screen View Press P - button");
+    both.println("Single screen Resolution: " + String(resolution) + "Mhz/tick");
+    both.println("Curent Resolution: " + String((float)RANGE_PER_PAGE / STEPS) + "Mhz/tick");
+
+    for (int i = 0; i < 500; i++)
+    {
+      button.update();
+      delay(10);
+      both.print(".");
+      if (button.pressed())
+      {
+        RANGE_PER_PAGE = range;
+        single_page_scan = true;
+        tone(BUZZZER_PIN, 205, 100);
+
+        break;
+      }
+    }
+  }
+  display.clear();
+
   // waterfall start line y-asix
   w = WATERFALL_START;
 }
 
 void loop()
 {
-  if (!initialized)
-  {
-    float resolution = RANGE / STEPS;
-    if (RANGE_PER_PAGE == range)
-    {
-      single_page_scan = true;
-    }
-    else
-    {
-      single_page_scan = false;
-    }
-
-    if (single_page_scan)
-    {
-      both.println("Single Page Screan MODE");
-      both.println("To Enable single screan View Press P - button");
-      both.println("Single Screan Resolution: " + String(resolution) + "Mhz/tick");
-      for (int i = 0; i < 500; i++)
-      {
-        delay(10);
-        both.print(".");
-        if (button.pressed())
-        {
-          RANGE_PER_PAGE = 50;
-          single_page_scan = false;
-          tone(BUZZZER_PIN, 205, 100);
-          delay(50);
-          tone(BUZZZER_PIN, 205, 100);
-          break;
-        }
-      }
-    }
-    else
-    {
-      both.println("Multi Page Screan MODE");
-      both.println("To Enable single screan View Press P - button");
-      both.println("Single screan Resolution: " + String(resolution) + "Mhz/tick");
-      both.println("Curent Resolution: " + String((float)RANGE_PER_PAGE / STEPS) + "Mhz/tick");
-
-      for (int i = 0; i < 500; i++)
-      {
-        delay(10);
-        both.print(".");
-        if (button.pressed())
-        {
-          RANGE_PER_PAGE = range;
-          single_page_scan = true;
-          tone(BUZZZER_PIN, 205, 100);
-          delay(50);
-          tone(BUZZZER_PIN, 205, 100);
-          break;
-        }
-      }
-    }
-    display.clear();
-  }
   displayDecorate();
   drone_detected = false;
   drone_detected_freqancy_start = 0;
@@ -423,7 +435,7 @@ void loop()
 
   fr_begin = FREQ_BEGIN;
   fr_end = fr_begin;
-  // 50 is a single screan range
+  // 50 is a single screen range
   // TODO:Make 50 as a variable with the option show full range
   iterations = range / RANGE_PER_PAGE;
 
@@ -497,8 +509,8 @@ void loop()
       }
       // read the results Array to which the results will be saved
       radio.spectralScanGetResult(result);
-      // Filter Elements without neabors
       bool detected = false;
+      // Filter Elements without neabors
       for (y = 1; y < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE; y++)
       {
         if (result[y] && (result[y + 1] > 0 || result[y - 1] > 0))
