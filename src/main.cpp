@@ -22,11 +22,15 @@
 */
 
 // frequency range in MHz to scan
-#define FREQ_BEGIN 830
+#define FREQ_BEGIN 850
 // TODO: if % RANGE_PER_PAGE  1= 0
-#define FREQ_END 960
+#define FREQ_END 950
 
-//TODO: Ignore power lines
+// MHZ per page
+// to put everething into one page set RANGE_PER_PAGE = FREQ_END - 800
+unsigned int RANGE_PER_PAGE = FREQ_END - FREQ_BEGIN; // FREQ_END - FREQ_BEGIN
+
+// TODO: Ignore power lines
 #define UP_FILTER = 5;
 #define LOW_FILTER = 3;
 
@@ -37,9 +41,7 @@
 #define SAMPLES 60 //(scan time = 1294)
 
 #define RANGE (int)(FREQ_END - FREQ_BEGIN)
-// MHZ per page
-// to put everething into one page set RANGE_PER_PAGE = FREQ_END - 800
-unsigned int RANGE_PER_PAGE = 130;
+
 #define SINGLE_STEP (float)(RANGE / STEPS)
 
 unsigned int single_step = SINGLE_STEP;
@@ -72,7 +74,7 @@ unsigned int median_freqancy = FREQ_BEGIN + range_freqancy / 2;
 #include "modules/SX126x/patches/SX126x_patch_scan.h"
 
 // Prints the scan measurement bins from the SX1262 in hex
-#define PRINT_SCAN_VALUES
+//#define PRINT_SCAN_VALUES
 #define PRINT_PROFILE_TIME
 // Change spectrum plot values at once or by line
 #define ANIMATED_RELOAD true
@@ -242,7 +244,7 @@ void displayDecorate(int begin = 0, int end = 0, bool redraw = false)
     display.drawString(128, SCALE_TEXT_TOP, (end == 0) ? String(FREQ_END) : String(end));
   }
 
-  if (led_flag == true)
+  if (led_flag == true && detection_count > 5)
   {
     digitalWrite(LED, HIGH);
     tone(BUZZZER_PIN, 104, 250);
@@ -341,7 +343,6 @@ void setup()
 
   display.clear();
 
- 
   float resolution = RANGE / STEPS;
   if (RANGE_PER_PAGE == range)
   {
@@ -352,10 +353,10 @@ void setup()
     single_page_scan = false;
   }
 
-   // Adjust range if it is not even to RANGE_PER_PAGE
+  // Adjust range if it is not even to RANGE_PER_PAGE
   if (!single_page_scan && range % RANGE_PER_PAGE != 0)
   {
-    //range = range + range % RANGE_PER_PAGE;
+    // range = range + range % RANGE_PER_PAGE;
   }
 
   if (single_page_scan)
@@ -414,6 +415,7 @@ void loop()
 {
   displayDecorate();
   drone_detected = false;
+  detection_count = 0;
   drone_detected_freqancy_start = 0;
 #ifdef PRINT_PROFILE_TIME
   start = millis();
@@ -559,8 +561,6 @@ void loop()
               if (detection_count % 10 == 0)
                 tone(BUZZZER_PIN, 205, 5);
             }
-
-            // TODO: make  detection waterfall
             display.setPixel(x, 1);
             display.setPixel(x, 2);
             display.setPixel(x, 3);
@@ -569,6 +569,7 @@ void loop()
           else if (filtered_result[y] == 1 && y > drone_detection_level && single_page_scan && waterfall[i][x][w] != true)
           {
             // if drone not found dark pixel on waterfall
+            // TODO: make somethin like scrolling up if possible 
             waterfall[i][x][w] = false;
             display.setColor(BLACK);
             display.setPixel(x, w);
@@ -632,6 +633,15 @@ void loop()
     {
       w = WATERFALL_START;
     }
+
+    // Draw waterfall position cursor
+    if (single_page_scan)
+    {
+      display.setColor(BLACK);
+      display.drawHorizontalLine(0, w, STEPS);
+      display.setColor(WHITE);
+    }
+
     display.display();
   }
 
