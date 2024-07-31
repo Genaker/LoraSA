@@ -38,7 +38,8 @@ unsigned int RANGE_PER_PAGE = FREQ_END - FREQ_BEGIN; // FREQ_END - FREQ_BEGIN
 // resolution of the scan limited by 128 pixel screan
 #define STEPS 128
 // Number of samples for each frequency scan. Fewer samples = better temporal resolution.
-#define SAMPLES 200 //(scan time = 1294)
+// if more tan 100 it can feez
+#define SAMPLES 100 //(scan time = 1294)
 
 #define RANGE (int)(FREQ_END - FREQ_BEGIN)
 
@@ -257,7 +258,7 @@ void displayDecorate(int begin = 0, int end = 0, bool redraw = false)
   if (led_flag == true && detection_count > 5)
   {
     digitalWrite(LED, HIGH);
-    tone(BUZZZER_PIN, 104, 250);
+    tone(BUZZZER_PIN, 104, 100);
     digitalWrite(REB_PIN, HIGH);
     led_flag = false;
   }
@@ -523,8 +524,14 @@ void loop()
       // Filter Elements without neabors
       for (y = 1; y < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE; y++)
       {
-        if (result[y] && (result[y + 1] > 0 || result[y - 1] > 0))
+        if (result[y] && (result[y + 1] > 0 || result[y + 2] > 0 || result[y - 1] > 0))
         {
+          // filling the empty pixel between signals int the level < 27 (noise level)
+          if (y < 27 && result[y + 1] == 0 && result[y + 2] > 0)
+          {
+            result[y + 1] = 1;
+            filtered_result[y + 1] = 1;
+          }
           filtered_result[y] = 1;
         }
         else
@@ -559,7 +566,7 @@ void loop()
             drone_detected_freqancy_end = freq;
             led_flag = true;
             // if level to sensetive doing beep every 10th freaqancy and shorter
-            if (drone_detection_level < 25)
+            if (drone_detection_level <= 25)
             {
               if (detection_count == 1)
                 tone(BUZZZER_PIN, 205, 10);
@@ -599,15 +606,16 @@ void loop()
             display.setPixel(x, y);
           }
         }
-        if (detected)
-        {
-          detection_count++;
-        }
+
 #ifdef PRINT_PROFILE_TIME
         scan_time = millis() - scan_start_time;
         // Huge performance issue if enable
         // Serial.printf("Single Scan took %lld ms\n", scan_time);
 #endif
+      }
+      if (detected)
+      {
+        detection_count++;
       }
       detected = false;
 #ifdef PRINT_SCAN_VALUES
