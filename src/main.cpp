@@ -197,8 +197,10 @@ void drawTicks(float every, int length)
 
 #ifdef MINOR_TICKS
     // Fix two ticks togather
-    // if(tick_minor + 1 != tick && tick_minor - 1 != tick && tick_minor + 2 != tick && tick_minor - 2 != tick) {
-    display.drawLine(tick_minor, HEIGHT + X_AXIS_WEIGHT, tick_minor, HEIGHT + X_AXIS_WEIGHT + MINOR_TICK_LENGTH);
+    if (tick_minor + 1 != tick && tick_minor - 1 != tick && tick_minor + 2 != tick && tick_minor - 2 != tick)
+    {
+      display.drawLine(tick_minor, HEIGHT + X_AXIS_WEIGHT, tick_minor, HEIGHT + X_AXIS_WEIGHT + MINOR_TICK_LENGTH);
+    }
     // Central tick
     if (tick_minor > (128 / 2) - 3 && tick_minor < (128 / 2) + 3)
     {
