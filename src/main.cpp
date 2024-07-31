@@ -115,6 +115,7 @@ bool led_flag = false;
 bool first_run = false;
 // drone tetection flag
 bool drone_detected = false;
+bool detected = false;
 unsigned int drone_detection_level = DEFAULT_DRONE_DETECTION_LEVEL;
 unsigned int drone_detected_freqancy_start = 0;
 unsigned int drone_detected_freqancy_end = 0;
@@ -509,7 +510,6 @@ void loop()
       Serial.print(freq);
       Serial.println();
 #endif
-
       // start spectral scan
       radio.spectralScanStart(SAMPLES, 1);
       // wait for spectral scan to finish
@@ -519,7 +519,7 @@ void loop()
       }
       // read the results Array to which the results will be saved
       radio.spectralScanGetResult(result);
-      bool detected = false;
+      detected = false;
       // Filter Elements without neabors
       for (y = 1; y < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE; y++)
       {
@@ -568,8 +568,8 @@ void loop()
             }
             else
             {
-              if (detection_count % 10 == 0)
-                tone(BUZZZER_PIN, 205, 5);
+              if (detection_count % 20 == 0)
+                tone(BUZZZER_PIN, 205, 10);
             }
             display.setPixel(x, 1);
             display.setPixel(x, 2);
@@ -602,7 +602,6 @@ void loop()
         if (detected)
         {
           detection_count++;
-          detected = false;
         }
 #ifdef PRINT_PROFILE_TIME
         scan_time = millis() - scan_start_time;
@@ -610,6 +609,7 @@ void loop()
         // Serial.printf("Single Scan took %lld ms\n", scan_time);
 #endif
       }
+      detected = false;
 #ifdef PRINT_SCAN_VALUES
       Serial.println();
 #endif
