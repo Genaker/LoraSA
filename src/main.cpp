@@ -70,18 +70,20 @@ unsigned int median_freqancy = FREQ_BEGIN + range_freqancy / 2;
 #include <heltec_unofficial.h>
 #include <images.h>
 
-// This file contains binary patch for the SX1262
+// This file contaiminins binary patch for the SX1262
 #include "modules/SX126x/patches/SX126x_patch_scan.h"
 
 // Prints the scan measurement bins from the SX1262 in hex
-//#define PRINT_SCAN_VALUES
+// #define PRINT_SCAN_VALUES
 #define PRINT_PROFILE_TIME
 // Change spectrum plot values at once or by line
 #define ANIMATED_RELOAD true
 
-#define MAJOR_TICK_LENGTH 3
+#define MAJOR_TICK_LENGTH 2
 #define MINOR_TICK_LENGTH 1
-#define X_AXIS_WEIGHT 2
+// WEIGHT of the x-asix line
+#define X_AXIS_WEIGHT 1
+// Height of the ploter area
 #define HEIGHT RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE
 //
 #define SCALE_TEXT_TOP (HEIGHT + X_AXIS_WEIGHT + MAJOR_TICK_LENGTH)
@@ -94,7 +96,7 @@ unsigned int median_freqancy = FREQ_BEGIN + range_freqancy / 2;
 // REB trigger PIN
 #define REB_PIN 42
 
-#define WATERFALL_START 39
+#define WATERFALL_START 37
 
 #define DISABLE_PLOT_CHART false
 
@@ -170,7 +172,8 @@ void drawTicks(float every, int length)
   int tick = 0;
   int tick_minor = 0;
   int median = (RANGE_PER_PAGE / every) / 2;
-  for (int t = 0; t <= (RANGE_PER_PAGE / every) + 1; t++)
+  // TODO: (RANGE_PER_PAGE / every) * 2 has twice extra steps we need to figureout correct logic or minor ticks is not showing to the end
+  for (int t = 0; t <= (RANGE_PER_PAGE / every) * 2; t++)
   {
     // fix if pixels per step is not int and we have shift
     if (correction && t % 2 != 0 && correction_number > 1)
@@ -180,15 +183,18 @@ void drawTicks(float every, int length)
     }
 
     tick += pixels_per_step;
+    tick_minor = tick / 2;
 
     // Fix double tick at the end ...
     if (tick < 128 - 3)
+    {
       display.drawLine(tick, HEIGHT + X_AXIS_WEIGHT, tick, HEIGHT + X_AXIS_WEIGHT + length);
+    }
 
 #ifdef MINOR_TICKS
     // Fix two ticks togather
     // if(tick_minor + 1 != tick && tick_minor - 1 != tick && tick_minor + 2 != tick && tick_minor - 2 != tick) {
-    display.drawLine(tick_minor, HEIGHT + X_AXIS_WEIGHT, tick_minor, HEIGHT + X_AXIS_WEIGHT + 2);
+    display.drawLine(tick_minor, HEIGHT + X_AXIS_WEIGHT, tick_minor, HEIGHT + X_AXIS_WEIGHT + MINOR_TICK_LENGTH);
 //}
 #endif
   }
@@ -205,8 +211,8 @@ void displayDecorate(int begin = 0, int end = 0, bool redraw = false)
   if (!initialized)
   {
     // begining and end ticks
-    display.fillRect(0, HEIGHT + X_AXIS_WEIGHT, 2, MAJOR_TICK_LENGTH);
-    display.fillRect(126, HEIGHT + X_AXIS_WEIGHT, 2, MAJOR_TICK_LENGTH);
+    display.fillRect(0, HEIGHT + X_AXIS_WEIGHT, 2, MAJOR_TICK_LENGTH + 1);
+    display.fillRect(126, HEIGHT + X_AXIS_WEIGHT, 2, MAJOR_TICK_LENGTH + 1);
 
     // drone detection level
     display.setTextAlignment(TEXT_ALIGN_RIGHT);
@@ -545,7 +551,7 @@ void loop()
             if (drone_detection_level < 25)
             {
               if (detection_count == 1)
-                tone(BUZZZER_PIN, 205, 10);    
+                tone(BUZZZER_PIN, 205, 10);
               if (detection_count % 5 == 0)
                 tone(BUZZZER_PIN, 205, 10);
             }
@@ -562,7 +568,7 @@ void loop()
           else if (filtered_result[y] == 1 && y > drone_detection_level && single_page_scan && waterfall[i][x][w] != true)
           {
             // if drone not found dark pixel on waterfall
-            // TODO: make somethin like scrolling up if possible 
+            // TODO: make somethin like scrolling up if possible
             waterfall[i][x][w] = false;
             display.setColor(BLACK);
             display.setPixel(x, w);
@@ -588,9 +594,9 @@ void loop()
           detected = false;
         }
 #ifdef PRINT_PROFILE_TIME
-      scan_time = millis() - scan_start_time;
-      //Huge performance issue if enable
-      //Serial.printf("Single Scan took %lld ms\n", scan_time);
+        scan_time = millis() - scan_start_time;
+        // Huge performance issue if enable
+        // Serial.printf("Single Scan took %lld ms\n", scan_time);
 #endif
       }
 #ifdef PRINT_SCAN_VALUES
@@ -640,7 +646,7 @@ void loop()
 #ifdef PRINT_SCAN_VALUES
   Serial.println();
 #endif
-  //display.display();
+  // display.display();
 #ifdef PRINT_PROFILE_TIME
   scan_time = millis() - start;
   Serial.printf("Scan took %lld ms\n", scan_time);
