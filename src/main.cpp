@@ -180,14 +180,6 @@ void drawTicks(float every, int length)
     }
 
     tick += pixels_per_step;
-    Serial.print("tick:");
-    Serial.print(tick);
-    Serial.print("\n");
-
-    tick_minor = tick - pixels_per_step / 2;
-    Serial.print("tick_minor:");
-    Serial.print(tick_minor);
-    Serial.print("\n");
 
     // Fix double tick at the end ...
     if (tick < 128 - 3)
@@ -373,7 +365,6 @@ void setup()
       both.print(".");
       if (button.pressed())
       {
-        Serial.print("Button pressed");
         RANGE_PER_PAGE = 50;
         single_page_scan = false;
         tone(BUZZZER_PIN, 205, 100);
@@ -481,6 +472,7 @@ void loop()
     // horizontal x assix loop
     for (x = 0; x < STEPS; x++)
     {
+      scan_start_time = millis();
       if (ANIMATED_RELOAD)
       {
         // Draw animated cursor on reload process
@@ -501,7 +493,6 @@ void loop()
       Serial.println();
 #endif
 
-      scan_start_time = millis();
       // start spectral scan
       radio.spectralScanStart(SAMPLES, 1);
       // wait for spectral scan to finish
@@ -553,7 +544,9 @@ void loop()
             // if level to sensetive doing beep every 10th freaqancy and shorter
             if (drone_detection_level < 25)
             {
-              if (detection_count % 3 == 0)
+              if (detection_count == 1)
+                tone(BUZZZER_PIN, 205, 10);    
+              if (detection_count % 5 == 0)
                 tone(BUZZZER_PIN, 205, 10);
             }
             else
@@ -594,6 +587,11 @@ void loop()
           detection_count++;
           detected = false;
         }
+#ifdef PRINT_PROFILE_TIME
+      scan_time = millis() - scan_start_time;
+      //Huge performance issue if enable
+      //Serial.printf("Single Scan took %lld ms\n", scan_time);
+#endif
       }
 #ifdef PRINT_SCAN_VALUES
       Serial.println();
@@ -622,11 +620,6 @@ void loop()
       }
       // wait a little bit before the next scan, otherwise the SX1262 hangs
       heltec_delay(1);
-
-#ifdef PRINT_PROFILE_TIME
-      scan_time = millis() - scan_start_time;
-      Serial.printf("Single Scan took %lld ms\n", scan_time);
-#endif
     }
     w++;
     if (w > STATUS_TEXT_TOP + 1)
@@ -641,14 +634,13 @@ void loop()
       display.drawHorizontalLine(0, w, STEPS);
       display.setColor(WHITE);
     }
-
     display.display();
   }
 
 #ifdef PRINT_SCAN_VALUES
   Serial.println();
 #endif
-  display.display();
+  //display.display();
 #ifdef PRINT_PROFILE_TIME
   scan_time = millis() - start;
   Serial.printf("Scan took %lld ms\n", scan_time);
