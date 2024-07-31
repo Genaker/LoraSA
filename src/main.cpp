@@ -38,7 +38,7 @@ unsigned int RANGE_PER_PAGE = FREQ_END - FREQ_BEGIN; // FREQ_END - FREQ_BEGIN
 // resolution of the scan limited by 128 pixel screan
 #define STEPS 128
 // Number of samples for each frequency scan. Fewer samples = better temporal resolution.
-#define SAMPLES 60 //(scan time = 1294)
+#define SAMPLES 200 //(scan time = 1294)
 
 #define RANGE (int)(FREQ_END - FREQ_BEGIN)
 
@@ -185,16 +185,25 @@ void drawTicks(float every, int length)
     tick += pixels_per_step;
     tick_minor = tick / 2;
 
-    // Fix double tick at the end ...
     if (tick < 128 - 3)
     {
       display.drawLine(tick, HEIGHT + X_AXIS_WEIGHT, tick, HEIGHT + X_AXIS_WEIGHT + length);
+      // Central tick
+      if (tick > (128 / 2) - 3 && tick < (128 / 2) + 3)
+      {
+        display.drawLine(tick + 1, HEIGHT + X_AXIS_WEIGHT, tick + 1, HEIGHT + X_AXIS_WEIGHT + length);
+      }
     }
 
 #ifdef MINOR_TICKS
     // Fix two ticks togather
     // if(tick_minor + 1 != tick && tick_minor - 1 != tick && tick_minor + 2 != tick && tick_minor - 2 != tick) {
     display.drawLine(tick_minor, HEIGHT + X_AXIS_WEIGHT, tick_minor, HEIGHT + X_AXIS_WEIGHT + MINOR_TICK_LENGTH);
+    // Central tick
+    if (tick_minor > (128 / 2) - 3 && tick_minor < (128 / 2) + 3)
+    {
+      display.drawLine(tick_minor + 1, HEIGHT + X_AXIS_WEIGHT, tick_minor + 1, HEIGHT + X_AXIS_WEIGHT + MINOR_TICK_LENGTH);
+    }
 //}
 #endif
   }
