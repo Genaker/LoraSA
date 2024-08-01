@@ -27,8 +27,8 @@
 #define FREQ_END 950
 
 // Feature to scan diapazones. Other frequency settings will be ignored. 
-//int SCAN_DIAPAZONES[] = {}; 
-int SCAN_DIAPAZONES[] = {850890, 920950};
+int SCAN_DIAPAZONES[] = {}; 
+//int SCAN_DIAPAZONES[] = {850890, 920950};
 
 // MHZ per page
 // to put everething into one page set RANGE_PER_PAGE = FREQ_END - 800
