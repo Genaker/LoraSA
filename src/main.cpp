@@ -39,11 +39,11 @@ unsigned int RANGE_PER_PAGE = FREQ_END - FREQ_BEGIN; // FREQ_END - FREQ_BEGIN
 #define LOW_FILTER 3
 #define FILTER_SPECTRUM_RESULTS true
 
-// numbers of the spectrum screen lines = width of screen
-// resolution of the scan limited by 128 pixel screan
+// The number of the spectrum screen lines = width of screen
+// Resolution of the scan is limited by 128-pixel screen
 #define STEPS 128
 // Number of samples for each frequency scan. Fewer samples = better temporal resolution.
-// if more tan 100 it can feez
+// if more than 100 it can freez
 #define SAMPLES 100 //(scan time = 1294)
 
 #define RANGE (int)(FREQ_END - FREQ_BEGIN)
@@ -76,7 +76,7 @@ unsigned int median_freqancy = FREQ_BEGIN + range_freqancy / 2;
 #include <heltec_unofficial.h>
 #include <images.h>
 
-// This file contaiminins binary patch for the SX1262
+// This file contains a binary patch for the SX1262
 #include "modules/SX126x/patches/SX126x_patch_scan.h"
 
 // Prints the scan measurement bins from the SX1262 in hex
@@ -89,13 +89,13 @@ unsigned int median_freqancy = FREQ_BEGIN + range_freqancy / 2;
 #define MINOR_TICK_LENGTH 1
 // WEIGHT of the x-asix line
 #define X_AXIS_WEIGHT 1
-// Height of the ploter area
+// Height of the plotter area
 #define HEIGHT RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE
 //
 #define SCALE_TEXT_TOP (HEIGHT + X_AXIS_WEIGHT + MAJOR_TICK_LENGTH)
 #define STATUS_TEXT_TOP (64 - 10)
 
-// Detection level from the 33 levels. Higher number is more sensative
+// Detection level from the 33 levels. The higher number is more sensitive
 #define DEFAULT_DRONE_DETECTION_LEVEL 21
 
 #define BUZZZER_PIN 41
@@ -118,10 +118,10 @@ bool waterfall[10][STEPS][10];
 unsigned short int scan_var = 0;
 // initialized flag
 bool initialized = false;
-// Used as a Led Light and Buzzer/sount trigger
+// Used as a Led Light and Buzzer/count trigger
 bool led_flag = false;
 bool first_run = false;
-// drone tetection flag
+// drone detection flag
 bool drone_detected = false;
 bool detected = false;
 unsigned int drone_detection_level = DEFAULT_DRONE_DETECTION_LEVEL;
@@ -231,11 +231,11 @@ void displayDecorate(int begin = 0, int end = 0, bool redraw = false)
 {
   if (!initialized)
   {
-    // begining and end ticks
+    // Start and end ticks
     display.fillRect(0, HEIGHT + X_AXIS_WEIGHT, 2, MAJOR_TICK_LENGTH + 1);
     display.fillRect(126, HEIGHT + X_AXIS_WEIGHT, 2, MAJOR_TICK_LENGTH + 1);
 
-    // drone detection level
+    // Drone detection level
     display.setTextAlignment(TEXT_ALIGN_RIGHT);
     display.drawString(128, 0, String(drone_detection_level));
   }
@@ -247,18 +247,18 @@ void displayDecorate(int begin = 0, int end = 0, bool redraw = false)
     display.fillRect(0, SCALE_TEXT_TOP + 1, 128, 12);
     display.setColor(WHITE);
 
-    // drone detection level
+    // Drone detection level
     display.setTextAlignment(TEXT_ALIGN_RIGHT);
     display.drawString(128, 0, String(drone_detection_level));
 
-    // frequency start
+    // Frequency start
     display.setTextAlignment(TEXT_ALIGN_LEFT);
     display.drawString(0, SCALE_TEXT_TOP, (begin == 0) ? String(FREQ_BEGIN) : String(begin));
 
     display.setTextAlignment(TEXT_ALIGN_CENTER);
     display.drawString(128 / 2, SCALE_TEXT_TOP, (begin == 0) ? String(median_freqancy) : String(begin + ((end - begin) / 2)));
 
-    // frequency end
+    // Frequency end
     display.setTextAlignment(TEXT_ALIGN_RIGHT);
     display.drawString(128, SCALE_TEXT_TOP, (end == 0) ? String(FREQ_END) : String(end));
   }
@@ -373,7 +373,7 @@ void setup()
   RADIOLIB_OR_HALT(radio.setRxBandwidth(BANDWIDTH));
   // and disable the data shaping
   RADIOLIB_OR_HALT(radio.setDataShaping(RADIOLIB_SHAPING_NONE));
-  both.println("Starting scaning...");
+  both.println("Starting scanning...");
   float vbat = heltec_vbat();
   both.printf("V battery: %.2fV (%d%%)\n", vbat, heltec_battery_percent(vbat));
   delay(300);
@@ -443,7 +443,7 @@ void setup()
   }
   display.clear();
 
-  // waterfall start line y-asix
+  // waterfall start line y-axis
   w = WATERFALL_START;
 }
 
@@ -473,8 +473,8 @@ void loop()
 
   fr_begin = FREQ_BEGIN;
   fr_end = fr_begin;
-  // 50 is a single screen range
-  // TODO:Make 50 as a variable with the option show full range
+  // 50 is a single-screen range
+  // TODO: Make 50 a variable with the option to show the full range
   iterations = range / RANGE_PER_PAGE;
 
   single_step = RANGE_PER_PAGE / 128;
@@ -552,7 +552,7 @@ void loop()
       freq = fr_begin + (range * ((float)x / STEPS));
       radio.setFrequency(freq);
       // RSSI METHOD
-      // Get RSSI (Recorded Signal Strength Indicator)
+      // Gets RSSI (Recorded Signal Strength Indicator)
       // rssi = radio.getRSSI(false);
       // Serial.println(String(rssi) + "db");
 #ifdef PRINT_SCAN_VALUES
@@ -574,12 +574,12 @@ void loop()
       radio.spectralScanGetResult(result);
       detected = false;
 #ifdef FILTER_SPECTRUM_RESULTS
-      // Filter Elements without neabors
+      // Filter Elements without neighbors
       for (y = 1; y < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE; y++)
       {
         if (result[y] && (result[y + 1] > 0 && result[y - 1] > 0))
         {
-          // filling the empty pixel between signals int the level < 27 (noise level)
+          //Filling the empty pixel between signals int the level < 27 (noise level)
           /* if (y < 27 && result[y + 1] == 0 && result[y + 2] > 0)
            {
              result[y + 1] = 1;
@@ -600,7 +600,7 @@ void loop()
 #endif
         if (result[y] || y == drone_detection_level)
         {
-          // check if we shuld alarm the dron
+          // check if we should alarm about a drone presence
           if (filtered_result[y] == 1 && y <= drone_detection_level)
           {
             drone_detected = true;
@@ -619,7 +619,7 @@ void loop()
             }
             drone_detected_freqancy_end = freq;
             led_flag = true;
-            // if level to sensetive doing beep every 10th freaqancy and shorter
+            //If level is set to sensitive, start beeping every 10th frequency and shorter
             if (drone_detection_level <= 25)
             {
               if (detection_count == 1 && SOUND_ON)
@@ -640,8 +640,8 @@ void loop()
 #ifdef WATERFALL_ENABLED
           if (filtered_result[y] == 1 && y > drone_detection_level && single_page_scan && waterfall[i][x][w] != true)
           {
-            // if drone not found dark pixel on waterfall
-            // TODO: make somethin like scrolling up if possible
+            // If drone not found set dark pixel on the waterfall
+            // TODO: make something like scrolling up if possible
             waterfall[i][x][w] = false;
             display.setColor(BLACK);
             display.setPixel(x, w);
