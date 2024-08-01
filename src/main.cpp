@@ -22,17 +22,18 @@
 */
 
 // frequency range in MHz to scan
-#define FREQ_BEGIN 830
+#define FREQ_BEGIN 850
 // TODO: if % RANGE_PER_PAGE  1= 0
-#define FREQ_END 930
+#define FREQ_END 950
 
 // MHZ per page
 // to put everething into one page set RANGE_PER_PAGE = FREQ_END - 800
 unsigned int RANGE_PER_PAGE = FREQ_END - FREQ_BEGIN; // FREQ_END - FREQ_BEGIN
 
 // TODO: Ignore power lines
-#define UP_FILTER = 5;
-#define LOW_FILTER = 3;
+#define UP_FILTER 5
+#define LOW_FILTER 3
+#define FILTER_SPECTRUM_RESULTS true
 
 // numbers of the spectrum screen lines = width of screen
 // resolution of the scan limited by 128 pixel screan
@@ -97,6 +98,7 @@ unsigned int median_freqancy = FREQ_BEGIN + range_freqancy / 2;
 // REB trigger PIN
 #define REB_PIN 42
 
+#define WATERFALL_ENABLED true
 #define WATERFALL_START 37
 
 #define DISABLE_PLOT_CHART false
@@ -259,7 +261,7 @@ void displayDecorate(int begin = 0, int end = 0, bool redraw = false)
     display.drawString(128, SCALE_TEXT_TOP, (end == 0) ? String(FREQ_END) : String(end));
   }
 
-  if (led_flag == true && detection_count > 5)
+  if (led_flag == true && detection_count >= 5)
   {
     digitalWrite(LED, HIGH);
     if (SOUND_ON)
@@ -523,6 +525,7 @@ void loop()
       freq = fr_begin + (range * ((float)x / STEPS));
       radio.setFrequency(freq);
       // RSSI METHOD
+      // Gets RSSI (Recorded Signal Strength Indicator)
       // rssi = radio.getRSSI(false);
       // Serial.println(String(rssi) + "db");
 #ifdef PRINT_SCAN_VALUES
@@ -533,7 +536,7 @@ void loop()
       Serial.print(freq);
       Serial.println();
 #endif
-      // start spectral scan
+      // start spectral scan third parameter is a sleep interval
       radio.spectralScanStart(SAMPLES, 1);
       // wait for spectral scan to finish
       while (radio.spectralScanGetStatus() != RADIOLIB_ERR_NONE)
@@ -543,17 +546,18 @@ void loop()
       // read the results Array to which the results will be saved
       radio.spectralScanGetResult(result);
       detected = false;
+#ifdef FILTER_SPECTRUM_RESULTS
       // Filter Elements without neabors
       for (y = 1; y < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE; y++)
       {
-        if (result[y] && (result[y + 1] > 0 || result[y + 2] > 0 || result[y - 1] > 0))
+        if (result[y] && (result[y + 1] > 0 && result[y - 1] > 0))
         {
           // filling the empty pixel between signals int the level < 27 (noise level)
-          if (y < 27 && result[y + 1] == 0 && result[y + 2] > 0)
-          {
-            result[y + 1] = 1;
-            filtered_result[y + 1] = 1;
-          }
+          /* if (y < 27 && result[y + 1] == 0 && result[y + 2] > 0)
+           {
+             result[y + 1] = 1;
+             filtered_result[y + 1] = 1;
+           }*/
           filtered_result[y] = 1;
         }
         else
@@ -561,7 +565,7 @@ void loop()
           filtered_result[y] = 0;
         }
       }
-
+#endif
       for (y = 0; y < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE; y++)
       {
 #ifdef PRINT_SCAN_VALUES
@@ -665,7 +669,7 @@ void loop()
           if (button_pressed_counter > 200)
           {
             digitalWrite(LED, HIGH);
-            delay(50);
+            delay(150);
             digitalWrite(LED, LOW);
           }
         }
@@ -679,7 +683,7 @@ void loop()
           display.display();
           break;
         }
-        if (button_pressed_counter > 100 && button_pressed_counter < 200)
+        if (button_pressed_counter > 50 && button_pressed_counter < 200)
         {
           // Visually confirm it's off so user releases button
           display.displayOff();
