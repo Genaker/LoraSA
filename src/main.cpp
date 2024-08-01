@@ -22,9 +22,9 @@
 */
 
 // frequency range in MHz to scan
-#define FREQ_BEGIN 850
+#define FREQ_BEGIN 830
 // TODO: if % RANGE_PER_PAGE  1= 0
-#define FREQ_END 950
+#define FREQ_END 930
 
 // MHZ per page
 // to put everething into one page set RANGE_PER_PAGE = FREQ_END - 800
@@ -59,7 +59,7 @@ unsigned int median_freqancy = FREQ_BEGIN + range_freqancy / 2;
 // Measurement bandwidth. Allowed bandwidth values (in kHz) are:
 // 4.8, 5.8, 7.3, 9.7, 11.7, 14.6, 19.5, 23.4, 29.3, 39.0, 46.9, 58.6,
 // 78.2, 93.8, 117.3, 156.2, 187.2, 234.3, 312.0, 373.6 and 467.0
-#define BANDWIDTH 93.8 // 467.0
+#define BANDWIDTH 467.0 // 93.8 // 467.0
 
 // (optional) major and minor tickmarks at x MHz
 #define MAJOR_TICKS 10
@@ -522,9 +522,9 @@ void loop()
       waterfall[i][x][w] = false;
       freq = fr_begin + (range * ((float)x / STEPS));
       radio.setFrequency(freq);
-      //RSSI METHOD
-      //rssi = radio.getRSSI(false);
-      //Serial.println(String(rssi) + "db");
+      // RSSI METHOD
+      // rssi = radio.getRSSI(false);
+      // Serial.println(String(rssi) + "db");
 #ifdef PRINT_SCAN_VALUES
       Serial.println();
       Serial.print("step-");
@@ -657,6 +657,10 @@ void loop()
         while (button.pressedNow())
         {
           delay(10);
+          // Print Curent frequency
+          display.setTextAlignment(TEXT_ALIGN_CENTER);
+          display.drawString(128 / 2, 0, String(freq));
+          display.display();
           button_pressed_counter++;
           if (button_pressed_counter > 200)
           {
@@ -667,6 +671,12 @@ void loop()
         }
         if (button_pressed_counter > 200)
         {
+          // Remove Curent Freqancy Text
+          display.setTextAlignment(TEXT_ALIGN_CENTER);
+          display.setColor(BLACK);
+          display.drawString(128 / 2, 0, String(freq));
+          display.setColor(WHITE);
+          display.display();
           break;
         }
         if (button_pressed_counter > 100 && button_pressed_counter < 200)
