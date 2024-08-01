@@ -122,6 +122,7 @@ unsigned int drone_detected_freqancy_start = 0;
 unsigned int drone_detected_freqancy_end = 0;
 unsigned int detection_count = 0;
 bool single_page_scan = false;
+bool SOUND_ON = true;
 
 unsigned int start_scan_text = (128 / 2) - 3;
 
@@ -133,6 +134,9 @@ uint64_t start = 0;
 unsigned int x, y, i, w = 0;
 
 float freq = 0;
+int rssi = 0;
+
+unsigned int button_pressed_counter = 0;
 
 void clearStatus()
 {
@@ -187,7 +191,7 @@ void drawTicks(float every, int length)
     tick += pixels_per_step;
     tick_minor = tick / 2;
 
-    if (tick < 128 - 3)
+    if (tick <= 128 - 3)
     {
       display.drawLine(tick, HEIGHT + X_AXIS_WEIGHT, tick, HEIGHT + X_AXIS_WEIGHT + length);
       // Central tick
@@ -258,7 +262,10 @@ void displayDecorate(int begin = 0, int end = 0, bool redraw = false)
   if (led_flag == true && detection_count > 5)
   {
     digitalWrite(LED, HIGH);
-    tone(BUZZZER_PIN, 104, 100);
+    if (SOUND_ON)
+    {
+      tone(BUZZZER_PIN, 104, 100);
+    }
     digitalWrite(REB_PIN, HIGH);
     led_flag = false;
   }
@@ -331,7 +338,19 @@ void setup()
   display.drawXbm(0, 2, 128, 64, epd_bitmap_ucog);
   display.display();
 
-  delay(2000);
+  for (int i = 0; i < 200; i++)
+  {
+    button.update();
+    delay(10);
+    if (button.pressed())
+    {
+      SOUND_ON = false;
+      tone(BUZZZER_PIN, 205, 100);
+      delay(50);
+      tone(BUZZZER_PIN, 205, 100);
+      break;
+    }
+  }
 
   // initialize SX1262 FSK modem at the initial frequency
   both.println("Init radio");
@@ -503,6 +522,8 @@ void loop()
       waterfall[i][x][w] = false;
       freq = fr_begin + (range * ((float)x / STEPS));
       radio.setFrequency(freq);
+      rssi = radio.getRSSI();
+      Serial.println(String(rssi) + "db");
 #ifdef PRINT_SCAN_VALUES
       Serial.println();
       Serial.print("step-");
@@ -568,14 +589,14 @@ void loop()
             // if level to sensetive doing beep every 10th freaqancy and shorter
             if (drone_detection_level <= 25)
             {
-              if (detection_count == 1)
+              if (detection_count == 1 && SOUND_ON)
                 tone(BUZZZER_PIN, 205, 10);
-              if (detection_count % 5 == 0)
+              if (detection_count % 5 == 0 && SOUND_ON)
                 tone(BUZZZER_PIN, 205, 10);
             }
             else
             {
-              if (detection_count % 20 == 0)
+              if (detection_count % 20 == 0 && SOUND_ON)
                 tone(BUZZZER_PIN, 205, 10);
             }
             display.setPixel(x, 1);
@@ -629,6 +650,34 @@ void loop()
       // Detection level button short press
       if (button.pressedFor(100))
       {
+        button.update();
+        button_pressed_counter = 0;
+        // if long press stop
+        while (button.pressedNow())
+        {
+          delay(10);
+          button_pressed_counter++;
+          if (button_pressed_counter > 200)
+          {
+            digitalWrite(LED, HIGH);
+            delay(50);
+            digitalWrite(LED, LOW);
+          }
+        }
+        if (button_pressed_counter > 200)
+        {
+          break;
+        }
+        if (button_pressed_counter > 100 && button_pressed_counter < 200)
+        {
+          // Visually confirm it's off so user releases button
+          display.displayOff();
+          // Deep sleep (has wait for release so we don't wake up immediately)
+          heltec_deep_sleep();
+          break;
+        }
+        button.update();
+
         display.setTextAlignment(TEXT_ALIGN_RIGHT);
         // erase old value
         display.setColor(BLACK);
@@ -637,7 +686,9 @@ void loop()
         drone_detection_level++;
         // print new value
         display.drawString(128, 0, String(drone_detection_level));
+
         tone(BUZZZER_PIN, 104, 150);
+
         if (drone_detection_level > 30)
         {
           drone_detection_level = 1;
