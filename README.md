@@ -55,12 +55,69 @@ Power Bins: 0000,0000,0000,0000,0000,0000,0000,0000,0000,0000,0000,0000,0000,000
 
 The spectrum analyzer performs power measurements in the configured bandwidth.
 
-The X-axis represents frequency in MHz and Y-axis displays actual received power.
+The X-axis represents frequency in MHz, and the Y-axis displays actually received power.
 In the example above, the frequency span goes from 850 MHz to 950 MHz (that is a 100MHz range), and
 the visual amplitude goes from -11 dBm to -110(-139) according to the datasheet(High sensitivity: down to -148dBm) dBm.
 
 To show the results in a plot, run the Python script
 RadioLib/extras/SX126x_Spectrum_Scan/SpectrumScan.py
+
+# Features
+## Multiple Ranges Scan
+Disabled By Default
+```
+// Feature to scan diapazones. Other frequency settings will be ignored.
+int SCAN_DIAPAZONES[] = {};
+//int SCAN_DIAPAZONES[] = {850890, 920950};
+```
+To Enable Add/ uncomment an array of the frequencies 
+```
+int SCAN_DIAPAZONES[] = {850890, 920950};
+```
+where 850890 stands for 950-890Mhz range 
+920950 - 920-890Mhz 
+Other settings will be ignored if **Multiple Ranges Scan** is enabled. 
+
+## Waterfall 
+Waterfall showed only on One Page Scan 
+to disable - un comment this line 
+```
+#define WATERFALL_ENABLED true
+```
+Waterfall shows the last **N** = SCREAN_HEIGHT (64) - WATERFALL_START(37) - 8 (part of the STATUS_TEXT_TOP)  = **19** signal detection that excited set signal level   
+
+## Multi Screen Scan
+Single screen scan for now has **RANGE / 128** resolution.
+Multi-page scan can be adjusted to how many MHz per page you wanna scan 
+
+```
+// frequency range in MHz to scan
+#define FREQ_BEGIN 850
+// TODO: if % RANGE_PER_PAGE  != 0
+#define FREQ_END 950
+
+// Feature to scan diapazones. Other frequency settings will be ignored.
+int SCAN_DIAPAZONES[] = {};
+// int SCAN_DIAPAZONES[] = {850890, 920950};
+
+// MHZ per page
+//To put everething into one page set RANGE_PER_PAGE = FREQ_END - 800
+unsigned int RANGE_PER_PAGE = FREQ_END - FREQ_BEGIN; // FREQ_END - FREQ_BEGIN
+//To Enable Multi Screen scan
+// unsigned int RANGE_PER_PAGE = 50;
+// Default Range on Menu Button Switch 
+#define DEFAULT_RANGE_PER_PAGE = 50;
+
+```
+To enable Multi-page by default set **RANGE_PER_PAGE** less than  **FREQ_END - FREQ_BEGIN**;
+Switch to multi-page during regular One Screen application run. Restart the ESP32 on screen after the logo press the P button. 
+
+## Mute Autio Notifications 
+Restart ESP32, and on the logo display, press the P button. 
+
+## Pause Execution 
+Press P for more than 2 seconds. Execution will pause, and the scan's current Mhz position will be shown on the display. 
+If less, ESP32 will turn off. Fast pressing(less than 0.5 second) P button changes the notification level 
 
 # VSCode Platform.IO development env installation
 1. Install VSCode
