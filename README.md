@@ -1,16 +1,16 @@
 # Lora SA(Spectrum Analyzer)
 RF Spectrum Analyzer using Lora Radio
 
-![IMG_5267](https://github.com/user-attachments/assets/4caeb467-1964-4184-ab20-ba68b97144aa)
+<img src="https://github.com/user-attachments/assets/4caeb467-1964-4184-ab20-ba68b97144aa" alt="LORA hardware" width="200"/>
 
-RadioLib SX126x Spectrum Scan 
+Based on RadioLib SX126x Spectrum Scan.
 
 Perform a spectrum power scan using SX126x.
 The output is in the form of scan lines; each line has 33 power bins.
 The first power bin corresponds to -11 dBm, the second to -15 dBm, and so on.
 The higher number of samples in a bin corresponds to more power received
 at that level.
-
+```
 N in Bin / dBm
 1	-11
 2	-15
@@ -45,15 +45,18 @@ N in Bin / dBm
 31	-131
 32	-135
 33	-139
+```
 
 Example:
+```
 step-13 Frequancy:816.25
-Power Bins: 0000,0000,0000,0000,0000,0000,0000,0000,0000,0000,  0000,0000,0000,0000,0000,0000,0000,0000,0000,0400,  0000,0000,0000,0000,0000,0000,0006,001B,000E,0005,   0006,0002,0000,
+Power Bins: 0000,0000,0000,0000,0000,0000,0000,0000,0000,0000,0000,0000,0000,0000,0000,0000,0000,0000,0000,0400,  0000,0000,0000,0000,0000,0000,0006,001B,000E,0005,0006,0002,0000
+```
 
 The spectrum analyzer performs power measurements in the configured bandwidth.
 
-The X axis represents frequency in MHZ and Y axis display actual received power.
-In this example above, the frequency span goes from 850 MHz to 950 MHz (that is a 100MHz range), and
+The X-axis represents frequency in MHz and Y-axis displays actual received power.
+In the example above, the frequency span goes from 850 MHz to 950 MHz (that is a 100MHz range), and
 the visual amplitude goes from -11 dBm to -110(-139) according to the datasheet(High sensitivity: down to -148dBm) dBm.
 
 To show the results in a plot, run the Python script
