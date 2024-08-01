@@ -26,9 +26,9 @@
 // TODO: if % RANGE_PER_PAGE  1= 0
 #define FREQ_END 950
 
-// Feature to scan diapazones. Other frequency settings will be ignored. 
-int SCAN_DIAPAZONES[] = {}; 
-//int SCAN_DIAPAZONES[] = {850890, 920950};
+// Feature to scan diapazones. Other frequency settings will be ignored.
+int SCAN_DIAPAZONES[] = {};
+// int SCAN_DIAPAZONES[] = {850890, 920950};
 
 // MHZ per page
 // to put everething into one page set RANGE_PER_PAGE = FREQ_END - 800
@@ -321,6 +321,16 @@ void displayDecorate(int begin = 0, int end = 0, bool redraw = false)
     display.setTextAlignment(TEXT_ALIGN_RIGHT);
     display.drawString(128, STATUS_TEXT_TOP, String(FREQ_END));
   }
+  else if (diapazones_count > 0)
+  {
+    display.setTextAlignment(TEXT_ALIGN_LEFT);
+    display.drawString(0, STATUS_TEXT_TOP, String(SCAN_DIAPAZONES[i] / 1000) + "-" + String(SCAN_DIAPAZONES[i] % 1000));
+    if (i + 1 < iterations)
+    {
+      display.setTextAlignment(TEXT_ALIGN_RIGHT);
+      display.drawString(128, STATUS_TEXT_TOP, String(SCAN_DIAPAZONES[i + 1] / 1000) + "-" + String(SCAN_DIAPAZONES[i + 1] % 1000));
+    }
+  }
 
   if (!initialized)
   {
@@ -510,7 +520,6 @@ void loop()
   for (i = 0; i < iterations; i++)
   {
     range = RANGE_PER_PAGE;
-    drone_detected_freqancy_start = 0;
 
     if (diapazones_count == 0)
     {
@@ -534,6 +543,8 @@ void loop()
     {
       displayDecorate(fr_begin, fr_end, true);
     }
+
+    drone_detected_freqancy_start = 0;
 
     display.setTextAlignment(TEXT_ALIGN_RIGHT);
     // horizontal x assix loop
@@ -579,7 +590,7 @@ void loop()
       {
         if (result[y] && (result[y + 1] > 0 && result[y - 1] > 0))
         {
-          //Filling the empty pixel between signals int the level < 27 (noise level)
+          // Filling the empty pixel between signals int the level < 27 (noise level)
           /* if (y < 27 && result[y + 1] == 0 && result[y + 2] > 0)
            {
              result[y + 1] = 1;
@@ -619,7 +630,7 @@ void loop()
             }
             drone_detected_freqancy_end = freq;
             led_flag = true;
-            //If level is set to sensitive, start beeping every 10th frequency and shorter
+            // If level is set to sensitive, start beeping every 10th frequency and shorter
             if (drone_detection_level <= 25)
             {
               if (detection_count == 1 && SOUND_ON)
