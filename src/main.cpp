@@ -522,8 +522,9 @@ void loop()
       waterfall[i][x][w] = false;
       freq = fr_begin + (range * ((float)x / STEPS));
       radio.setFrequency(freq);
-      rssi = radio.getRSSI();
-      Serial.println(String(rssi) + "db");
+      //RSSI METHOD
+      //rssi = radio.getRSSI(false);
+      //Serial.println(String(rssi) + "db");
 #ifdef PRINT_SCAN_VALUES
       Serial.println();
       Serial.print("step-");
