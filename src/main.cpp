@@ -36,7 +36,7 @@ unsigned int RANGE_PER_PAGE = FREQ_END - FREQ_BEGIN; // FREQ_END - FREQ_BEGIN
 //To Enable Multi Screen scan
 // unsigned int RANGE_PER_PAGE = 50;
 // Default Range on Menu Button Switch 
-#define DEFAULT_RANGE_PER_PAGE = 50;
+#define DEFAULT_RANGE_PER_PAGE 50
 
 
 // TODO: Ignore power lines
@@ -569,7 +569,7 @@ void loop()
       waterfall[i][x][w] = false;
       freq = fr_begin + (range * ((float)x / STEPS));
       radio.setFrequency(freq);
-      // TODOL: RSSI METHOD
+      // TODO: RSSI METHOD
       // Gets RSSI (Recorded Signal Strength Indicator)
       // Restart continuous receive mode on the new frequency 
       // state = radio.startReceive();
@@ -581,9 +581,12 @@ void loop()
       //}
       // rssi = radio.getRSSI(false);
       // Serial.println(String(rssi) + "db");
+      // delay(25);
       // This code will iterate over the specified frequencies, changing the frequency every 
       // second and printing the RSSI value for each frequency to the serial monitor. Adjust the frequencies array 
       // to include the specific frequencies you're interested in monitoring.
+      //A short delay after changing the frequency
+      //ensures the module has time to stabilize and get an accurate RSSI reading.
 #ifdef PRINT_SCAN_VALUES
       Serial.println();
       Serial.print("step-");
@@ -597,8 +600,10 @@ void loop()
       // wait for spectral scan to finish
       while (radio.spectralScanGetStatus() != RADIOLIB_ERR_NONE)
       {
+        //TODO: offload logic here it is non blocking spectral scan 
         heltec_delay(1);
       }
+
       // read the results Array to which the results will be saved
       radio.spectralScanGetResult(result);
       detected = false;
