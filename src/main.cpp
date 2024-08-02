@@ -23,7 +23,7 @@
 
 // frequency range in MHz to scan
 #define FREQ_BEGIN 850
-// TODO: if % RANGE_PER_PAGE  1= 0
+// TODO: if % RANGE_PER_PAGE  != 0
 #define FREQ_END 950
 
 // Feature to scan diapazones. Other frequency settings will be ignored.
@@ -33,6 +33,11 @@ int SCAN_DIAPAZONES[] = {};
 // MHZ per page
 // to put everething into one page set RANGE_PER_PAGE = FREQ_END - 800
 unsigned int RANGE_PER_PAGE = FREQ_END - FREQ_BEGIN; // FREQ_END - FREQ_BEGIN
+//To Enable Multi Screen scan
+// unsigned int RANGE_PER_PAGE = 50;
+// Default Range on Menu Button Switch 
+#define DEFAULT_RANGE_PER_PAGE = 50;
+
 
 // TODO: Ignore power lines
 #define UP_FILTER 5
@@ -101,6 +106,8 @@ unsigned int median_freqancy = FREQ_BEGIN + range_freqancy / 2;
 #define BUZZZER_PIN 41
 // REB trigger PIN
 #define REB_PIN 42
+
+#define SCREAN_HEIGHT 64
 
 #define WATERFALL_ENABLED true
 #define WATERFALL_START 37
@@ -420,7 +427,7 @@ void setup()
       both.print(".");
       if (button.pressed())
       {
-        RANGE_PER_PAGE = 50;
+        RANGE_PER_PAGE = DEFAULT_RANGE_PER_PAGE;
         single_page_scan = false;
         tone(BUZZZER_PIN, 205, 100);
         delay(50);
@@ -562,10 +569,21 @@ void loop()
       waterfall[i][x][w] = false;
       freq = fr_begin + (range * ((float)x / STEPS));
       radio.setFrequency(freq);
-      // RSSI METHOD
+      // TODOL: RSSI METHOD
       // Gets RSSI (Recorded Signal Strength Indicator)
+      // Restart continuous receive mode on the new frequency 
+      // state = radio.startReceive();
+      //if (state == RADIOLIB_ERR_NONE) {
+      //Serial.println(F("Started continuous receive mode"));
+      //} else {
+      //Serial.print(F("Failed to start receive mode, error code: "));
+      //Serial.println(state);
+      //}
       // rssi = radio.getRSSI(false);
       // Serial.println(String(rssi) + "db");
+      // This code will iterate over the specified frequencies, changing the frequency every 
+      // second and printing the RSSI value for each frequency to the serial monitor. Adjust the frequencies array 
+      // to include the specific frequencies you're interested in monitoring.
 #ifdef PRINT_SCAN_VALUES
       Serial.println();
       Serial.print("step-");
