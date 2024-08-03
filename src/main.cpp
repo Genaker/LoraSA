@@ -823,8 +823,9 @@ void loop()
         }
       }
       // wait a little bit before the next scan, otherwise the SX1262 hangs
-      // Add more logic before insead of delay...
+      // Add more logic before insead of long delay...
       // heltec_delay(1);
+      heltec_loop();
     }
     w++;
     if (w > STATUS_TEXT_TOP + 1)
