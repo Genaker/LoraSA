@@ -606,7 +606,7 @@ void loop()
         // wait for spectral scan to finish
         while (radio.spectralScanGetStatus() != RADIOLIB_ERR_NONE)
         {
-          // TODO: offload logic here it is non blocking spectral scan
+          Serial.println("radio.spectralScanGetStatus ERROR");
           heltec_delay(1);
         }
         // read the results Array to which the results will be saved
@@ -648,8 +648,8 @@ void loop()
             Serial.println(rssi);
             Serial.println(result_index);
           }
-          // Saving max value only
-          if (result[result_index] < rssi)
+          // Saving max value only rss is negative so smaller is bigger
+          if (result[result_index] > rssi)
           {
             result[result_index] = rssi;
           }
@@ -739,7 +739,7 @@ void loop()
             detected = true;
           }
 
-          // Draw detection Level line
+          // Draw detection Level line evere 2 pixel
           if (y == drone_detection_level && x % 2 == 0)
           {
             display.setPixel(x, y);
@@ -823,7 +823,8 @@ void loop()
         }
       }
       // wait a little bit before the next scan, otherwise the SX1262 hangs
-      heltec_delay(1);
+      // Add more logic before insead of delay...
+      // heltec_delay(1);
     }
     w++;
     if (w > STATUS_TEXT_TOP + 1)
