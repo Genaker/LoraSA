@@ -26,6 +26,8 @@
 // TODO: if % RANGE_PER_PAGE  != 0
 #define FREQ_END 950
 
+#define RSSI_METHOD false
+
 // Feature to scan diapazones. Other frequency settings will be ignored.
 int SCAN_DIAPAZONES[] = {};
 // int SCAN_DIAPAZONES[] = {850890, 920950};
@@ -33,11 +35,10 @@ int SCAN_DIAPAZONES[] = {};
 // MHZ per page
 // to put everething into one page set RANGE_PER_PAGE = FREQ_END - 800
 unsigned int RANGE_PER_PAGE = FREQ_END - FREQ_BEGIN; // FREQ_END - FREQ_BEGIN
-//To Enable Multi Screen scan
-// unsigned int RANGE_PER_PAGE = 50;
-// Default Range on Menu Button Switch 
+// To Enable Multi Screen scan
+//  unsigned int RANGE_PER_PAGE = 50;
+//  Default Range on Menu Button Switch
 #define DEFAULT_RANGE_PER_PAGE 50
-
 
 // TODO: Ignore power lines
 #define UP_FILTER 5
@@ -150,6 +151,8 @@ unsigned int diapazones_count = 0;
 
 float freq = 0;
 int rssi = 0;
+int state = 0;
+int result_index = 0;
 
 unsigned int button_pressed_counter = 0;
 
@@ -571,22 +574,22 @@ void loop()
       radio.setFrequency(freq);
       // TODO: RSSI METHOD
       // Gets RSSI (Recorded Signal Strength Indicator)
-      // Restart continuous receive mode on the new frequency 
+      // Restart continuous receive mode on the new frequency
       // state = radio.startReceive();
-      //if (state == RADIOLIB_ERR_NONE) {
-      //Serial.println(F("Started continuous receive mode"));
+      // if (state == RADIOLIB_ERR_NONE) {
+      // Serial.println(F("Started continuous receive mode"));
       //} else {
-      //Serial.print(F("Failed to start receive mode, error code: "));
-      //Serial.println(state);
+      // Serial.print(F("Failed to start receive mode, error code: "));
+      // Serial.println(state);
       //}
       // rssi = radio.getRSSI(false);
       // Serial.println(String(rssi) + "db");
       // delay(25);
-      // This code will iterate over the specified frequencies, changing the frequency every 
-      // second and printing the RSSI value for each frequency to the serial monitor. Adjust the frequencies array 
+      // This code will iterate over the specified frequencies, changing the frequency every
+      // second and printing the RSSI value for each frequency to the serial monitor. Adjust the frequencies array
       // to include the specific frequencies you're interested in monitoring.
-      //A short delay after changing the frequency
-      //ensures the module has time to stabilize and get an accurate RSSI reading.
+      // A short delay after changing the frequency
+      // ensures the module has time to stabilize and get an accurate RSSI reading.
 #ifdef PRINT_SCAN_VALUES
       Serial.println();
       Serial.print("step-");
@@ -595,23 +598,70 @@ void loop()
       Serial.print(freq);
       Serial.println();
 #endif
-      // start spectral scan third parameter is a sleep interval
-      radio.spectralScanStart(SAMPLES, 1);
-      // wait for spectral scan to finish
-      while (radio.spectralScanGetStatus() != RADIOLIB_ERR_NONE)
+      // SpectrumScan Method
+      if (!RSSI_METHOD)
       {
-        //TODO: offload logic here it is non blocking spectral scan 
-        heltec_delay(1);
+        // start spectral scan third parameter is a sleep interval
+        radio.spectralScanStart(SAMPLES, 1);
+        // wait for spectral scan to finish
+        while (radio.spectralScanGetStatus() != RADIOLIB_ERR_NONE)
+        {
+          // TODO: offload logic here it is non blocking spectral scan
+          heltec_delay(1);
+        }
+        // read the results Array to which the results will be saved
+        radio.spectralScanGetResult(result);
       }
 
-      // read the results Array to which the results will be saved
-      radio.spectralScanGetResult(result);
+      // Spectrum Analizer using getRSSI
+      if (RSSI_METHOD)
+      {
+        state = radio.startReceive(0);
+        if (state == RADIOLIB_ERR_NONE)
+        {
+          // Serial.println(F("Started continuous receive mode"));
+        }
+        else
+        {
+          Serial.print(F("Failed to start receive mode, error code: "));
+          Serial.println(state);
+        }
+
+        for (int r = 1; r < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE; r++)
+        {
+          result[r] = 0;
+        }
+        result_index = 0;
+        // N of samples
+        for (int r = 1; r < 20; r++)
+        {
+          rssi = radio.getRSSI(false);
+          // delay(1);
+          // ToDO: check if 4 is correct value for 33 power bins
+          result_index = (abs(rssi) / 4);
+
+          // Debug Information
+          if (false)
+          {
+            Serial.print("Frequency: ");
+            Serial.println(freq);
+            Serial.println(rssi);
+            Serial.println(result_index);
+          }
+          // Saving max value only
+          if (result[result_index] < rssi)
+          {
+            result[result_index] = rssi;
+          }
+        }
+      }
       detected = false;
 #ifdef FILTER_SPECTRUM_RESULTS
       // Filter Elements without neighbors
       for (y = 1; y < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE; y++)
       {
-        if (result[y] && (result[y + 1] > 0 && result[y - 1] > 0))
+        // if RSSI method actual value is -xxx dB
+        if (result[y] && (result[y + 1] != 0 || result[y - 1] != 0))
         {
           // Filling the empty pixel between signals int the level < 27 (noise level)
           /* if (y < 27 && result[y + 1] == 0 && result[y + 2] > 0)
