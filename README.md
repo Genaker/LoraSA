@@ -86,6 +86,13 @@ to disable - un comment this line
 ```
 Waterfall shows the last **N** = SCREAN_HEIGHT (64) - WATERFALL_START(37) - 8 (part of the STATUS_TEXT_TOP)  = **19** signal detection that excited set signal level   
 
+## RSSI Method of scan 
+by default we are using spectralScan method of the RadioLib Library 
+this method works only with Sx1262 modules. 
+we are implemented scan using getRSSI method which has more flexibility and supports sx1276 modules. 
+using this method we also receiving **dB** values of the signal not just O-33 number... 
+to enable this method set value of the **RSSI_METHOD** to true. 
+
 ## Multi Screen Scan
 Single screen scan for now has **RANGE / 128** resolution.
 Multi-page scan can be adjusted to how many MHz per page you wanna scan 
