@@ -80,18 +80,18 @@ Other settings will be ignored if **Multiple Ranges Scan** is enabled.
 
 ## Waterfall 
 Waterfall showed only on One Page Scan 
-to disable - un comment this line 
+to disable - uncomment this line 
 ```
 #define WATERFALL_ENABLED true
 ```
 Waterfall shows the last **N** = SCREAN_HEIGHT (64) - WATERFALL_START(37) - 8 (part of the STATUS_TEXT_TOP)  = **19** signal detection that excited set signal level   
 
 ## RSSI Method of scan 
-by default we are using spectralScan method of the RadioLib Library 
-this method works only with Sx1262 modules. 
-we are implemented scan using getRSSI method which has more flexibility and supports sx1276 modules. 
-using this method we also receiving **dB** values of the signal not just O-33 number... 
-to enable this method set value of the **RSSI_METHOD** to true. 
+By default, we are using the spectralScan method of the RadioLib Library: https://jgromes.github.io/RadioLib/class_s_x126x.html#a8a3ad4e12df862ab18b326d9dba26d66
+This method works only with Sx1262 modules. 
+We implemented a scan using the **getRSSI** method, which has more flexibility and supports sx1276 and other modules. 
+Using this method, we also receive the signal's **dB** values, not just the O-33 number. 
+To enable this method, set the value of the **RSSI_METHOD** to true. 
 
 ## Multi Screen Scan
 Single screen scan for now has **RANGE / 128** resolution.
