@@ -27,20 +27,20 @@
 
 #include <Arduino.h>
 #include <heltec_unofficial.h>
-#include <images.h>
-
 // This file contains a binary patch for the SX1262
 #include "modules/SX126x/patches/SX126x_patch_scan.h"
+
+
+// project components 
+#include "global_config.h"
+#include "images.h"
+#include "ui.h"
 
 
 // -----------------------------------------------------------------
 // CONFIGURATION OPTIONS
 // -----------------------------------------------------------------
 
-// frequency range in MHz to scan
-#define FREQ_BEGIN 850
-// TODO: if % RANGE_PER_PAGE  != 0
-#define FREQ_END 950
 
 
 typedef enum {
@@ -68,9 +68,6 @@ unsigned int RANGE_PER_PAGE = FREQ_END - FREQ_BEGIN; // FREQ_END - FREQ_BEGIN
 #define LOW_FILTER 3
 #define FILTER_SPECTRUM_RESULTS true
 
-// The number of the spectrum screen lines = width of screen
-// Resolution of the scan is limited by 128-pixel screen
-#define STEPS 128
 // Number of samples for each frequency scan. Fewer samples = better temporal resolution.
 // if more than 100 it can freez
 #define SAMPLES 100 //(scan time = 1294)
@@ -89,64 +86,23 @@ unsigned int fr_end = FREQ_BEGIN;
 
 unsigned int iterations = RANGE / RANGE_PER_PAGE;
 
-unsigned int range_frequency = FREQ_END - FREQ_BEGIN;
-unsigned int median_frequency = FREQ_BEGIN + range_frequency / 2;
-
-// Measurement bandwidth. Allowed bandwidth values (in kHz) are:
-// 4.8, 5.8, 7.3, 9.7, 11.7, 14.6, 19.5, 23.4, 29.3, 39.0, 46.9, 58.6,
-// 78.2, 93.8, 117.3, 156.2, 187.2, 234.3, 312.0, 373.6 and 467.0
-#define BANDWIDTH 467.0 
-
-// (optional) major and minor tickmarks at x MHz
-#define MAJOR_TICKS 10
-#define MINOR_TICKS 5
-
-#define ONE_MILLISEC 1
+// unsigned int range_frequency = FREQ_END - FREQ_BEGIN;
+unsigned int median_frequency = FREQ_BEGIN + FREQ_END - FREQ_BEGIN / 2;
 
 
 
-// Prints debug information and the scan measurement bins from the SX1262 in hex
-//#define PRINT_DEBUG
-// Change spectrum plot values at once or by line
-#define ANIMATED_RELOAD true
-
-#define MAJOR_TICK_LENGTH 2
-#define MINOR_TICK_LENGTH 1
-// WEIGHT of the x-asix line
-#define X_AXIS_WEIGHT 1
-// Height of the plotter area
-#define HEIGHT RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE
-//
-#define SCALE_TEXT_TOP (HEIGHT + X_AXIS_WEIGHT + MAJOR_TICK_LENGTH)
-#define STATUS_TEXT_TOP (64 - 10)
-
-// Detection level from the 33 levels. The higher number is more sensitive
-#define DEFAULT_DRONE_DETECTION_LEVEL 21
-
-#define BUZZER_PIN 41
-// REB trigger PIN
-#define REB_PIN 42
-
-#define SCREAN_HEIGHT 64
-
-#define WATERFALL_ENABLED true
-#define WATERFALL_START 37
-#define OSD_ENABLED true
-
-#define DISABLE_PLOT_CHART false
+// #define OSD_ENABLED true           // unused
+// #define DISABLE_PLOT_CHART false   // unused
 
 // Array to store the scan results
 uint16_t result[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
 uint16_t filtered_result[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
 
 // Waterfall array
-bool waterfall[10][STEPS][10];
+bool waterfall[10][STEPS][10];    // 10 - ??? 
 // global variable
-unsigned short int scan_var = 0;
-// initialized flag
-bool initialized = false;
+
 // Used as a Led Light and Buzzer/count trigger
-bool led_flag = false;
 bool first_run = false;
 // drone detection flag
 bool drone_detected = false;
@@ -158,14 +114,13 @@ unsigned int detection_count = 0;
 bool single_page_scan = false;
 bool SOUND_ON = true;
 
-unsigned int start_scan_text = (128 / 2) - 3;
 
 unsigned int scan_time = 0;
 unsigned int scan_start_time = 0;
 
 uint64_t start = 0;
 
-unsigned int x, y, i, w = 0;
+unsigned int x, y, scan_iterration, w = 0;
 unsigned int ranges_count = 0;
 
 float freq = 0;
@@ -175,203 +130,6 @@ int result_index = 0;
 
 unsigned int button_pressed_counter = 0;
 
-void clearStatus()
-{
-  // clear status line
-  display.setColor(BLACK);
-  display.fillRect(0, STATUS_TEXT_TOP + 2, 128, 13);
-  display.setColor(WHITE);
-}
-
-void clearPlotter()
-{
-  // clear the scan plot rectangle
-  display.setColor(BLACK);
-  display.fillRect(0, 0, STEPS, HEIGHT);
-  display.setColor(WHITE);
-}
-
-/**
- * @brief Draws ticks on the display at regular whole intervals.
- *
- * @param every The interval between ticks in MHz.
- * @param length The length of each tick in pixels.
- */
-void drawTicks(float every, int length)
-{
-  int first_tick = 0;
-  //+ (every - (fr_begin - (int)(fr_begin / every) * every));
-  /*if (first_tick < fr_begin)
-  {
-    first_tick += every;
-  }*/
-  bool correction = false;
-  int pixels_per_step = STEPS / (RANGE_PER_PAGE / every);
-  if (STEPS / RANGE_PER_PAGE != 0)
-  {
-    correction = true;
-  }
-  int correction_number = STEPS - (int)(pixels_per_step * (RANGE_PER_PAGE / every));
-  int tick = 0;
-  int tick_minor = 0;
-  int median = (RANGE_PER_PAGE / every) / 2;
-  // TODO: (RANGE_PER_PAGE / every) * 2 has twice extra steps we need to figureout correct logic or minor ticks is not showing to the end
-  for (int t = 0; t <= (RANGE_PER_PAGE / every) * 2; t++)
-  {
-    // fix if pixels per step is not int and we have shift
-    if (correction && t % 2 != 0 && correction_number > 1)
-    {
-      // pixels_per_step++;
-      correction_number--;
-    }
-
-    tick += pixels_per_step;
-    tick_minor = tick / 2;
-
-    if (tick <= 128 - 3)
-    {
-      display.drawLine(tick, HEIGHT + X_AXIS_WEIGHT, tick, HEIGHT + X_AXIS_WEIGHT + length);
-      // Central tick
-      if (tick > (128 / 2) - 3 && tick < (128 / 2) + 3)
-      {
-        display.drawLine(tick + 1, HEIGHT + X_AXIS_WEIGHT, tick + 1, HEIGHT + X_AXIS_WEIGHT + length);
-      }
-    }
-
-#ifdef MINOR_TICKS
-    // Fix two ticks together
-    if (tick_minor + 1 != tick && tick_minor - 1 != tick && tick_minor + 2 != tick && tick_minor - 2 != tick)
-    {
-      display.drawLine(tick_minor, HEIGHT + X_AXIS_WEIGHT, tick_minor, HEIGHT + X_AXIS_WEIGHT + MINOR_TICK_LENGTH);
-    }
-    // Central tick
-    if (tick_minor > (128 / 2) - 3 && tick_minor < (128 / 2) + 3)
-    {
-      display.drawLine(tick_minor + 1, HEIGHT + X_AXIS_WEIGHT, tick_minor + 1, HEIGHT + X_AXIS_WEIGHT + MINOR_TICK_LENGTH);
-    }
-#endif
-  }
-}
-
-/**
- * @brief Decorates the display: everything but the plot itself.
- */
-void displayDecorate(int begin = 0, int end = 0, bool redraw = false)
-{
-  if (!initialized)
-  {
-    // Start and end ticks
-    display.fillRect(0, HEIGHT + X_AXIS_WEIGHT, 2, MAJOR_TICK_LENGTH + 1);
-    display.fillRect(126, HEIGHT + X_AXIS_WEIGHT, 2, MAJOR_TICK_LENGTH + 1);
-
-    // Drone detection level
-    display.setTextAlignment(TEXT_ALIGN_RIGHT);
-    display.drawString(128, 0, String(drone_detection_level));
-  }
-
-  if (!initialized || redraw)
-  {
-    // Clear something
-    display.setColor(BLACK);
-    display.fillRect(0, SCALE_TEXT_TOP + 1, 128, 12);
-    display.setColor(WHITE);
-
-    // Drone detection level
-    display.setTextAlignment(TEXT_ALIGN_RIGHT);
-    display.drawString(128, 0, String(drone_detection_level));
-
-    // Frequency start
-    display.setTextAlignment(TEXT_ALIGN_LEFT);
-    display.drawString(0, SCALE_TEXT_TOP, (begin == 0) ? String(FREQ_BEGIN) : String(begin));
-
-    display.setTextAlignment(TEXT_ALIGN_CENTER);
-    display.drawString(128 / 2, SCALE_TEXT_TOP, (begin == 0) ? String(median_frequency) : String(begin + ((end - begin) / 2)));
-
-    // Frequency end
-    display.setTextAlignment(TEXT_ALIGN_RIGHT);
-    display.drawString(128, SCALE_TEXT_TOP, (end == 0) ? String(FREQ_END) : String(end));
-  }
-
-  if (led_flag == true && detection_count >= 5)
-  {
-    digitalWrite(LED, HIGH);
-    if (SOUND_ON)
-    {
-      tone(BUZZER_PIN, 104, 100);
-    }
-    digitalWrite(REB_PIN, HIGH);
-    led_flag = false;
-  }
-
-  else if (!redraw)
-  {
-    digitalWrite(LED, LOW);
-  }
-  // Status text block
-  if (!drone_detected)
-  {
-    // "Scanning"
-    display.setTextAlignment(TEXT_ALIGN_CENTER);
-    // clear status line
-    clearStatus();
-    if (scan_var == 0)
-    {
-      display.drawString(start_scan_text, STATUS_TEXT_TOP, "Scan.  ");
-    }
-    else if (scan_var == 1)
-    {
-      display.drawString(start_scan_text, STATUS_TEXT_TOP, "Scan.. ");
-    }
-    else if (scan_var == 2)
-    {
-      display.drawString(start_scan_text, STATUS_TEXT_TOP, "Scan...");
-    }
-    scan_var++;
-    if (scan_var == 3)
-    {
-      scan_var = 0;
-    }
-  }
-
-  if (drone_detected)
-  {
-    display.setTextAlignment(TEXT_ALIGN_CENTER);
-    // clear status line
-    clearStatus();
-
-    display.drawString(start_scan_text, STATUS_TEXT_TOP, String(drone_detected_frequency_start) + ">RF<" + String(drone_detected_frequency_end));
-  }
-
-  if (ranges_count == 0)
-  {
-    display.setTextAlignment(TEXT_ALIGN_LEFT);
-    display.drawString(0, STATUS_TEXT_TOP, String(FREQ_BEGIN));
-
-    display.setTextAlignment(TEXT_ALIGN_RIGHT);
-    display.drawString(128, STATUS_TEXT_TOP, String(FREQ_END));
-  }
-  else if (ranges_count > 0)
-  {
-    display.setTextAlignment(TEXT_ALIGN_LEFT);
-    display.drawString(0, STATUS_TEXT_TOP, String(SCAN_RANGES[i] / 1000) + "-" + String(SCAN_RANGES[i] % 1000));
-    if (i + 1 < iterations)
-    {
-      display.setTextAlignment(TEXT_ALIGN_RIGHT);
-      display.drawString(128, STATUS_TEXT_TOP, String(SCAN_RANGES[i + 1] / 1000) + "-" + String(SCAN_RANGES[i + 1] % 1000));
-    }
-  }
-
-  if (!initialized)
-  {
-    // X-axis
-    display.fillRect(0, HEIGHT, STEPS, X_AXIS_WEIGHT);
-// ticks
-#ifdef MAJOR_TICKS
-    drawTicks(MAJOR_TICKS, MAJOR_TICK_LENGTH);
-#endif
-  }
-  initialized = true;
-}
 
 void setup()
 {
@@ -379,10 +137,8 @@ void setup()
   pinMode(BUZZER_PIN, OUTPUT);
   pinMode(REB_PIN, OUTPUT);
   heltec_setup();
-  display.clear();
-  // draw the UCOG welcome logo
-  display.drawXbm(0, 2, 128, 64, epd_bitmap_ucog);
-  display.display();
+
+  UI_Init(&display);
 
   for (int i = 0; i < 200; i++)
   {
@@ -415,8 +171,8 @@ void setup()
   both.println("Starting scanning...");
   float vbat = heltec_vbat();
   both.printf("V battery: %.2fV (%d%%)\n", vbat, heltec_battery_percent(vbat));
+  
   delay(300);
-
   display.clear();
 
   float resolution = RANGE / STEPS;
@@ -488,7 +244,7 @@ void setup()
 
 void loop()
 {
-  displayDecorate();
+  UI_displayDecorate(0,0,false); // some default values
   drone_detected = false;
   detection_count = 0;
   drone_detected_frequency_start = 0;
@@ -499,7 +255,7 @@ void loop()
   if (!ANIMATED_RELOAD || !single_page_scan)
   {
     // clear the scan plot rectangle
-    clearPlotter();
+    UI_clearPlotter();
   }
 
   // do the scan
@@ -546,31 +302,31 @@ void loop()
   }
 
   // Iterating by small ranges by 50 Mhz each pixel is 0.4 Mhz
-  for (i = 0; i < iterations; i++)
+  for (scan_iterration = 0; scan_iterration < iterations; scan_iterration++)
   {
     range = RANGE_PER_PAGE;
 
     if (ranges_count == 0)
     {
-      fr_begin = (i == 0) ? fr_begin : fr_begin += range;
+      fr_begin = (scan_iterration == 0) ? fr_begin : fr_begin += range;
       fr_end = fr_begin + RANGE_PER_PAGE;
     }
     else
     {
-      fr_begin = SCAN_RANGES[i] / 1000;
-      fr_end = SCAN_RANGES[i] % 1000;
+      fr_begin = SCAN_RANGES[scan_iterration] / 1000;
+      fr_end = SCAN_RANGES[scan_iterration] % 1000;
       range = fr_end - fr_begin;
     }
 
     if (!ANIMATED_RELOAD || !single_page_scan)
     {
       // clear the scan plot rectangle
-      clearPlotter();
+      UI_clearPlotter();
     }
 
     if (single_page_scan == false)
     {
-      displayDecorate(fr_begin, fr_end, true);
+      UI_displayDecorate(fr_begin, fr_end, true);
     }
 
     drone_detected_frequency_start = 0;
@@ -580,15 +336,12 @@ void loop()
     for (x = 0; x < STEPS; x++)
     {
       scan_start_time = millis();
-      if (ANIMATED_RELOAD)
-      {
-        // Draw animated cursor on reload process
-        display.setColor(BLACK);
-        display.drawVerticalLine(x, 0, HEIGHT);
-        display.drawVerticalLine(x + 1, 0, HEIGHT);
-        display.setColor(WHITE);
-      }
-      waterfall[i][x][w] = false;
+
+#if ANIMATED_RELOAD
+      UI_drawCurrsor(x);
+#endif
+
+      waterfall[scan_iterration][x][w] = false;
       freq = fr_begin + (range * ((float)x / STEPS));
       radio.setFrequency(freq);
       // TODO: RSSI METHOD
@@ -719,7 +472,7 @@ void loop()
           if (single_page_scan)
           {
             // Drone detection true for waterfall
-            waterfall[i][x][w] = true;
+            waterfall[scan_iterration][x][w] = true;
             display.setColor(WHITE);
             display.setPixel(x, w);
           }
@@ -729,7 +482,9 @@ void loop()
             drone_detected_frequency_start = freq;
           }
           drone_detected_frequency_end = freq;
-          led_flag = true;
+      
+          UI_setLedFlag(true);
+
           // If level is set to sensitive, start beeping every 10th frequency and shorter
           if (drone_detection_level <= 25)
           {
@@ -748,12 +503,13 @@ void loop()
           display.setPixel(x, 3);
           display.setPixel(x, 4);
         }
+        
 #ifdef WATERFALL_ENABLED
-        if (filtered_result[y] == 1 && y > drone_detection_level && single_page_scan && waterfall[i][x][w] != true)
+        if (filtered_result[y] == 1 && y > drone_detection_level && single_page_scan && waterfall[scan_iterration][x][w] != true)
         {
           // If drone not found set dark pixel on the waterfall
           // TODO: make something like scrolling up if possible
-          waterfall[i][x][w] = false;
+          waterfall[scan_iterration][x][w] = false;
           display.setColor(BLACK);
           display.setPixel(x, w);
           display.setColor(WHITE);
