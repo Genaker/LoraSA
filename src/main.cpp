@@ -30,8 +30,8 @@
 #define RSSI_METHOD false
 
 // Feature to scan diapazones. Other frequency settings will be ignored.
-int SCAN_DIAPAZONES[] = {};
-// int SCAN_DIAPAZONES[] = {850890, 920950};
+int SCAN_RANGES[] = {};
+// int SCAN_RANGES[] = {850890, 920950};
 
 // MHZ per page
 // to put everething into one page set RANGE_PER_PAGE = FREQ_END - 800
@@ -67,19 +67,19 @@ unsigned int fr_end = FREQ_BEGIN;
 
 unsigned int iterations = RANGE / RANGE_PER_PAGE;
 
-unsigned int range_freqancy = FREQ_END - FREQ_BEGIN;
-unsigned int median_freqancy = FREQ_BEGIN + range_freqancy / 2;
+unsigned int range_frequency = FREQ_END - FREQ_BEGIN;
+unsigned int median_frequency = FREQ_BEGIN + range_frequency / 2;
 
 // Measurement bandwidth. Allowed bandwidth values (in kHz) are:
 // 4.8, 5.8, 7.3, 9.7, 11.7, 14.6, 19.5, 23.4, 29.3, 39.0, 46.9, 58.6,
 // 78.2, 93.8, 117.3, 156.2, 187.2, 234.3, 312.0, 373.6 and 467.0
-#define BANDWIDTH 467.0 // 93.8 // 467.0
+#define BANDWIDTH 467.0 
 
 // (optional) major and minor tickmarks at x MHz
 #define MAJOR_TICKS 10
 #define MINOR_TICKS 5
 
-#define ONE_MILISEC 1
+#define ONE_MILLISEC 1
 
 // Turns the 'PRG' button into the power button, long press is off
 #define HELTEC_POWER_BUTTON // must be before "#include <heltec_unofficial.h>"
@@ -108,7 +108,7 @@ unsigned int median_freqancy = FREQ_BEGIN + range_freqancy / 2;
 // Detection level from the 33 levels. The higher number is more sensitive
 #define DEFAULT_DRONE_DETECTION_LEVEL 21
 
-#define BUZZZER_PIN 41
+#define BUZZER_PIN 41
 // REB trigger PIN
 #define REB_PIN 42
 
@@ -137,8 +137,8 @@ bool first_run = false;
 bool drone_detected = false;
 bool detected = false;
 unsigned int drone_detection_level = DEFAULT_DRONE_DETECTION_LEVEL;
-unsigned int drone_detected_freqancy_start = 0;
-unsigned int drone_detected_freqancy_end = 0;
+unsigned int drone_detected_frequency_start = 0;
+unsigned int drone_detected_frequency_end = 0;
 unsigned int detection_count = 0;
 bool single_page_scan = false;
 bool SOUND_ON = true;
@@ -151,7 +151,7 @@ unsigned int scan_start_time = 0;
 uint64_t start = 0;
 
 unsigned int x, y, i, w = 0;
-unsigned int diapazones_count = 0;
+unsigned int ranges_count = 0;
 
 float freq = 0;
 int rssi = 0;
@@ -168,7 +168,7 @@ void clearStatus()
   display.setColor(WHITE);
 }
 
-void clearPloter()
+void clearPlotter()
 {
   // clear the scan plot rectangle
   display.setColor(BLACK);
@@ -224,7 +224,7 @@ void drawTicks(float every, int length)
     }
 
 #ifdef MINOR_TICKS
-    // Fix two ticks togather
+    // Fix two ticks together
     if (tick_minor + 1 != tick && tick_minor - 1 != tick && tick_minor + 2 != tick && tick_minor - 2 != tick)
     {
       display.drawLine(tick_minor, HEIGHT + X_AXIS_WEIGHT, tick_minor, HEIGHT + X_AXIS_WEIGHT + MINOR_TICK_LENGTH);
@@ -270,7 +270,7 @@ void displayDecorate(int begin = 0, int end = 0, bool redraw = false)
     display.drawString(0, SCALE_TEXT_TOP, (begin == 0) ? String(FREQ_BEGIN) : String(begin));
 
     display.setTextAlignment(TEXT_ALIGN_CENTER);
-    display.drawString(128 / 2, SCALE_TEXT_TOP, (begin == 0) ? String(median_freqancy) : String(begin + ((end - begin) / 2)));
+    display.drawString(128 / 2, SCALE_TEXT_TOP, (begin == 0) ? String(median_frequency) : String(begin + ((end - begin) / 2)));
 
     // Frequency end
     display.setTextAlignment(TEXT_ALIGN_RIGHT);
@@ -282,7 +282,7 @@ void displayDecorate(int begin = 0, int end = 0, bool redraw = false)
     digitalWrite(LED, HIGH);
     if (SOUND_ON)
     {
-      tone(BUZZZER_PIN, 104, 100);
+      tone(BUZZER_PIN, 104, 100);
     }
     digitalWrite(REB_PIN, HIGH);
     led_flag = false;
@@ -324,10 +324,10 @@ void displayDecorate(int begin = 0, int end = 0, bool redraw = false)
     // clear status line
     clearStatus();
 
-    display.drawString(start_scan_text, STATUS_TEXT_TOP, String(drone_detected_freqancy_start) + ">RF<" + String(drone_detected_freqancy_end));
+    display.drawString(start_scan_text, STATUS_TEXT_TOP, String(drone_detected_frequency_start) + ">RF<" + String(drone_detected_frequency_end));
   }
 
-  if (diapazones_count == 0)
+  if (ranges_count == 0)
   {
     display.setTextAlignment(TEXT_ALIGN_LEFT);
     display.drawString(0, STATUS_TEXT_TOP, String(FREQ_BEGIN));
@@ -335,14 +335,14 @@ void displayDecorate(int begin = 0, int end = 0, bool redraw = false)
     display.setTextAlignment(TEXT_ALIGN_RIGHT);
     display.drawString(128, STATUS_TEXT_TOP, String(FREQ_END));
   }
-  else if (diapazones_count > 0)
+  else if (ranges_count > 0)
   {
     display.setTextAlignment(TEXT_ALIGN_LEFT);
-    display.drawString(0, STATUS_TEXT_TOP, String(SCAN_DIAPAZONES[i] / 1000) + "-" + String(SCAN_DIAPAZONES[i] % 1000));
+    display.drawString(0, STATUS_TEXT_TOP, String(SCAN_RANGES[i] / 1000) + "-" + String(SCAN_RANGES[i] % 1000));
     if (i + 1 < iterations)
     {
       display.setTextAlignment(TEXT_ALIGN_RIGHT);
-      display.drawString(128, STATUS_TEXT_TOP, String(SCAN_DIAPAZONES[i + 1] / 1000) + "-" + String(SCAN_DIAPAZONES[i + 1] % 1000));
+      display.drawString(128, STATUS_TEXT_TOP, String(SCAN_RANGES[i + 1] / 1000) + "-" + String(SCAN_RANGES[i + 1] % 1000));
     }
   }
 
@@ -361,7 +361,7 @@ void displayDecorate(int begin = 0, int end = 0, bool redraw = false)
 void setup()
 {
   pinMode(LED, OUTPUT);
-  pinMode(BUZZZER_PIN, OUTPUT);
+  pinMode(BUZZER_PIN, OUTPUT);
   pinMode(REB_PIN, OUTPUT);
   heltec_setup();
   display.clear();
@@ -376,9 +376,9 @@ void setup()
     if (button.pressed())
     {
       SOUND_ON = false;
-      tone(BUZZZER_PIN, 205, 100);
+      tone(BUZZER_PIN, 205, 100);
       delay(50);
-      tone(BUZZZER_PIN, 205, 100);
+      tone(BUZZER_PIN, 205, 100);
       break;
     }
   }
@@ -436,9 +436,9 @@ void setup()
       {
         RANGE_PER_PAGE = DEFAULT_RANGE_PER_PAGE;
         single_page_scan = false;
-        tone(BUZZZER_PIN, 205, 100);
+        tone(BUZZER_PIN, 205, 100);
         delay(50);
-        tone(BUZZZER_PIN, 205, 100);
+        tone(BUZZER_PIN, 205, 100);
         break;
       }
     }
@@ -459,7 +459,7 @@ void setup()
       {
         RANGE_PER_PAGE = range;
         single_page_scan = true;
-        tone(BUZZZER_PIN, 205, 100);
+        tone(BUZZER_PIN, 205, 100);
 
         break;
       }
@@ -476,7 +476,7 @@ void loop()
   displayDecorate();
   drone_detected = false;
   detection_count = 0;
-  drone_detected_freqancy_start = 0;
+  drone_detected_frequency_start = 0;
 #ifdef PRINT_PROFILE_TIME
   start = millis();
 #endif
@@ -484,7 +484,7 @@ void loop()
   if (!ANIMATED_RELOAD || !single_page_scan)
   {
     // clear the scan plot rectangle
-    clearPloter();
+    clearPlotter();
   }
 
   // do the scan
@@ -517,40 +517,40 @@ void loop()
     single_page_scan = false;
   }
 
-  diapazones_count = 0;
+  ranges_count = 0;
 
-  for (int diapazone : SCAN_DIAPAZONES)
+  for (int range : SCAN_RANGES)
   {
-    diapazones_count++;
+    ranges_count++;
   }
 
-  if (diapazones_count > 0)
+  if (ranges_count > 0)
   {
-    iterations = diapazones_count;
+    iterations = ranges_count;
     single_page_scan = false;
   }
 
-  // Iterateing by small ranges by 50 Mhz each pixel is 0.4 Mhz
+  // Iterating by small ranges by 50 Mhz each pixel is 0.4 Mhz
   for (i = 0; i < iterations; i++)
   {
     range = RANGE_PER_PAGE;
 
-    if (diapazones_count == 0)
+    if (ranges_count == 0)
     {
       fr_begin = (i == 0) ? fr_begin : fr_begin += range;
       fr_end = fr_begin + RANGE_PER_PAGE;
     }
     else
     {
-      fr_begin = SCAN_DIAPAZONES[i] / 1000;
-      fr_end = SCAN_DIAPAZONES[i] % 1000;
+      fr_begin = SCAN_RANGES[i] / 1000;
+      fr_end = SCAN_RANGES[i] % 1000;
       range = fr_end - fr_begin;
     }
 
     if (!ANIMATED_RELOAD || !single_page_scan)
     {
       // clear the scan plot rectangle
-      clearPloter();
+      clearPlotter();
     }
 
     if (single_page_scan == false)
@@ -558,10 +558,10 @@ void loop()
       displayDecorate(fr_begin, fr_end, true);
     }
 
-    drone_detected_freqancy_start = 0;
+    drone_detected_frequency_start = 0;
 
     display.setTextAlignment(TEXT_ALIGN_RIGHT);
-    // horizontal x assix loop
+    // horizontal x axis loop
     for (x = 0; x < STEPS; x++)
     {
       scan_start_time = millis();
@@ -598,11 +598,11 @@ void loop()
       Serial.println();
       Serial.print("step-");
       Serial.print(x);
-      Serial.print(" Frequancy:");
+      Serial.print(" Frequency:");
       Serial.print(freq);
       Serial.println();
 #endif
-      // SectralScan Method
+      // SpectralScan Method
       if (!RSSI_METHOD)
       {
         // start spectral scan third parameter is a sleep interval
@@ -612,13 +612,13 @@ void loop()
         {
           Serial.print("radio.spectralScanGetStatus ERROR: ");
           Serial.println(radio.spectralScanGetStatus());
-          heltec_delay(ONE_MILISEC);
+          heltec_delay(ONE_MILLISEC);
         }
         // read the results Array to which the results will be saved
         radio.spectralScanGetResult(result);
       }
 
-      // Spectrum Analizer using getRSSI
+      // Spectrum analyzer using getRSSI
       if (RSSI_METHOD)
       {
         state = radio.startReceive(0);
@@ -643,7 +643,7 @@ void loop()
         for (int r = 1; r < SAMPLES_RSSI; r++)
         {
           rssi = radio.getRSSI(false);
-          // delay(ONE_MILISEC);
+          // delay(ONE_MILLISEC);
           // ToDO: check if 4 is correct value for 33 power bins
           result_index = (abs(rssi) / 4);
 
@@ -703,24 +703,24 @@ void loop()
             display.setPixel(x, w);
           }
 #endif
-          if (drone_detected_freqancy_start == 0)
+          if (drone_detected_frequency_start == 0)
           {
-            drone_detected_freqancy_start = freq;
+            drone_detected_frequency_start = freq;
           }
-          drone_detected_freqancy_end = freq;
+          drone_detected_frequency_end = freq;
           led_flag = true;
           // If level is set to sensitive, start beeping every 10th frequency and shorter
           if (drone_detection_level <= 25)
           {
             if (detection_count == 1 && SOUND_ON)
-              tone(BUZZZER_PIN, 205, 10);
+              tone(BUZZER_PIN, 205, 10);
             if (detection_count % 5 == 0 && SOUND_ON)
-              tone(BUZZZER_PIN, 205, 10);
+              tone(BUZZER_PIN, 205, 10);
           }
           else
           {
             if (detection_count % 20 == 0 && SOUND_ON)
-              tone(BUZZZER_PIN, 205, 10);
+              tone(BUZZER_PIN, 205, 10);
           }
           display.setPixel(x, 1);
           display.setPixel(x, 2);
@@ -821,7 +821,7 @@ void loop()
       // print new value
       display.drawString(128, 0, String(drone_detection_level));
 
-      tone(BUZZZER_PIN, 104, 150);
+      tone(BUZZER_PIN, 104, 150);
 
       if (drone_detection_level > 30)
       {
