@@ -1,11 +1,12 @@
 
+#include "images.h"
 //'Logo_UCOG', 128x64px
 //https://www.online-utility.org/image/convert/to/XBM
 //https://javl.github.io/image2cpp/
 //#define 1721604660673_width 128
 //#define 1721604660673_height 64
 
-const unsigned char epd_bitmap_ucog [] PROGMEM = {
+const unsigned char epd_bitmap_ucog[] = { 
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
@@ -95,7 +96,7 @@ const unsigned char epd_bitmap_ucog [] PROGMEM = {
 };
 
 // Array of all bitmaps for convenience. (Total bytes used to store images in PROGMEM = 1040)
-const int epd_bitmap_allArray_LEN = 1;
-const unsigned char* epd_bitmap_allArray[1] = {
-	epd_bitmap_ucog
-};
+// const int epd_bitmap_allArray_LEN = 1;
+// const unsigned char* epd_bitmap_allArray[1] = {
+// 	epd_bitmap_ucog
+// };

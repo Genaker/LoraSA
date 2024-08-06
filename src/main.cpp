@@ -21,13 +21,34 @@
   https://jgromes.github.io/RadioLib/
 */
 
+// Turns the 'PRG' button into the power button, long press is off
+// TODO add it to compiller options using -DHELTEC_POWER_BUTTON
+#define HELTEC_POWER_BUTTON // must be before "#include <heltec_unofficial.h>"
+
+#include <Arduino.h>
+#include <heltec_unofficial.h>
+#include <images.h>
+
+// This file contains a binary patch for the SX1262
+#include "modules/SX126x/patches/SX126x_patch_scan.h"
+
+
+// -----------------------------------------------------------------
+// CONFIGURATION OPTIONS
+// -----------------------------------------------------------------
+
 // frequency range in MHz to scan
 #define FREQ_BEGIN 850
 // TODO: if % RANGE_PER_PAGE  != 0
 #define FREQ_END 950
 
-// true for RSSI and flase for default spectralScan method
-#define RSSI_METHOD false
+
+typedef enum {
+  METHOD_RSSI = 0u, 
+  METHOD_SPECTRAL
+} TSCAN_METOD_ENUM;
+
+#define SCAN_METHOD       METHOD_SPECTRAL
 
 // Feature to scan diapazones. Other frequency settings will be ignored.
 int SCAN_RANGES[] = {};
@@ -39,6 +60,7 @@ unsigned int RANGE_PER_PAGE = FREQ_END - FREQ_BEGIN; // FREQ_END - FREQ_BEGIN
 // To Enable Multi Screen scan
 //  unsigned int RANGE_PER_PAGE = 50;
 //  Default Range on Menu Button Switch
+
 #define DEFAULT_RANGE_PER_PAGE 50
 
 // TODO: Ignore power lines
@@ -81,14 +103,7 @@ unsigned int median_frequency = FREQ_BEGIN + range_frequency / 2;
 
 #define ONE_MILLISEC 1
 
-// Turns the 'PRG' button into the power button, long press is off
-#define HELTEC_POWER_BUTTON // must be before "#include <heltec_unofficial.h>"
-#include <Arduino.h>
-#include <heltec_unofficial.h>
-#include <images.h>
 
-// This file contains a binary patch for the SX1262
-#include "modules/SX126x/patches/SX126x_patch_scan.h"
 
 // Prints debug information and the scan measurement bins from the SX1262 in hex
 //#define PRINT_DEBUG
@@ -602,8 +617,10 @@ void loop()
       Serial.print(freq);
       Serial.println();
 #endif
+
+
       // SpectralScan Method
-      if (!RSSI_METHOD)
+#if SCAN_METHOD == METHOD_SPECTRAL
       {
         // start spectral scan third parameter is a sleep interval
         radio.spectralScanStart(SAMPLES, 1);
@@ -617,9 +634,10 @@ void loop()
         // read the results Array to which the results will be saved
         radio.spectralScanGetResult(result);
       }
+#endif
 
+#if SCAN_METHOD == METHOD_RSSI
       // Spectrum analyzer using getRSSI
-      if (RSSI_METHOD)
       {
         state = radio.startReceive(0);
         if (state == RADIOLIB_ERR_NONE)
@@ -661,6 +679,9 @@ void loop()
         }
       }
     }
+#endif
+
+
     detected = false;
 #ifdef FILTER_SPECTRUM_RESULTS
     // Filter Elements without neighbors
