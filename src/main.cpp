@@ -235,6 +235,10 @@ void setup(void)
     display.clear();
     Serial.println();
 
+    // calibrate only once ,,, at startup 
+    radio.setFrequency(FREQ_BEGIN,true);
+    
+
     // waterfall start line y-axis
     w = WATERFALL_START;
 }
@@ -345,7 +349,8 @@ void loop(void)
 
             waterfall[scan_iteration][x][w] = false;
             freq = fr_begin + (range * ((float)x / STEPS));
-            radio.setFrequency(freq);
+
+            radio.setFrequency(freq,false);
 
             // TODO: RSSI METHOD
             // Gets RSSI (Recorded Signal Strength Indicator)
@@ -429,15 +434,21 @@ void loop(void)
                 }
             }
 #endif  // SCAN_METHOD == METHOD_RSSI
-
+            
             detected = false;
 
-#ifdef FILTER_SPECTRUM_RESULTS
-            // Filter Elements without neighbors
+
             for (y = 0; y < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE; y++)
             {
+#ifdef PRINT_DEBUG
+                Serial.printf("%04X,", result[y]);
+#endif
+
+#ifdef FILTER_SPECTRUM_RESULTS
+                // Filter Elements without neighbors
+
                 // if RSSI method actual value is -xxx dB
-                if (result[y] && (result[y + 1] != 0 || result[y - 1] != 0))
+                if (result[y] && ((result[y + 1] != 0) || (result[y - 1] != 0)))
                 {
                     // Filling the empty pixel between signals int the level < 27 (noise level)
                     /* if (y < 27 && result[y + 1] == 0 && result[y + 2] > 0)
@@ -451,19 +462,18 @@ void loop(void)
                 {
                     filtered_result[y] = 0;
                 }
-            }
 #endif
-            for (y = 0; y < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE; y++)
-            {
-#ifdef PRINT_DEBUG
-                Serial.printf("%04X,", result[y]);
-#endif
+
                 if (result[y] || y == drone_detection_level)
                 {
                     // check if we should alarm about a drone presence
                     if (filtered_result[y] == 1 && y <= drone_detection_level)
                     {
                         drone_detected = true;
+
+                        // Set LED to ON (filtered in UI component)
+                        UI_setLedFlag(drone_detected);
+
 
 #if ( WATERFALL_ENABLED == true )
                         if (single_page_scan)
@@ -476,12 +486,13 @@ void loop(void)
 #endif
                         if (drone_detected_frequency_start == 0)
                         {
+                            // mark freq start 
                             drone_detected_frequency_start = freq;
                         }
-                        
+
+                        // mark freq end ... will right last detected range 
                         drone_detected_frequency_end = freq;
 
-                        UI_setLedFlag(true);
                         
                         // If level is set to sensitive,
                         // start beeping every 10th frequency and shorter
@@ -512,7 +523,10 @@ void loop(void)
                     }
 
 #if ( WATERFALL_ENABLED == true )
-                    if (filtered_result[y] == 1 && y > drone_detection_level && single_page_scan && waterfall[scan_iteration][x][w] != true)
+                    if ((filtered_result[y] == 1) 
+                        && ( y > drone_detection_level) 
+                        && ( single_page_scan ) 
+                        && ( waterfall[scan_iteration][x][w] != true) )
                     {
                         // If drone not found set dark pixel on the waterfall
                         // TODO: make something like scrolling up if possible
@@ -531,8 +545,10 @@ void loop(void)
                         detected = true;
                     }
 
-                    // Draw detection Level line every 2 pixel
-                    if (y == drone_detection_level && x % 2 == 0)
+                    // -------------------------------------------------------------
+                    // Draw "Detection Level line" every 2 pixel
+                    // -------------------------------------------------------------
+                    if ( ( y == drone_detection_level) && (x % 2 == 0))
                     {
                         display.setPixel(x, y);
                     }
