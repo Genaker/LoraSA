@@ -53,6 +53,7 @@ int SCAN_RANGES[] = {};
 // MHZ per page
 // to put everething into one page set RANGE_PER_PAGE = FREQ_END - 800
 unsigned int RANGE_PER_PAGE = FREQ_END - FREQ_BEGIN; // FREQ_END - FREQ_BEGIN
+
 // To Enable Multi Screen scan
 //  unsigned int RANGE_PER_PAGE = 50;
 //  Default Range on Menu Button Switch
@@ -74,7 +75,6 @@ unsigned int RANGE_PER_PAGE = FREQ_END - FREQ_BEGIN; // FREQ_END - FREQ_BEGIN
 
 #define SINGLE_STEP (float)(RANGE / STEPS)
 
-unsigned int single_step = SINGLE_STEP;
 
 unsigned int range = (int)(FREQ_END - FREQ_BEGIN);
 unsigned int fr_begin = FREQ_BEGIN;
@@ -94,6 +94,7 @@ uint16_t filtered_result[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
 
 // Waterfall array
 bool waterfall[10][STEPS][10]; // 10 - ???
+
 // global variable
 
 // Used as a Led Light and Buzzer/count trigger
@@ -111,7 +112,10 @@ bool SOUND_ON = true;
 unsigned int scan_time = 0;
 unsigned int scan_start_time = 0;
 
-uint64_t start = 0;
+
+#ifdef PRINT_PROFILE_TIME
+uint64_t scan_start = 0;
+#endif
 
 unsigned int x, y, scan_iteration, w = 0;
 unsigned int ranges_count = 0;
@@ -239,31 +243,41 @@ void loop(void)
     drone_detected = false;
     detection_count = 0;
     drone_detected_frequency_start = 0;
+    ranges_count = 0;
+
+
 #ifdef PRINT_PROFILE_TIME
-    start = millis();
+    scan_start = millis();
 #endif
+    
     if (!ANIMATED_RELOAD || !single_page_scan)
     {
         // clear the scan plot rectangle
         UI_clearPlotter();
     }
+
     // do the scan
     range = FREQ_END - FREQ_BEGIN;
     if (RANGE_PER_PAGE > range)
     {
         RANGE_PER_PAGE = range;
     }
+    
     fr_begin = FREQ_BEGIN;
     fr_end = fr_begin;
+
     // 50 is a single-screen range
     // TODO: Make 50 a variable with the option to show the full range
     iterations = range / RANGE_PER_PAGE;
-    single_step = RANGE_PER_PAGE / 128;
+
+#if 0 // disabled code
     if (range % RANGE_PER_PAGE != 0)
     {
         // add more scan
         //++;
     }
+#endif
+
     if (RANGE_PER_PAGE == range)
     {
         single_page_scan = true;
@@ -272,16 +286,18 @@ void loop(void)
     {
         single_page_scan = false;
     }
-    ranges_count = 0;
+
     for (int range : SCAN_RANGES)
     {
         ranges_count++;
     }
+
     if (ranges_count > 0)
     {
         iterations = ranges_count;
         single_page_scan = false;
     }
+
     // Iterating by small ranges by 50 Mhz each pixel is 0.4 Mhz
     for (scan_iteration = 0; scan_iteration < iterations; scan_iteration++)
     {
@@ -323,6 +339,7 @@ void loop(void)
             waterfall[scan_iteration][x][w] = false;
             freq = fr_begin + (range * ((float)x / STEPS));
             radio.setFrequency(freq);
+
             // TODO: RSSI METHOD
             // Gets RSSI (Recorded Signal Strength Indicator)
             // Restart continuous receive mode on the new frequency
@@ -407,8 +424,10 @@ void loop(void)
                     }
                 }
             }
-#endif
+#endif  // SCAN_METHOD == METHOD_RSSI
+
             detected = false;
+
 #ifdef FILTER_SPECTRUM_RESULTS
             // Filter Elements without neighbors
             for (y = 1; y < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE; y++)
@@ -454,27 +473,39 @@ void loop(void)
                         {
                             drone_detected_frequency_start = freq;
                         }
+                        
                         drone_detected_frequency_end = freq;
+
                         UI_setLedFlag(true);
+                        
                         // If level is set to sensitive,
                         // start beeping every 10th frequency and shorter
                         if (drone_detection_level <= 25)
                         {
                             if (detection_count == 1 && SOUND_ON)
-                                tone(BUZZER_PIN, 205, 10);
+                            {
+                                tone(BUZZER_PIN, 205, 10); // same action ???
+                            }
                             if (detection_count % 5 == 0 && SOUND_ON)
-                                tone(BUZZER_PIN, 205, 10);
+                            {
+                                tone(BUZZER_PIN, 205, 10); // same action ???
+                            }   
                         }
                         else
                         {
                             if (detection_count % 20 == 0 && SOUND_ON)
-                                tone(BUZZER_PIN, 205, 10);
+                            {
+                                tone(BUZZER_PIN, 205, 10); // same action ???
+                            }
                         }
+
+                        // draw ... ???
                         display.setPixel(x, 1);
                         display.setPixel(x, 2);
                         display.setPixel(x, 3);
                         display.setPixel(x, 4);
                     }
+
 #ifdef WATERFALL_ENABLED
                     if (filtered_result[y] == 1 && y > drone_detection_level && single_page_scan && waterfall[scan_iteration][x][w] != true)
                     {
@@ -486,29 +517,35 @@ void loop(void)
                         display.setColor(WHITE);
                     }
 #endif
+
+
                     if (filtered_result[y] == 1)
                     {
                         // Set signal level pixel
                         display.setPixel(x, y);
                         detected = true;
                     }
-                    // Draw detection Level line evere 2 pixel
+
+                    // Draw detection Level line every 2 pixel
                     if (y == drone_detection_level && x % 2 == 0)
                     {
                         display.setPixel(x, y);
                     }
                 }
+                
 #ifdef PRINT_PROFILE_TIME
                 scan_time = millis() - scan_start_time;
                 // Huge performance issue if enable
                 // Serial.printf("Single Scan took %lld ms\n", scan_time);
 #endif
             }
+            
+            // count detected 
             if (detected)
             {
                 detection_count++;
             }
-            detected = false;
+
 #ifdef PRINT_DEBUG
             Serial.println("....");
 #endif
@@ -516,6 +553,7 @@ void loop(void)
             {
                 display.display();
             }
+
             // Detection level button short press
             if (button.pressedFor(100))
             {
@@ -598,7 +636,7 @@ void loop(void)
 #endif
 // display.display();
 #ifdef PRINT_PROFILE_TIME
-    scan_time = millis() - start;
+    scan_time = millis() - scan_start;
     Serial.printf("Scan took %lld ms\n", scan_time);
 #endif
 }
