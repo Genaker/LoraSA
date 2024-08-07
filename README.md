@@ -96,7 +96,7 @@ to disable - uncomment this line
 #define WATERFALL_ENABLED true
 ```
 
-Waterfall shows the last **N** = SCREEN_HEIGHT (64) - WATERFALL_START(37) - 8 (part of the STATUS_TEXT_TOP)  = **19** signal detection that excited set signal level
+Waterfall shows the last **N** = SCREEN_HEIGHT (64) - WATERFALL_START(37) - 8 (part of the ROW_STATUS_TEXT)  = **19** signal detection that excited set signal level
 
 ### RSSI Method of scan
 

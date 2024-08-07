@@ -15,16 +15,15 @@
 #define ONE_MILLISEC 1
 
 // Prints debug information and the scan measurement bins from the SX1262 in hex
-// #define PRINT_DEBUG
 // Change spectrum plot values at once or by line
-#define ANIMATED_RELOAD true
+#define ANIMATED_RELOAD false
 
 #define MAJOR_TICK_LENGTH 2
 #define MINOR_TICK_LENGTH 1
 // WEIGHT of the x-axis line
 #define X_AXIS_WEIGHT 1
 
-#define STATUS_TEXT_TOP (64 - 10)
+#define ROW_STATUS_TEXT (64 - 10)
 
 // The number of the spectrum screen lines = width of screen
 // Resolution of the scan is limited by 128-pixel screen

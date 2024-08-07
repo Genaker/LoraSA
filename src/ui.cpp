@@ -34,7 +34,10 @@ extern unsigned int ranges_count;
 extern int SCAN_RANGES[];
 extern unsigned int ranges_count;
 extern unsigned int iterations;
-extern unsigned int scan_iteration;
+extern unsigned int range_item;
+
+extern uint64_t loop_time;
+
 
 void UI_Init(SSD1306Wire *display_ptr)
 {
@@ -56,13 +59,13 @@ void clearStatus(void)
 {
     // clear status line
     display_instance->setColor(BLACK);
-    display_instance->fillRect(0, STATUS_TEXT_TOP + 2, 128, 13);
+    display_instance->fillRect(0, ROW_STATUS_TEXT + 2, 128, 13);
     display_instance->setColor(WHITE);
 }
 
 void UI_clearPlotter(void)
 {
-    // clear the scan plot rectangle
+    // clear the scan plot rectangle (top part)
     display_instance->setColor(BLACK);
     display_instance->fillRect(0, 0, STEPS, HEIGHT);
     display_instance->setColor(WHITE);
@@ -171,21 +174,25 @@ void UI_displayDecorate(int begin = 0, int end = 0, bool redraw = false)
         display_instance->setColor(BLACK);
         display_instance->fillRect(0, SCALE_TEXT_TOP + 1, 128, 12);
         display_instance->setColor(WHITE);
+
         // Drone detection level
         display_instance->setTextAlignment(TEXT_ALIGN_RIGHT);
         display_instance->drawString(128, 0, String(drone_detection_level));
         // Frequency start
         display_instance->setTextAlignment(TEXT_ALIGN_LEFT);
-        display_instance->drawString(0, SCALE_TEXT_TOP,
+        display_instance->drawString(0, ROW_STATUS_TEXT, 
                                      (begin == 0) ? String(FREQ_BEGIN) : String(begin));
+
+        // Frequency detected 
         display_instance->setTextAlignment(TEXT_ALIGN_CENTER);
-        display_instance->drawString(128 / 2, SCALE_TEXT_TOP,
+        display_instance->drawString(128 / 2, ROW_STATUS_TEXT,
                                      (begin == 0) ? String(median_frequency) : String(begin + ((end - begin) / 2)));
         // Frequency end
         display_instance->setTextAlignment(TEXT_ALIGN_RIGHT);
-        display_instance->drawString(128, SCALE_TEXT_TOP,
+        display_instance->drawString(128, ROW_STATUS_TEXT,
                                      (end == 0) ? String(FREQ_END) : String(end));
     }
+
     if (led_flag == true && detection_count >= 5)
     {
         digitalWrite(LED, HIGH);
@@ -200,6 +207,7 @@ void UI_displayDecorate(int begin = 0, int end = 0, bool redraw = false)
     {
         digitalWrite(LED, LOW);
     }
+
     // Status text block
     if (!drone_detected)
     {
@@ -209,21 +217,26 @@ void UI_displayDecorate(int begin = 0, int end = 0, bool redraw = false)
         clearStatus();
         if (scan_progress_count == 0)
         {
-            display_instance->drawString(start_scan_text, STATUS_TEXT_TOP,
-                                         "Scan.  ");
+            display_instance->drawString(start_scan_text, ROW_STATUS_TEXT,
+                                         "Scan  \\");
         }
         else if (scan_progress_count == 1)
         {
-            display_instance->drawString(start_scan_text, STATUS_TEXT_TOP,
-                                         "Scan.. ");
+            display_instance->drawString(start_scan_text, ROW_STATUS_TEXT,
+                                         "Scan  |");
         }
         else if (scan_progress_count == 2)
         {
-            display_instance->drawString(start_scan_text, STATUS_TEXT_TOP,
-                                         "Scan...");
+            display_instance->drawString(start_scan_text, ROW_STATUS_TEXT,
+                                         "Scan  /");
+        }
+        else if (scan_progress_count == 3)
+        {
+            display_instance->drawString(start_scan_text, ROW_STATUS_TEXT,
+                                         "Scan  -");
         }
         scan_progress_count++;
-        if (scan_progress_count == 3)
+        if (scan_progress_count >= 4)
         {
             scan_progress_count = 0;
         }
@@ -233,29 +246,38 @@ void UI_displayDecorate(int begin = 0, int end = 0, bool redraw = false)
         display_instance->setTextAlignment(TEXT_ALIGN_CENTER);
         // clear status line
         clearStatus();
-        display_instance->drawString(start_scan_text, STATUS_TEXT_TOP,
+        display_instance->drawString(start_scan_text, ROW_STATUS_TEXT,
                                      String(drone_detected_frequency_start) + ">RF<" + String(drone_detected_frequency_end));
+        
+
     }
     if (ranges_count == 0)
     {
+#ifdef DEBUG
         display_instance->setTextAlignment(TEXT_ALIGN_LEFT);
-        display_instance->drawString(0, STATUS_TEXT_TOP, String(FREQ_BEGIN));
+        display_instance->drawString(0, ROW_STATUS_TEXT,String(loop_time)); 
+#else
+        display_instance->setTextAlignment(TEXT_ALIGN_LEFT);
+        display_instance->drawString(0, ROW_STATUS_TEXT, String(FREQ_BEGIN));
+    
+#endif
         display_instance->setTextAlignment(TEXT_ALIGN_RIGHT);
-        display_instance->drawString(128, STATUS_TEXT_TOP, String(FREQ_END));
+        display_instance->drawString(128, ROW_STATUS_TEXT, String(FREQ_END));
+
     }
     else if (ranges_count > 0)
     {
         display_instance->setTextAlignment(TEXT_ALIGN_LEFT);
-        display_instance->drawString(0, STATUS_TEXT_TOP,
-                                     String(SCAN_RANGES[scan_iteration] / 1000) + "-" + String(SCAN_RANGES[scan_iteration] % 1000));
-        if (scan_iteration + 1 < iterations)
+        display_instance->drawString(0, ROW_STATUS_TEXT,
+                                     String(SCAN_RANGES[range_item] / 1000) + "-" + String(SCAN_RANGES[range_item] % 1000));
+        if (range_item + 1 < iterations)
         {
             display_instance->setTextAlignment(TEXT_ALIGN_RIGHT);
-            display_instance->drawString(128, STATUS_TEXT_TOP,
-                                         String(SCAN_RANGES[scan_iteration + 1] / 1000) + "-" + String(SCAN_RANGES[scan_iteration + 1] % 1000));
+            display_instance->drawString(128, ROW_STATUS_TEXT,
+                                         String(SCAN_RANGES[range_item + 1] / 1000) + "-" + String(SCAN_RANGES[range_item + 1] % 1000));
         }
     }
-    if (!ui_initialized)
+    if (ui_initialized == false)
     {
         // X-axis
         display_instance->fillRect(0, HEIGHT, STEPS, X_AXIS_WEIGHT);

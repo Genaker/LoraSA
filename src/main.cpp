@@ -44,8 +44,8 @@ typedef enum
 #define SCAN_METHOD METHOD_SPECTRAL
 
 // Feature to scan diapazones. Other frequency settings will be ignored.
-int SCAN_RANGES[] = {};
 // int SCAN_RANGES[] = {850890, 920950};
+int SCAN_RANGES[] = {};
 
 // MHZ per page
 // to put everething into one page set RANGE_PER_PAGE = FREQ_END - 800
@@ -116,7 +116,7 @@ uint64_t scan_time = 0;
 uint64_t scan_start_time = 0;
 #endif
 
-uint64_t x, y, scan_iteration, w = 0;
+uint64_t x, y, range_item, w = 0;
 uint64_t ranges_count = 0;
 
 float freq = 0;
@@ -124,12 +124,15 @@ int rssi = 0;
 int state = 0;
 int result_index = 0;
 
-uint64_t button_pressed_counter = 0;
+uint8_t button_pressed_counter = 0;
+
+uint64_t loop_cnt = 0;
 
 void setup(void)
 {
     float vbat;
     float resolution;
+    loop_cnt = 0;
 
     pinMode(LED, OUTPUT);
     pinMode(BUZZER_PIN, OUTPUT);
@@ -177,19 +180,17 @@ void setup(void)
     display.clear();
     
     resolution = RANGE / STEPS;
-    if (RANGE_PER_PAGE == range)
-    {
-        single_page_scan = true;
-    }
-    else
-    {
-        single_page_scan = false;
-    }
+
+    single_page_scan = (RANGE_PER_PAGE == range);
+
+#ifdef DISABLED_CODE
     // Adjust range if it is not even to RANGE_PER_PAGE
     if (!single_page_scan && range % RANGE_PER_PAGE != 0)
     {
         // range = range + range % RANGE_PER_PAGE;
     }
+#endif
+
     if (single_page_scan)
     {
         both.println("Single Page Screen MODE");
@@ -254,6 +255,9 @@ void loop(void)
     //reset scan time    
     scan_time = 0;
 
+    // general purpose loop conter
+    loop_cnt++;
+
 #ifdef PRINT_PROFILE_TIME
     loop_start = millis();
 #endif
@@ -307,18 +311,18 @@ void loop(void)
     }
 
     // Iterating by small ranges by 50 Mhz each pixel is 0.4 Mhz
-    for (scan_iteration = 0; scan_iteration < iterations; scan_iteration++)
+    for (range_item = 0; range_item < iterations; range_item++)
     {
         range = RANGE_PER_PAGE;
         if (ranges_count == 0)
         {
-            fr_begin = (scan_iteration == 0) ? fr_begin : fr_begin += range;
+            fr_begin = (range_item == 0) ? fr_begin : fr_begin += range;
             fr_end = fr_begin + RANGE_PER_PAGE;
         }
         else
         {
-            fr_begin = SCAN_RANGES[scan_iteration] / 1000;
-            fr_end = SCAN_RANGES[scan_iteration] % 1000;
+            fr_begin = SCAN_RANGES[range_item] / 1000;
+            fr_end = SCAN_RANGES[range_item] % 1000;
             range = fr_end - fr_begin;
         }
         
@@ -347,30 +351,11 @@ void loop(void)
             scan_start_time = millis();
 #endif
 
-            waterfall[scan_iteration][x][w] = false;
+            waterfall[range_item][x][w] = false;
             freq = fr_begin + (range * ((float)x / STEPS));
 
-            radio.setFrequency(freq,false);
+            radio.setFrequency(freq,false); // false = no calibration need here
 
-            // TODO: RSSI METHOD
-            // Gets RSSI (Recorded Signal Strength Indicator)
-            // Restart continuous receive mode on the new frequency
-            // state = radio.startReceive();
-            // if (state == RADIOLIB_ERR_NONE) {
-            // Serial.println(F("Started continuous receive mode"));
-            //} else {
-            // Serial.print(F("Failed to start receive mode, error code: "));
-            // Serial.println(state);
-            //}
-            // rssi = radio.getRSSI(false);
-            // Serial.println(String(rssi) + "db");
-            // delay(25);
-            // This code will iterate over the specified frequencies,
-            // changing the frequency every
-            // second and printing the RSSI value for each frequency to the serial monitor. Adjust the frequencies array
-            // to include the specific frequencies you're interested in monitoring.
-            // A short delay after changing the frequency
-            // ensures the module has time to stabilize and get an accurate RSSI reading.
 #ifdef PRINT_DEBUG
             Serial.printf("Step:%d\n",x);
             // Serial.printf("Step:%d Freq: %f\n",x,freq);
@@ -410,10 +395,8 @@ void loop(void)
                     Serial.println(state);
                 }
 
-                for (int r = 1; r < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE; r++)
-                {
-                    result[r] = 0; // ?????
-                }
+                // memset 
+                memset(result,0,RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE);
                 result_index = 0;
                 // N of samples
                 for (int r = 1; r < SAMPLES_RSSI; r++)
@@ -421,7 +404,7 @@ void loop(void)
                     rssi = radio.getRSSI(false);
                     // delay(ONE_MILLISEC);
                     // ToDO: check if 4 is correct value for 33 power bins
-                    result_index = (abs(rssi) / 4);  /// WTF ??? 
+                    result_index = (abs(rssi) / 4);  /// still not clear formula  
 
 #ifdef PRINT_DEBUG
                     Serial.printf("Freq: %.2f RSSI: %d \n",freq,rssi);
@@ -479,7 +462,7 @@ void loop(void)
                         if (single_page_scan)
                         {
                             // Drone detection true for waterfall
-                            waterfall[scan_iteration][x][w] = true;
+                            waterfall[range_item][x][w] = true;
                             display.setColor(WHITE);
                             display.setPixel(x, w);
                         }
@@ -520,17 +503,20 @@ void loop(void)
                         // display.setPixel(x, 2);
                         // display.setPixel(x, 3);
                         // display.setPixel(x, 4);
+
+                        // draw vertical line on top of display for "drone detected" frequencies
+                        display.drawLine(x , 1, x, 6 ); 
                     }
 
 #if ( WATERFALL_ENABLED == true )
                     if ((filtered_result[y] == 1) 
                         && ( y > drone_detection_level) 
                         && ( single_page_scan ) 
-                        && ( waterfall[scan_iteration][x][w] != true) )
+                        && ( waterfall[range_item][x][w] != true) )
                     {
                         // If drone not found set dark pixel on the waterfall
                         // TODO: make something like scrolling up if possible
-                        waterfall[scan_iteration][x][w] = false;
+                        waterfall[range_item][x][w] = false;
                         display.setColor(BLACK);
                         display.setPixel(x, w);
                         display.setColor(WHITE);
@@ -635,7 +621,7 @@ void loop(void)
             heltec_loop();
         }
         w++;
-        if (w > STATUS_TEXT_TOP + 1)
+        if (w > ROW_STATUS_TEXT + 1)
         {
             w = WATERFALL_START;
         }
@@ -648,15 +634,22 @@ void loop(void)
             display.setColor(WHITE);
         }
 #endif
-        display.display();
+
+        // Render display data here
+        display.display();            
     }
+
 #ifdef PRINT_DEBUG
     Serial.println("----");
 #endif
-// display.display();
-#ifdef PRINT_PROFILE_TIME
+
     loop_time = millis() - loop_start;
+
+
+#ifdef PRINT_PROFILE_TIME
+#ifdef PRINT_DEBUG
     Serial.printf("LOOP: %lld ms; SCAN: %lld ms;\n  ", loop_time,scan_time);
+#endif
 #endif
 
 }
