@@ -27,7 +27,6 @@ extern unsigned int RANGE_PER_PAGE;
 extern unsigned int median_frequency;
 extern unsigned int detection_count;
 extern bool SOUND_ON;
-extern bool drone_detected;
 extern unsigned int drone_detected_frequency_start;
 extern unsigned int drone_detected_frequency_end;
 extern unsigned int ranges_count;
@@ -193,23 +192,15 @@ void UI_displayDecorate(int begin = 0, int end = 0, bool redraw = false)
                                      (end == 0) ? String(FREQ_END) : String(end));
     }
 
-    if (led_flag == true && detection_count >= 5)
-    {
-        digitalWrite(LED, HIGH);
-        if (SOUND_ON)
-        {
-            tone(BUZZER_PIN, 104, 100);
-        }
-        digitalWrite(REB_PIN, HIGH);
-        led_flag = false;
-    }
-    else if (!redraw)
-    {
-        digitalWrite(LED, LOW);
-    }
-
     // Status text block
-    if (!drone_detected)
+    if (led_flag) // 'drone' detected 
+    {
+        display_instance->setTextAlignment(TEXT_ALIGN_CENTER);
+        // clear status line
+        clearStatus();
+        display_instance->drawString(start_scan_text, ROW_STATUS_TEXT,
+                                     String(drone_detected_frequency_start) + ">RF<" + String(drone_detected_frequency_end));
+    } else 
     {
         // "Scanning"
         display_instance->setTextAlignment(TEXT_ALIGN_CENTER);
@@ -241,16 +232,24 @@ void UI_displayDecorate(int begin = 0, int end = 0, bool redraw = false)
             scan_progress_count = 0;
         }
     }
-    if (drone_detected)
-    {
-        display_instance->setTextAlignment(TEXT_ALIGN_CENTER);
-        // clear status line
-        clearStatus();
-        display_instance->drawString(start_scan_text, ROW_STATUS_TEXT,
-                                     String(drone_detected_frequency_start) + ">RF<" + String(drone_detected_frequency_end));
-        
 
+
+    if (led_flag == true && detection_count >= 5)
+    {
+        digitalWrite(LED, HIGH);
+        if (SOUND_ON)
+        {
+            tone(BUZZER_PIN, 104, 100);
+        }
+        digitalWrite(REB_PIN, HIGH);
+        led_flag = false;
     }
+    else if (!redraw)
+    {
+        digitalWrite(LED, LOW);
+    }
+
+
     if (ranges_count == 0)
     {
 #ifdef DEBUG

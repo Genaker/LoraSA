@@ -97,7 +97,6 @@ bool waterfall[10][STEPS][10]; // 10 - ???
 // Used as a Led Light and Buzzer/count trigger
 bool first_run = false;
 // drone detection flag
-bool drone_detected = false;
 bool detected = false;
 uint64_t drone_detection_level = DEFAULT_DRONE_DETECTION_LEVEL;
 uint64_t drone_detected_frequency_start = 0;
@@ -122,7 +121,7 @@ uint64_t ranges_count = 0;
 float freq = 0;
 int rssi = 0;
 int state = 0;
-int result_index = 0;
+uint8_t result_index = 0;
 
 uint8_t button_pressed_counter = 0;
 
@@ -247,7 +246,6 @@ void setup(void)
 void loop(void)
 {
     UI_displayDecorate(0, 0, false); // some default values
-    drone_detected = false;
     detection_count = 0;
     drone_detected_frequency_start = 0;
     ranges_count = 0;
@@ -357,11 +355,7 @@ void loop(void)
             radio.setFrequency(freq,false); // false = no calibration need here
 
 #ifdef PRINT_DEBUG
-            Serial.printf("Step:%d\n",x);
             // Serial.printf("Step:%d Freq: %f\n",x,freq);
-            // Serial.print(" Frequency:");
-            // Serial.print(freq);
-            // Serial.println();
 #endif
             // SpectralScan Method
 #if SCAN_METHOD == METHOD_SPECTRAL
@@ -383,13 +377,7 @@ void loop(void)
             // Spectrum analyzer using getRSSI
             {
                 state = radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_NONE);
-                if (state == RADIOLIB_ERR_NONE)
-                {
-#ifdef PRINT_DEBUG
-                    Serial.println(F("Started continuous RX mode"));
-#endif
-                }
-                else
+                if (state != RADIOLIB_ERR_NONE)
                 {
                     Serial.print(F("Failed to start receive mode, error code: "));
                     Serial.println(state);
@@ -397,23 +385,34 @@ void loop(void)
 
                 // memset 
                 memset(result,0,RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE);
-                result_index = 0;
+                result_index = 0u;
                 // N of samples
-                for (int r = 1; r < SAMPLES_RSSI; r++)
+                for (int r = 0; r < SAMPLES_RSSI; r++)
                 {
                     rssi = radio.getRSSI(false);
                     // delay(ONE_MILLISEC);
                     // ToDO: check if 4 is correct value for 33 power bins
-                    result_index = (abs(rssi) / 4);  /// still not clear formula  
+                    result_index = uint8_t(abs(rssi) / 4);  /// still not clear formula  
 
 #ifdef PRINT_DEBUG
-                    Serial.printf("Freq: %.2f RSSI: %d \n",freq,rssi);
+                    // Serial.printf("RSSI: %d IDX: %d\n",rssi,result_index);
 #endif
-                    // Saving max value only rss is negative so smaller is bigger
-                    if (result[result_index] > rssi)
+                    // avoid buffer overflow
+                    if (result_index < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE)
                     {
-                        result[result_index] = rssi;
+                        // Saving max value only rss is negative so smaller is bigger
+                        if (result[result_index] > rssi)
+                        {
+                            result[result_index] = rssi;
+                        }
                     }
+#ifdef PRINT_DEBUG
+                    else
+                    {
+                        Serial.print("Out-of-Range: result_index %d\n");
+                    }
+#endif
+
                 }
             }
 #endif  // SCAN_METHOD == METHOD_RSSI
@@ -424,39 +423,43 @@ void loop(void)
             for (y = 0; y < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE; y++)
             {
 #ifdef PRINT_DEBUG
-                Serial.printf("%04X,", result[y]);
+                // Serial.printf("%04X,", result[y]);
 #endif
 
 #ifdef FILTER_SPECTRUM_RESULTS
-                // Filter Elements without neighbors
 
+                filtered_result[y] = 0;
+                // Filter Elements without neighbors
                 // if RSSI method actual value is -xxx dB
-                if (result[y] && ((result[y + 1] != 0) || (result[y - 1] != 0)))
+                if (result[y])
                 {
-                    // Filling the empty pixel between signals int the level < 27 (noise level)
-                    /* if (y < 27 && result[y + 1] == 0 && result[y + 2] > 0)
+                    // do not process 'first' and 'last' row to avoid out of index access
+                    if ((y!=0) && (y != (RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE - 1)))
+                    {
+                        if ((result[y + 1] != 0) || (result[y - 1] != 0))
                         {
-                        result[y + 1] = 1;
-                        filtered_result[y + 1] = 1;
-                        }*/
-                    filtered_result[y] = 1;
-                }
-                else
-                {
-                    filtered_result[y] = 0;
+                            // Filling the empty pixel between signals int the level < 27 (noise level)
+                            /* if (y < 27 && result[y + 1] == 0 && result[y + 2] > 0)
+                                {
+                                result[y + 1] = 1;
+                                filtered_result[y + 1] = 1;
+                                }*/
+                            filtered_result[y] = 1;
+                        }
+                    }
                 }
 #endif
 
-                if (result[y] || y == drone_detection_level)
+
+                // if (result[y] || y == drone_detection_level)
                 {
                     // check if we should alarm about a drone presence
-                    if (filtered_result[y] == 1 && y <= drone_detection_level)
+                    if ((filtered_result[y] == 1)           // we have some data and
+                        && (y <= drone_detection_level))    // detection threshold match
                     {
-                        drone_detected = true;
-
+                        
                         // Set LED to ON (filtered in UI component)
-                        UI_setLedFlag(drone_detected);
-
+                        UI_setLedFlag(true);
 
 #if ( WATERFALL_ENABLED == true )
                         if (single_page_scan)
@@ -473,7 +476,7 @@ void loop(void)
                             drone_detected_frequency_start = freq;
                         }
 
-                        // mark freq end ... will right last detected range 
+                        // mark freq end ... will shift right to last detected range 
                         drone_detected_frequency_end = freq;
 
                         
@@ -497,6 +500,7 @@ void loop(void)
                                 tone(BUZZER_PIN, 205, 10); // same action ???
                             }
                         }
+
 
                         // debug draw 
                         // display.setPixel(x, 1);
@@ -523,7 +527,12 @@ void loop(void)
                     }
 #endif
 
+#if 0
 
+#endif // If 0
+
+
+                    // next 2 If's ... adds !!!! 10ms of runtime ......tfk ???
                     if (filtered_result[y] == 1)
                     {
                         // Set signal level pixel
@@ -535,15 +544,18 @@ void loop(void)
                     // Draw "Detection Level line" every 2 pixel
                     // -------------------------------------------------------------
                     if ( ( y == drone_detection_level) && (x % 2 == 0))
-                    {
+                    {                
+                        display.setColor(INVERSE);
                         display.setPixel(x, y);
+                        display.setPixel(x, y+1); // 2 px wide 
+                        display.setColor(WHITE);
                     }
                 }
 
             }
                     
 #ifdef PRINT_PROFILE_TIME
-                scan_time += (millis() - scan_start_time);
+            scan_time += (millis() - scan_start_time);
 #endif        
             // count detected 
             if (detected)
@@ -552,7 +564,7 @@ void loop(void)
             }
 
 #ifdef PRINT_DEBUG
-            Serial.println("....");
+            // Serial.println("....");
 #endif
             if (first_run || ANIMATED_RELOAD)
             {
@@ -640,7 +652,7 @@ void loop(void)
     }
 
 #ifdef PRINT_DEBUG
-    Serial.println("----");
+    //Serial.println("----");
 #endif
 
     loop_time = millis() - loop_start;
