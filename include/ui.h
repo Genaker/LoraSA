@@ -2,9 +2,9 @@
 #ifndef __UI_H__
 #define __UI_H__
 
-#include "OLEDDisplayUi.h"
-#include "SSD1306Wire.h"
 #include <Arduino.h>
+#include "SSD1306Wire.h"
+#include "OLEDDisplayUi.h"
 
 // #include <heltec_unofficial.h>
 
@@ -14,8 +14,8 @@
 
 #define ONE_MILLISEC 1
 
-// Prints debug information and the scan measurement bins from the SX1262 in
-// hex Change spectrum plot values at once or by line
+// Prints debug information and the scan measurement bins from the SX1262 in hex
+// Change spectrum plot values at once or by line
 #define ANIMATED_RELOAD false
 
 #define MAJOR_TICK_LENGTH 2

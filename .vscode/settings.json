@@ -1,15 +1,12 @@
 {
-    // Suggest where to make a new line by adding two vertical lines
-    // Vertical lines, 79 works well for code reviews and diffs
-    "editor.rulers": [
-        79,
-        90
-    ],
-    "editor.formatOnSave": true,
-    "editor.minimap.enabled": false,
-    "workbench.colorCustomizations": {
-        "editorRuler.foreground": "#ff4081"
-    },
-    "files.insertFinalNewline": true,
-    "files.autoSave": "onFocusChange",
+	"files.associations": {
+		"images.h": "c",
+		"*.tcc": "cpp",
+		"deque": "cpp",
+		"string": "cpp",
+		"unordered_map": "cpp",
+		"unordered_set": "cpp",
+		"vector": "cpp",
+		"system_error": "cpp"
+	}
 }
