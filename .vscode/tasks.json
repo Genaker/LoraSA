@@ -1,0 +1,15 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Format All Files with ClangFormat",
+            "type": "shell",
+            "command": "find . -name '*.cpp' -o -name '*.h' | xargs clang-format -i",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": []
+        }
+    ]
+}
