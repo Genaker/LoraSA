@@ -1,7 +1,7 @@
 #include "ui.h"
-#include "images.h"
-#include "global_config.h"
 #include "RadioLib.h"
+#include "global_config.h"
+#include "images.h"
 
 // -------------------------------------------------
 // LOCAL DEFINES
@@ -37,7 +37,6 @@ extern unsigned int range_item;
 
 extern uint64_t loop_time;
 
-
 void UI_Init(SSD1306Wire *display_ptr)
 {
     // init pointer to display instance.
@@ -49,10 +48,7 @@ void UI_Init(SSD1306Wire *display_ptr)
     display_instance->display();
 }
 
-void UI_setLedFlag(bool new_status)
-{
-    led_flag = new_status;
-}
+void UI_setLedFlag(bool new_status) { led_flag = new_status; }
 
 void clearStatus(void)
 {
@@ -103,7 +99,8 @@ void drawTicks(float every, int length)
     tick_minor = 0;
     median = (RANGE_PER_PAGE / every) / 2;
     // TODO: (RANGE_PER_PAGE / every)
-    //	* 2 has twice extra steps we need to figureout correct logic or minor ticks is not showing to the end
+    //	* 2 has twice extra steps we need to figureout correct logic or minor
+    // ticks is not showing to the end
     for (int t = 0; t <= (RANGE_PER_PAGE / every) * 2; t++)
     {
         // fix if pixels per step is not int and we have shift
@@ -121,22 +118,24 @@ void drawTicks(float every, int length)
             // Central tick
             if (tick > (128 / 2) - 3 && tick < (128 / 2) + 3)
             {
-                display_instance->drawLine(tick + 1, HEIGHT + X_AXIS_WEIGHT,
-                                           tick + 1, HEIGHT + X_AXIS_WEIGHT + length);
+                display_instance->drawLine(tick + 1, HEIGHT + X_AXIS_WEIGHT, tick + 1,
+                                           HEIGHT + X_AXIS_WEIGHT + length);
             }
         }
 #ifdef MINOR_TICKS
         // Fix two ticks together
-        if ((tick_minor + 1 != tick) && (tick_minor - 1 != tick) && (tick_minor + 2 != tick) && (tick_minor - 2 != tick))
+        if ((tick_minor + 1 != tick) && (tick_minor - 1 != tick) &&
+            (tick_minor + 2 != tick) && (tick_minor - 2 != tick))
         {
-            display_instance->drawLine(tick_minor, HEIGHT + X_AXIS_WEIGHT,
-                                       tick_minor, HEIGHT + X_AXIS_WEIGHT + MINOR_TICK_LENGTH);
+            display_instance->drawLine(tick_minor, HEIGHT + X_AXIS_WEIGHT, tick_minor,
+                                       HEIGHT + X_AXIS_WEIGHT + MINOR_TICK_LENGTH);
         }
         // Central tick
         if (tick_minor > (128 / 2) - 3 && tick_minor < (128 / 2) + 3)
         {
             display_instance->drawLine(tick_minor + 1, HEIGHT + X_AXIS_WEIGHT,
-                                       tick_minor + 1, HEIGHT + X_AXIS_WEIGHT + MINOR_TICK_LENGTH);
+                                       tick_minor + 1,
+                                       HEIGHT + X_AXIS_WEIGHT + MINOR_TICK_LENGTH);
         }
 #endif
     }
@@ -159,10 +158,8 @@ void UI_displayDecorate(int begin = 0, int end = 0, bool redraw = false)
     if (!ui_initialized)
     {
         // Start and end ticks
-        display_instance->fillRect(0, HEIGHT + X_AXIS_WEIGHT, 2,
-                                   MAJOR_TICK_LENGTH + 1);
-        display_instance->fillRect(126, HEIGHT + X_AXIS_WEIGHT, 2,
-                                   MAJOR_TICK_LENGTH + 1);
+        display_instance->fillRect(0, HEIGHT + X_AXIS_WEIGHT, 2, MAJOR_TICK_LENGTH + 1);
+        display_instance->fillRect(126, HEIGHT + X_AXIS_WEIGHT, 2, MAJOR_TICK_LENGTH + 1);
         // Drone detection level
         display_instance->setTextAlignment(TEXT_ALIGN_RIGHT);
         display_instance->drawString(128, 0, String(drone_detection_level));
@@ -179,13 +176,14 @@ void UI_displayDecorate(int begin = 0, int end = 0, bool redraw = false)
         display_instance->drawString(128, 0, String(drone_detection_level));
         // Frequency start
         display_instance->setTextAlignment(TEXT_ALIGN_LEFT);
-        display_instance->drawString(0, ROW_STATUS_TEXT, 
+        display_instance->drawString(0, ROW_STATUS_TEXT,
                                      (begin == 0) ? String(FREQ_BEGIN) : String(begin));
 
-        // Frequency detected 
+        // Frequency detected
         display_instance->setTextAlignment(TEXT_ALIGN_CENTER);
         display_instance->drawString(128 / 2, ROW_STATUS_TEXT,
-                                     (begin == 0) ? String(median_frequency) : String(begin + ((end - begin) / 2)));
+                                     (begin == 0) ? String(median_frequency)
+                                                  : String(begin + ((end - begin) / 2)));
         // Frequency end
         display_instance->setTextAlignment(TEXT_ALIGN_RIGHT);
         display_instance->drawString(128, ROW_STATUS_TEXT,
@@ -193,14 +191,16 @@ void UI_displayDecorate(int begin = 0, int end = 0, bool redraw = false)
     }
 
     // Status text block
-    if (led_flag) // 'drone' detected 
+    if (led_flag) // 'drone' detected
     {
         display_instance->setTextAlignment(TEXT_ALIGN_CENTER);
         // clear status line
         clearStatus();
         display_instance->drawString(start_scan_text, ROW_STATUS_TEXT,
-                                     String(drone_detected_frequency_start) + ">RF<" + String(drone_detected_frequency_end));
-    } else 
+                                     String(drone_detected_frequency_start) + ">RF<" +
+                                         String(drone_detected_frequency_end));
+    }
+    else
     {
         // "Scanning"
         display_instance->setTextAlignment(TEXT_ALIGN_CENTER);
@@ -208,23 +208,19 @@ void UI_displayDecorate(int begin = 0, int end = 0, bool redraw = false)
         clearStatus();
         if (scan_progress_count == 0)
         {
-            display_instance->drawString(start_scan_text, ROW_STATUS_TEXT,
-                                         "Scan  \\");
+            display_instance->drawString(start_scan_text, ROW_STATUS_TEXT, "Scan  \\");
         }
         else if (scan_progress_count == 1)
         {
-            display_instance->drawString(start_scan_text, ROW_STATUS_TEXT,
-                                         "Scan  |");
+            display_instance->drawString(start_scan_text, ROW_STATUS_TEXT, "Scan  |");
         }
         else if (scan_progress_count == 2)
         {
-            display_instance->drawString(start_scan_text, ROW_STATUS_TEXT,
-                                         "Scan  /");
+            display_instance->drawString(start_scan_text, ROW_STATUS_TEXT, "Scan  /");
         }
         else if (scan_progress_count == 3)
         {
-            display_instance->drawString(start_scan_text, ROW_STATUS_TEXT,
-                                         "Scan  -");
+            display_instance->drawString(start_scan_text, ROW_STATUS_TEXT, "Scan  -");
         }
         scan_progress_count++;
         if (scan_progress_count >= 4)
@@ -232,7 +228,6 @@ void UI_displayDecorate(int begin = 0, int end = 0, bool redraw = false)
             scan_progress_count = 0;
         }
     }
-
 
     if (led_flag == true && detection_count >= 5)
     {
@@ -249,31 +244,32 @@ void UI_displayDecorate(int begin = 0, int end = 0, bool redraw = false)
         digitalWrite(LED, LOW);
     }
 
-
     if (ranges_count == 0)
     {
 #ifdef DEBUG
         display_instance->setTextAlignment(TEXT_ALIGN_LEFT);
-        display_instance->drawString(0, ROW_STATUS_TEXT,String(loop_time)); 
+        display_instance->drawString(0, ROW_STATUS_TEXT, String(loop_time));
 #else
         display_instance->setTextAlignment(TEXT_ALIGN_LEFT);
         display_instance->drawString(0, ROW_STATUS_TEXT, String(FREQ_BEGIN));
-    
+
 #endif
         display_instance->setTextAlignment(TEXT_ALIGN_RIGHT);
         display_instance->drawString(128, ROW_STATUS_TEXT, String(FREQ_END));
-
     }
     else if (ranges_count > 0)
     {
         display_instance->setTextAlignment(TEXT_ALIGN_LEFT);
         display_instance->drawString(0, ROW_STATUS_TEXT,
-                                     String(SCAN_RANGES[range_item] / 1000) + "-" + String(SCAN_RANGES[range_item] % 1000));
+                                     String(SCAN_RANGES[range_item] / 1000) + "-" +
+                                         String(SCAN_RANGES[range_item] % 1000));
         if (range_item + 1 < iterations)
         {
             display_instance->setTextAlignment(TEXT_ALIGN_RIGHT);
             display_instance->drawString(128, ROW_STATUS_TEXT,
-                                         String(SCAN_RANGES[range_item + 1] / 1000) + "-" + String(SCAN_RANGES[range_item + 1] % 1000));
+                                         String(SCAN_RANGES[range_item + 1] / 1000) +
+                                             "-" +
+                                             String(SCAN_RANGES[range_item + 1] % 1000));
         }
     }
     if (ui_initialized == false)
