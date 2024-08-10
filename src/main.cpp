@@ -59,10 +59,12 @@ uint64_t RANGE_PER_PAGE = FREQ_END - FREQ_BEGIN; // FREQ_END - FREQ_BEGIN
 // TODO: Ignore power lines
 #define UP_FILTER 5
 #define LOW_FILTER 3
+// Remove reading without neighbors
 #define FILTER_SPECTRUM_RESULTS true
+#define DRAW_DETECTION_TICKS true
 
-// Number of samples for each frequency scan. Fewer samples = better temporal
-// resolution. if more than 100 it can freez
+// Number of samples for each frequency scan. Fewer samples = better temporal resolution.
+// if more than 100 it can freez
 #define SAMPLES 100 //(scan time = 1294)
 // number of samples for RSSI method
 #define SAMPLES_RSSI RADIOLIB_SX126X_SPECTRAL_SCAN_WINDOW_DEFAULT // 21 //
@@ -88,7 +90,7 @@ uint16_t result[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
 uint16_t filtered_result[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
 
 // Waterfall array
-bool waterfall[10][STEPS][10]; // 10 - ???
+bool waterfall[10][STEPS][10]; // 10 - ??? steps of the waterfall
 
 // global variable
 
@@ -234,6 +236,7 @@ void setup(void)
     Serial.println();
 
     // calibrate only once ,,, at startup
+    // TODO: check documentation (9.2.1) if we must calibrate in certain ranges
     radio.setFrequency(FREQ_BEGIN, true);
 
     // waterfall start line y-axis
@@ -349,8 +352,7 @@ void loop(void)
             waterfall[range_item][x][w] = false;
             freq = fr_begin + (range * ((float)x / STEPS));
 
-            radio.setFrequency(freq,
-                               false); // false = no calibration need here
+            radio.setFrequency(freq, false); // false = no calibration need here
 
 #ifdef PRINT_DEBUG
             // Serial.printf("Step:%d Freq: %f\n",x,freq);
@@ -398,8 +400,7 @@ void loop(void)
                     // avoid buffer overflow
                     if (result_index < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE)
                     {
-                        // Saving max value only rss is negative so smaller is
-                        // bigger
+                        // Saving max value only rss is negative so smaller is bigger
                         if (result[result_index] > rssi)
                         {
                             result[result_index] = rssi;
@@ -423,23 +424,32 @@ void loop(void)
                 // Serial.printf("%04X,", result[y]);
 #endif
 
-#ifdef FILTER_SPECTRUM_RESULTS
+#if FILTER_SPECTRUM_RESULTS == false
+                if (result[y] && result[y] != 0)
+                {
+                    filtered_result[y] = 1;
+                }
+                else
+                {
+                    filtered_result[y] = 0;
+                }
+#endif
+
+#if FILTER_SPECTRUM_RESULTS
 
                 filtered_result[y] = 0;
                 // Filter Elements without neighbors
                 // if RSSI method actual value is -xxx dB
                 if (result[y])
                 {
-                    // do not process 'first' and 'last' row to avoid out of
-                    // index access
+                    // do not process 'first' and 'last' row to avoid out of index access
                     if ((y != 0) && (y != (RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE - 1)))
                     {
                         if ((result[y + 1] != 0) || (result[y - 1] != 0))
                         {
-                            // Filling the empty pixel between signals int the
-                            // level < 27 (noise level)
-                            /* if (y < 27 && result[y + 1] == 0 && result[y +
-                               2] > 0)
+                            // Filling the empty pixel between signals int the level < 27
+                            // (noise level)
+                            /* if (y < 27 && result[y + 1] == 0 && result[y + 2] > 0)
                                 {
                                 result[y + 1] = 1;
                                 filtered_result[y + 1] = 1;
@@ -475,40 +485,39 @@ void loop(void)
                             drone_detected_frequency_start = freq;
                         }
 
-                        // mark freq end ... will shift right to last detected
-                        // range
+                        // mark freq end ... will shift right to last detected range
                         drone_detected_frequency_end = freq;
 
                         // If level is set to sensitive,
                         // start beeping every 10th frequency and shorter
+                        // it improves performance less short beep delays...
                         if (drone_detection_level <= 25)
                         {
                             if (detection_count == 1 && SOUND_ON)
                             {
-                                tone(BUZZER_PIN, 205, 10); // same action ???
+                                tone(BUZZER_PIN, 205,
+                                     10); // same action ??? but first time
                             }
                             if (detection_count % 5 == 0 && SOUND_ON)
                             {
-                                tone(BUZZER_PIN, 205, 10); // same action ???
+                                tone(BUZZER_PIN, 205,
+                                     10); // same action ??? but everey 5th time
                             }
                         }
                         else
                         {
                             if (detection_count % 20 == 0 && SOUND_ON)
                             {
-                                tone(BUZZER_PIN, 205, 10); // same action ???
+                                tone(BUZZER_PIN, 205,
+                                     10); // same action ??? but everey 20th detection
                             }
                         }
 
-                        // debug draw
-                        // display.setPixel(x, 1);
-                        // display.setPixel(x, 2);
-                        // display.setPixel(x, 3);
-                        // display.setPixel(x, 4);
-
-                        // draw vertical line on top of display for "drone
-                        // detected" frequencies
+#if (DRAW_DETECTION_TICKS == true)
+                        // draw vertical line on top of display for "drone detected"
+                        // frequencies
                         display.drawLine(x, 1, x, 6);
+#endif
                     }
 
 #if (WATERFALL_ENABLED == true)
@@ -533,7 +542,8 @@ void loop(void)
                     {
                         // Set signal level pixel
                         display.setPixel(x, y);
-                        detected = true;
+                        if (!detected)
+                            detected = true;
                     }
 
                     // -------------------------------------------------------------
@@ -601,14 +611,13 @@ void loop(void)
                 {
                     // Visually confirm it's off so user releases button
                     display.displayOff();
-                    // Deep sleep (has wait for release so we don't wake up
-                    // immediately)
+                    // Deep sleep (has wait for release so we don't wake up immediately)
                     heltec_deep_sleep();
                     break;
                 }
                 button.update();
                 display.setTextAlignment(TEXT_ALIGN_RIGHT);
-                // erase old value
+                // erase old drone detection level value
                 display.setColor(BLACK);
                 display.fillRect(128 - 13, 0, 13, 13);
                 display.setColor(WHITE);
