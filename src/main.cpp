@@ -50,6 +50,9 @@ int SCAN_RANGES[] = {};
 // to put everething into one page set RANGE_PER_PAGE = FREQ_END - 800
 uint64_t RANGE_PER_PAGE = FREQ_END - FREQ_BEGIN; // FREQ_END - FREQ_BEGIN
 
+// multiplies STEPS * N to increase scan resolution.
+uint64_t SCAN_RBW_RFACTOR = 2;
+
 // To Enable Multi Screen scan
 //  uint64_t RANGE_PER_PAGE = 50;
 //  Default Range on Menu Button Switch
@@ -71,7 +74,7 @@ uint64_t RANGE_PER_PAGE = FREQ_END - FREQ_BEGIN; // FREQ_END - FREQ_BEGIN
 
 #define RANGE (int)(FREQ_END - FREQ_BEGIN)
 
-#define SINGLE_STEP (float)(RANGE / STEPS)
+#define SINGLE_STEP (float)(RANGE / (STEPS * SCAN_RBW_RFACTOR))
 
 uint64_t range = (int)(FREQ_END - FREQ_BEGIN);
 uint64_t fr_begin = FREQ_BEGIN;
@@ -176,7 +179,7 @@ void setup(void)
     delay(300);
     display.clear();
 
-    resolution = RANGE / STEPS;
+    resolution = RANGE / (STEPS * SCAN_RBW_RFACTOR);
 
     single_page_scan = (RANGE_PER_PAGE == range);
 
@@ -193,7 +196,8 @@ void setup(void)
         both.println("Single Page Screen MODE");
         both.println("Multi Screen View Press P - button");
         both.println("Single Screen Resolution: " + String(resolution) + "Mhz/tick");
-        both.println("Curent Resolution: " + String((float)RANGE_PER_PAGE / STEPS) +
+        both.println("Curent Resolution: " +
+                     String((float)RANGE_PER_PAGE / (STEPS * SCAN_RBW_RFACTOR)) +
                      "Mhz/tick");
         for (int i = 0; i < 500; i++)
         {
@@ -216,7 +220,8 @@ void setup(void)
         both.println("Multi Page Screen MODE");
         both.println("Single screen View Press P - button");
         both.println("Single screen Resolution: " + String(resolution) + "Mhz/tick");
-        both.println("Curent Resolution: " + String((float)RANGE_PER_PAGE / STEPS) +
+        both.println("Curent Resolution: " +
+                     String((float)RANGE_PER_PAGE / (STEPS * SCAN_RBW_RFACTOR)) +
                      "Mhz/tick");
         for (int i = 0; i < 500; i++)
         {
@@ -339,7 +344,7 @@ void loop(void)
         display.setTextAlignment(TEXT_ALIGN_RIGHT);
 
         // horizontal x axis loop
-        for (x = 0; x < STEPS; x++)
+        for (x = 0; x < STEPS * SCAN_RBW_RFACTOR; x++)
         {
 #if ANIMATED_RELOAD
             UI_drawCursor(x);
@@ -349,8 +354,8 @@ void loop(void)
             scan_start_time = millis();
 #endif
 
-            waterfall[range_item][x][w] = false;
-            freq = fr_begin + (range * ((float)x / STEPS));
+            waterfall[range_item][x / SCAN_RBW_RFACTOR][w] = false;
+            freq = fr_begin + (range * ((float)x / (STEPS * SCAN_RBW_RFACTOR)));
 
             radio.setFrequency(freq, false); // false = no calibration need here
 
@@ -474,9 +479,9 @@ void loop(void)
                         if (single_page_scan)
                         {
                             // Drone detection true for waterfall
-                            waterfall[range_item][x][w] = true;
+                            waterfall[range_item][x / SCAN_RBW_RFACTOR][w] = true;
                             display.setColor(WHITE);
-                            display.setPixel(x, w);
+                            display.setPixel(x / SCAN_RBW_RFACTOR, w);
                         }
 #endif
                         if (drone_detected_frequency_start == 0)
@@ -516,19 +521,21 @@ void loop(void)
 #if (DRAW_DETECTION_TICKS == true)
                         // draw vertical line on top of display for "drone detected"
                         // frequencies
-                        display.drawLine(x, 1, x, 6);
+                        display.drawLine(x / SCAN_RBW_RFACTOR, 1, x / SCAN_RBW_RFACTOR,
+                                         6);
 #endif
                     }
 
 #if (WATERFALL_ENABLED == true)
                     if ((filtered_result[y] == 1) && (y > drone_detection_level) &&
-                        (single_page_scan) && (waterfall[range_item][x][w] != true))
+                        (single_page_scan) &&
+                        (waterfall[range_item][x / SCAN_RBW_RFACTOR][w] != true))
                     {
                         // If drone not found set dark pixel on the waterfall
                         // TODO: make something like scrolling up if possible
-                        waterfall[range_item][x][w] = false;
+                        waterfall[range_item][x / SCAN_RBW_RFACTOR][w] = false;
                         display.setColor(BLACK);
-                        display.setPixel(x, w);
+                        display.setPixel(x / SCAN_RBW_RFACTOR, w);
                         display.setColor(WHITE);
                     }
 #endif
@@ -541,7 +548,7 @@ void loop(void)
                     if (filtered_result[y] == 1)
                     {
                         // Set signal level pixel
-                        display.setPixel(x, y);
+                        display.setPixel(x / SCAN_RBW_RFACTOR, y);
                         if (!detected)
                             detected = true;
                     }
@@ -552,8 +559,8 @@ void loop(void)
                     if ((y == drone_detection_level) && (x % 2 == 0))
                     {
                         display.setColor(INVERSE);
-                        display.setPixel(x, y);
-                        display.setPixel(x, y + 1); // 2 px wide
+                        display.setPixel((int)x / SCAN_RBW_RFACTOR, y);
+                        display.setPixel((int)x / SCAN_RBW_RFACTOR, y + 1); // 2 px wide
                         display.setColor(WHITE);
                     }
                 }
