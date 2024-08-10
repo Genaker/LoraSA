@@ -21,7 +21,6 @@
   https://jgromes.github.io/RadioLib/
 */
 
-
 #include <Arduino.h>
 #include <heltec_unofficial.h>
 // This file contains a binary patch for the SX1262
@@ -60,7 +59,9 @@ uint64_t RANGE_PER_PAGE = FREQ_END - FREQ_BEGIN; // FREQ_END - FREQ_BEGIN
 // TODO: Ignore power lines
 #define UP_FILTER 5
 #define LOW_FILTER 3
+// Remove reading without neighbors
 #define FILTER_SPECTRUM_RESULTS true
+#define DRAW_DETECTION_TICKS true
 
 // Number of samples for each frequency scan. Fewer samples = better temporal resolution.
 // if more than 100 it can freez
@@ -71,7 +72,6 @@ uint64_t RANGE_PER_PAGE = FREQ_END - FREQ_BEGIN; // FREQ_END - FREQ_BEGIN
 #define RANGE (int)(FREQ_END - FREQ_BEGIN)
 
 #define SINGLE_STEP (float)(RANGE / STEPS)
-
 
 uint64_t range = (int)(FREQ_END - FREQ_BEGIN);
 uint64_t fr_begin = FREQ_BEGIN;
@@ -104,7 +104,6 @@ uint64_t drone_detected_frequency_end = 0;
 uint64_t detection_count = 0;
 bool single_page_scan = false;
 bool SOUND_ON = true;
-
 
 #define PRINT_PROFILE_TIME
 
@@ -174,10 +173,10 @@ void setup(void)
     both.println("Starting scanning...");
     vbat = heltec_vbat();
     both.printf("V battery: %.2fV (%d%%)\n", vbat,
-    heltec_battery_percent(vbat));
+                heltec_battery_percent(vbat));
     delay(300);
     display.clear();
-    
+
     resolution = RANGE / STEPS;
 
     single_page_scan = (RANGE_PER_PAGE == range);
@@ -235,9 +234,9 @@ void setup(void)
     display.clear();
     Serial.println();
 
-    // calibrate only once ,,, at startup 
-    radio.setFrequency(FREQ_BEGIN,true);
-    
+    // calibrate only once ,,, at startup
+    // TODO: check documentation (9.2.1) if we must calibrate in certain ranges 
+    radio.setFrequency(FREQ_BEGIN, true);
 
     // waterfall start line y-axis
     w = WATERFALL_START;
@@ -250,7 +249,7 @@ void loop(void)
     drone_detected_frequency_start = 0;
     ranges_count = 0;
 
-    //reset scan time    
+    // reset scan time
     scan_time = 0;
 
     // general purpose loop conter
@@ -259,7 +258,7 @@ void loop(void)
 #ifdef PRINT_PROFILE_TIME
     loop_start = millis();
 #endif
-    
+
     if (!ANIMATED_RELOAD || !single_page_scan)
     {
         // clear the scan plot rectangle
@@ -272,7 +271,7 @@ void loop(void)
     {
         RANGE_PER_PAGE = range;
     }
-    
+
     fr_begin = FREQ_BEGIN;
     fr_end = fr_begin;
 
@@ -323,18 +322,18 @@ void loop(void)
             fr_end = SCAN_RANGES[range_item] % 1000;
             range = fr_end - fr_begin;
         }
-        
+
         if (!ANIMATED_RELOAD || !single_page_scan)
         {
             // clear the scan plot rectangle
             UI_clearPlotter();
         }
-        
+
         if (single_page_scan == false)
         {
             UI_displayDecorate(fr_begin, fr_end, true);
         }
-        
+
         drone_detected_frequency_start = 0;
         display.setTextAlignment(TEXT_ALIGN_RIGHT);
 
@@ -342,7 +341,7 @@ void loop(void)
         for (x = 0; x < STEPS; x++)
         {
 #if ANIMATED_RELOAD
-        UI_drawCursor(x);
+            UI_drawCursor(x);
 #endif
 
 #ifdef PRINT_PROFILE_TIME
@@ -352,7 +351,7 @@ void loop(void)
             waterfall[range_item][x][w] = false;
             freq = fr_begin + (range * ((float)x / STEPS));
 
-            radio.setFrequency(freq,false); // false = no calibration need here
+            radio.setFrequency(freq, false); // false = no calibration need here
 
 #ifdef PRINT_DEBUG
             // Serial.printf("Step:%d Freq: %f\n",x,freq);
@@ -383,8 +382,8 @@ void loop(void)
                     Serial.println(state);
                 }
 
-                // memset 
-                memset(result,0,RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE);
+                // memset
+                memset(result, 0, RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE);
                 result_index = 0u;
                 // N of samples
                 for (int r = 0; r < SAMPLES_RSSI; r++)
@@ -392,7 +391,7 @@ void loop(void)
                     rssi = radio.getRSSI(false);
                     // delay(ONE_MILLISEC);
                     // ToDO: check if 4 is correct value for 33 power bins
-                    result_index = uint8_t(abs(rssi) / 4);  /// still not clear formula  
+                    result_index = uint8_t(abs(rssi) / 4); /// still not clear formula
 
 #ifdef PRINT_DEBUG
                     // Serial.printf("RSSI: %d IDX: %d\n",rssi,result_index);
@@ -412,13 +411,11 @@ void loop(void)
                         Serial.print("Out-of-Range: result_index %d\n");
                     }
 #endif
-
                 }
             }
-#endif  // SCAN_METHOD == METHOD_RSSI
-            
-            detected = false;
+#endif // SCAN_METHOD == METHOD_RSSI
 
+            detected = false;
 
             for (y = 0; y < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE; y++)
             {
@@ -426,7 +423,18 @@ void loop(void)
                 // Serial.printf("%04X,", result[y]);
 #endif
 
-#ifdef FILTER_SPECTRUM_RESULTS
+#if FILTER_SPECTRUM_RESULTS == false
+                if (result[y] && result[y] != 0)
+                {
+                    filtered_result[y] = 1;
+                }
+                else
+                {
+                    filtered_result[y] = 0;
+                }
+#endif
+
+#if FILTER_SPECTRUM_RESULTS
 
                 filtered_result[y] = 0;
                 // Filter Elements without neighbors
@@ -434,7 +442,7 @@ void loop(void)
                 if (result[y])
                 {
                     // do not process 'first' and 'last' row to avoid out of index access
-                    if ((y!=0) && (y != (RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE - 1)))
+                    if ((y != 0) && (y != (RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE - 1)))
                     {
                         if ((result[y + 1] != 0) || (result[y - 1] != 0))
                         {
@@ -450,18 +458,17 @@ void loop(void)
                 }
 #endif
 
-
                 // if (result[y] || y == drone_detection_level)
                 {
                     // check if we should alarm about a drone presence
-                    if ((filtered_result[y] == 1)           // we have some data and
-                        && (y <= drone_detection_level))    // detection threshold match
+                    if ((filtered_result[y] == 1)        // we have some data and
+                        && (y <= drone_detection_level)) // detection threshold match
                     {
-                        
+
                         // Set LED to ON (filtered in UI component)
                         UI_setLedFlag(true);
 
-#if ( WATERFALL_ENABLED == true )
+#if (WATERFALL_ENABLED == true)
                         if (single_page_scan)
                         {
                             // Drone detection true for waterfall
@@ -472,51 +479,43 @@ void loop(void)
 #endif
                         if (drone_detected_frequency_start == 0)
                         {
-                            // mark freq start 
+                            // mark freq start
                             drone_detected_frequency_start = freq;
                         }
 
-                        // mark freq end ... will shift right to last detected range 
+                        // mark freq end ... will shift right to last detected range
                         drone_detected_frequency_end = freq;
 
-                        
                         // If level is set to sensitive,
                         // start beeping every 10th frequency and shorter
+                        // it improves performance less short beep delays...
                         if (drone_detection_level <= 25)
                         {
                             if (detection_count == 1 && SOUND_ON)
                             {
-                                tone(BUZZER_PIN, 205, 10); // same action ???
+                                tone(BUZZER_PIN, 205, 10); // same action ??? but first time
                             }
                             if (detection_count % 5 == 0 && SOUND_ON)
                             {
-                                tone(BUZZER_PIN, 205, 10); // same action ???
-                            }   
+                                tone(BUZZER_PIN, 205, 10); // same action ??? but everey 5th time
+                            }
                         }
                         else
                         {
                             if (detection_count % 20 == 0 && SOUND_ON)
                             {
-                                tone(BUZZER_PIN, 205, 10); // same action ???
+                                tone(BUZZER_PIN, 205, 10); // same action ??? but everey 20th detection
                             }
                         }
 
-
-                        // debug draw 
-                        // display.setPixel(x, 1);
-                        // display.setPixel(x, 2);
-                        // display.setPixel(x, 3);
-                        // display.setPixel(x, 4);
-
+#if (DRAW_DETECTION_TICKS == true)
                         // draw vertical line on top of display for "drone detected" frequencies
-                        display.drawLine(x , 1, x, 6 ); 
+                        display.drawLine(x, 1, x, 6);
+#endif
                     }
 
-#if ( WATERFALL_ENABLED == true )
-                    if ((filtered_result[y] == 1) 
-                        && ( y > drone_detection_level) 
-                        && ( single_page_scan ) 
-                        && ( waterfall[range_item][x][w] != true) )
+#if (WATERFALL_ENABLED == true)
+                    if ((filtered_result[y] == 1) && (y > drone_detection_level) && (single_page_scan) && (waterfall[range_item][x][w] != true))
                     {
                         // If drone not found set dark pixel on the waterfall
                         // TODO: make something like scrolling up if possible
@@ -531,33 +530,32 @@ void loop(void)
 
 #endif // If 0
 
-
                     // next 2 If's ... adds !!!! 10ms of runtime ......tfk ???
                     if (filtered_result[y] == 1)
                     {
                         // Set signal level pixel
                         display.setPixel(x, y);
-                        detected = true;
+                        if (!detected)
+                            detected = true;
                     }
 
                     // -------------------------------------------------------------
                     // Draw "Detection Level line" every 2 pixel
                     // -------------------------------------------------------------
-                    if ( ( y == drone_detection_level) && (x % 2 == 0))
-                    {                
+                    if ((y == drone_detection_level) && (x % 2 == 0))
+                    {
                         display.setColor(INVERSE);
                         display.setPixel(x, y);
-                        display.setPixel(x, y+1); // 2 px wide 
+                        display.setPixel(x, y + 1); // 2 px wide
                         display.setColor(WHITE);
                     }
                 }
-
             }
-                    
+
 #ifdef PRINT_PROFILE_TIME
             scan_time += (millis() - scan_start_time);
-#endif        
-            // count detected 
+#endif
+            // count detected
             if (detected)
             {
                 detection_count++;
@@ -612,7 +610,7 @@ void loop(void)
                 }
                 button.update();
                 display.setTextAlignment(TEXT_ALIGN_RIGHT);
-                // erase old value
+                // erase old drone detection level value
                 display.setColor(BLACK);
                 display.fillRect(128 - 13, 0, 13, 13);
                 display.setColor(WHITE);
@@ -637,7 +635,7 @@ void loop(void)
         {
             w = WATERFALL_START;
         }
-#if ( WATERFALL_ENABLED == true )
+#if (WATERFALL_ENABLED == true)
         // Draw waterfall position cursor
         if (single_page_scan)
         {
@@ -648,20 +646,18 @@ void loop(void)
 #endif
 
         // Render display data here
-        display.display();            
+        display.display();
     }
 
 #ifdef PRINT_DEBUG
-    //Serial.println("----");
+    // Serial.println("----");
 #endif
 
     loop_time = millis() - loop_start;
 
-
 #ifdef PRINT_PROFILE_TIME
 #ifdef PRINT_DEBUG
-    Serial.printf("LOOP: %lld ms; SCAN: %lld ms;\n  ", loop_time,scan_time);
+    Serial.printf("LOOP: %lld ms; SCAN: %lld ms;\n  ", loop_time, scan_time);
 #endif
 #endif
-
 }
