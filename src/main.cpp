@@ -90,10 +90,12 @@ uint64_t median_frequency = FREQ_BEGIN + FREQ_END - FREQ_BEGIN / 2;
 
 // Array to store the scan results
 uint16_t result[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
+uint16_t result_display_set[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
+uint16_t result_detections[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
 uint16_t filtered_result[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
 
 // Waterfall array
-bool waterfall[10][STEPS][10]; // 10 - ??? steps of the waterfall
+bool waterfall[20][STEPS][20]; // 20 - ??? steps of the waterfall
 
 // global variable
 
@@ -479,9 +481,12 @@ void loop(void)
                         if (single_page_scan)
                         {
                             // Drone detection true for waterfall
-                            waterfall[range_item][x / SCAN_RBW_RFACTOR][w] = true;
-                            display.setColor(WHITE);
-                            display.setPixel(x / SCAN_RBW_RFACTOR, w);
+                            if (!waterfall[range_item][x / SCAN_RBW_RFACTOR][w])
+                            {
+                                waterfall[range_item][x / SCAN_RBW_RFACTOR][w] = true;
+                                display.setColor(WHITE);
+                                display.setPixel(x / SCAN_RBW_RFACTOR, w);
+                            }
                         }
 #endif
                         if (drone_detected_frequency_start == 0)
@@ -527,7 +532,7 @@ void loop(void)
                     }
 
 #if (WATERFALL_ENABLED == true)
-                    if ((filtered_result[y] == 1) && (y > drone_detection_level) &&
+                    if ((filtered_result[y] == 1) && (y < drone_detection_level) &&
                         (single_page_scan) &&
                         (waterfall[range_item][x / SCAN_RBW_RFACTOR][w] != true))
                     {
@@ -556,11 +561,11 @@ void loop(void)
                     // -------------------------------------------------------------
                     // Draw "Detection Level line" every 2 pixel
                     // -------------------------------------------------------------
-                    if ((y == drone_detection_level) && (x % 2 == 0))
+                    if ((y == drone_detection_level) && (x % 2 == 0) && x < STEPS)
                     {
                         display.setColor(INVERSE);
-                        display.setPixel((int)x / SCAN_RBW_RFACTOR, y);
-                        display.setPixel((int)x / SCAN_RBW_RFACTOR, y + 1); // 2 px wide
+                        display.setPixel((int)x, y);
+                        display.setPixel((int)x, y + 1); // 2 px wide
                         display.setColor(WHITE);
                     }
                 }
