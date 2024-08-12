@@ -95,7 +95,7 @@ uint16_t result_detections[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
 uint16_t filtered_result[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
 
 // Waterfall array
-bool waterfall[20][STEPS][20]; // 20 - ??? steps of the waterfall
+bool waterfall[STEPS]; // 20 - ??? steps of the waterfall
 
 // global variable
 
@@ -345,7 +345,7 @@ void loop(void)
         drone_detected_frequency_start = 0;
         display.setTextAlignment(TEXT_ALIGN_RIGHT);
 
-        // horizontal x axis loop
+        // horizontal (x axis) Frequency loop
         for (x = 0; x < STEPS * SCAN_RBW_RFACTOR; x++)
         {
 #if ANIMATED_RELOAD
@@ -355,8 +355,10 @@ void loop(void)
 #ifdef PRINT_PROFILE_TIME
             scan_start_time = millis();
 #endif
-
-            waterfall[range_item][x / SCAN_RBW_RFACTOR][w] = false;
+            // Real display pixel x - axis.
+            // Beacuse of the SCAN_RBW_RFACTOR x is not a display coordinate anymore.
+            int dispaly_x = x / SCAN_RBW_RFACTOR;
+            waterfall[dispaly_x] = false;
             freq = fr_begin + (range * ((float)x / (STEPS * SCAN_RBW_RFACTOR)));
 
             radio.setFrequency(freq, false); // false = no calibration need here
@@ -481,11 +483,11 @@ void loop(void)
                         if (single_page_scan)
                         {
                             // Drone detection true for waterfall
-                            if (!waterfall[range_item][x / SCAN_RBW_RFACTOR][w])
+                            if (!waterfall[dispaly_x])
                             {
-                                waterfall[range_item][x / SCAN_RBW_RFACTOR][w] = true;
+                                waterfall[dispaly_x] = true;
                                 display.setColor(WHITE);
-                                display.setPixel(x / SCAN_RBW_RFACTOR, w);
+                                display.setPixel(dispaly_x, w);
                             }
                         }
 #endif
@@ -526,21 +528,19 @@ void loop(void)
 #if (DRAW_DETECTION_TICKS == true)
                         // draw vertical line on top of display for "drone detected"
                         // frequencies
-                        display.drawLine(x / SCAN_RBW_RFACTOR, 1, x / SCAN_RBW_RFACTOR,
-                                         6);
+                        display.drawLine(dispaly_x, 1, dispaly_x, 6);
 #endif
                     }
 
 #if (WATERFALL_ENABLED == true)
                     if ((filtered_result[y] == 1) && (y < drone_detection_level) &&
-                        (single_page_scan) &&
-                        (waterfall[range_item][x / SCAN_RBW_RFACTOR][w] != true))
+                        (single_page_scan) && (waterfall[dispaly_x] != true))
                     {
                         // If drone not found set dark pixel on the waterfall
                         // TODO: make something like scrolling up if possible
-                        waterfall[range_item][x / SCAN_RBW_RFACTOR][w] = false;
+                        waterfall[dispaly_x] = false;
                         display.setColor(BLACK);
-                        display.setPixel(x / SCAN_RBW_RFACTOR, w);
+                        display.setPixel(dispaly_x, w);
                         display.setColor(WHITE);
                     }
 #endif
@@ -553,7 +553,7 @@ void loop(void)
                     if (filtered_result[y] == 1)
                     {
                         // Set signal level pixel
-                        display.setPixel(x / SCAN_RBW_RFACTOR, y);
+                        display.setPixel(dispaly_x, y);
                         if (!detected)
                             detected = true;
                     }
