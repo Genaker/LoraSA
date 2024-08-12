@@ -561,11 +561,15 @@ void loop(void)
                     // -------------------------------------------------------------
                     // Draw "Detection Level line" every 2 pixel
                     // -------------------------------------------------------------
-                    if ((y == drone_detection_level) && (x % 2 == 0) && x < STEPS)
+                    if ((y == drone_detection_level) && (dispaly_x % 2 == 0))
                     {
-                        display.setColor(INVERSE);
-                        display.setPixel((int)x, y);
-                        display.setPixel((int)x, y + 1); // 2 px wide
+                        display.setColor(WHITE);
+                        if (filtered_result[y] == 1 && filtered_result[y + 1] == 1)
+                        {
+                            display.setColor(INVERSE);
+                        }
+                        display.setPixel(dispaly_x, y);
+                        display.setPixel(dispaly_x, y + 1); // 2 px wide
                         display.setColor(WHITE);
                     }
                 }
