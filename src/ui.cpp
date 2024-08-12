@@ -29,7 +29,6 @@ extern unsigned int detection_count;
 extern bool SOUND_ON;
 extern unsigned int drone_detected_frequency_start;
 extern unsigned int drone_detected_frequency_end;
-extern unsigned int ranges_count;
 extern int SCAN_RANGES[];
 extern unsigned int ranges_count;
 extern unsigned int iterations;

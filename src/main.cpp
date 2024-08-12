@@ -44,7 +44,7 @@ typedef enum
 
 // Feature to scan diapazones. Other frequency settings will be ignored.
 // int SCAN_RANGES[] = {850890, 920950};
-int SCAN_RANGES[] = {};
+uint32_t SCAN_RANGES[] = {};
 
 // MHZ per page
 // to put everething into one page set RANGE_PER_PAGE = FREQ_END - 800
@@ -129,7 +129,7 @@ uint64_t loop_cnt = 0;
 void setup(void)
 {
     float vbat;
-    float resolution;
+    float resolution = (float)RANGE / (float)STEPS;
     loop_cnt = 0;
 
     pinMode(LED, OUTPUT);
@@ -176,8 +176,6 @@ void setup(void)
     delay(300);
     display.clear();
 
-    resolution = RANGE / STEPS;
-
     single_page_scan = (RANGE_PER_PAGE == range);
 
 #ifdef DISABLED_CODE
@@ -190,16 +188,21 @@ void setup(void)
 
     if (single_page_scan)
     {
-        both.println("Single Page Screen MODE");
+        both.println("Mode: SINGLE page scan");
+        both.println("Scr Res: " + String(resolution) + "Mhz/tick");
+        // both.println("-Cur.Res: " + String((float)RANGE_PER_PAGE / STEPS) +
+        // "Mhz/tick");
         both.println("Multi Screen View Press P - button");
-        both.println("Single Screen Resolution: " + String(resolution) + "Mhz/tick");
-        both.println("Curent Resolution: " + String((float)RANGE_PER_PAGE / STEPS) +
-                     "Mhz/tick");
-        for (int i = 0; i < 500; i++)
+
+        for (uint16_t i = 500; i > 1; i--)
         {
             button.update();
             delay(10);
-            both.print(".");
+            if ((i % 23) == 0)
+            {
+                display.print("#");
+            }
+
             if (button.pressed())
             {
                 RANGE_PER_PAGE = DEFAULT_RANGE_PER_PAGE;
@@ -213,9 +216,9 @@ void setup(void)
     }
     else
     {
-        both.println("Multi Page Screen MODE");
+        both.println("Mode: MULTI page scan");
         both.println("Single screen View Press P - button");
-        both.println("Single screen Resolution: " + String(resolution) + "Mhz/tick");
+        // both.println("Single screen Resolution: " + String(resolution) + "Mhz/tick");
         both.println("Curent Resolution: " + String((float)RANGE_PER_PAGE / STEPS) +
                      "Mhz/tick");
         for (int i = 0; i < 500; i++)
@@ -241,6 +244,9 @@ void setup(void)
 
     // waterfall start line y-axis
     w = WATERFALL_START;
+
+    // count nr of ranges
+    ranges_count = sizeof(SCAN_RANGES) / sizeof(uint32_t);
 }
 
 void loop(void)
@@ -248,15 +254,13 @@ void loop(void)
     UI_displayDecorate(0, 0, false); // some default values
     detection_count = 0;
     drone_detected_frequency_start = 0;
-    ranges_count = 0;
-
-    // reset scan time
-    scan_time = 0;
 
     // general purpose loop conter
     loop_cnt++;
 
 #ifdef PRINT_PROFILE_TIME
+    // reset scan time
+    scan_time = 0;
     loop_start = millis();
 #endif
 
@@ -268,6 +272,7 @@ void loop(void)
 
     // do the scan
     range = FREQ_END - FREQ_BEGIN;
+
     if (RANGE_PER_PAGE > range)
     {
         RANGE_PER_PAGE = range;
@@ -288,19 +293,7 @@ void loop(void)
     }
 #endif
 
-    if (RANGE_PER_PAGE == range)
-    {
-        single_page_scan = true;
-    }
-    else
-    {
-        single_page_scan = false;
-    }
-
-    for (int range : SCAN_RANGES)
-    {
-        ranges_count++;
-    }
+    single_page_scan = (RANGE_PER_PAGE == range);
 
     if (ranges_count > 0)
     {
@@ -308,7 +301,7 @@ void loop(void)
         single_page_scan = false;
     }
 
-    // Iterating by small ranges by 50 Mhz each pixel is 0.4 Mhz
+    // only one itteration at this momment
     for (range_item = 0; range_item < iterations; range_item++)
     {
         range = RANGE_PER_PAGE;
@@ -319,6 +312,7 @@ void loop(void)
         }
         else
         {
+            // Iterating by small ranges, each pixel is (RANGE_PER_PAGE/STEPS) Mhz
             fr_begin = SCAN_RANGES[range_item] / 1000;
             fr_end = SCAN_RANGES[range_item] % 1000;
             range = fr_end - fr_begin;
@@ -637,6 +631,7 @@ void loop(void)
             // Loop is needed if heltec_delay(1) not used
             heltec_loop();
         }
+
         w++;
         if (w > ROW_STATUS_TEXT + 1)
         {
