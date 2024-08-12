@@ -675,8 +675,6 @@ void loop(void)
     loop_time = millis() - loop_start;
 
 #ifdef PRINT_PROFILE_TIME
-#ifdef PRINT_DEBUG
     Serial.printf("LOOP: %lld ms; SCAN: %lld ms;\n  ", loop_time, scan_time);
-#endif
 #endif
 }
