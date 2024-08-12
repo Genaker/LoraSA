@@ -51,7 +51,7 @@ int SCAN_RANGES[] = {};
 uint64_t RANGE_PER_PAGE = FREQ_END - FREQ_BEGIN; // FREQ_END - FREQ_BEGIN
 
 // multiplies STEPS * N to increase scan resolution.
-uint64_t SCAN_RBW_RFACTOR = 2;
+#define SCAN_RBW_RFACTOR 2
 
 // To Enable Multi Screen scan
 //  uint64_t RANGE_PER_PAGE = 50;
@@ -95,12 +95,12 @@ uint16_t result_detections[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
 uint16_t filtered_result[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
 
 // Waterfall array
-bool waterfall[STEPS]; // 20 - ??? steps of the waterfall
+bool waterfall[STEPS], detected_y[STEPS]; // 20 - ??? steps of the waterfall
 
 // global variable
 
 // Used as a Led Light and Buzzer/count trigger
-bool first_run = false;
+bool first_run, new_pixel, detected_x = false;
 // drone detection flag
 bool detected = false;
 uint64_t drone_detection_level = DEFAULT_DRONE_DETECTION_LEVEL;
@@ -197,10 +197,10 @@ void setup(void)
     {
         both.println("Single Page Screen MODE");
         both.println("Multi Screen View Press P - button");
-        both.println("Single Screen Resolution: " + String(resolution) + "Mhz/tick");
-        both.println("Curent Resolution: " +
-                     String((float)RANGE_PER_PAGE / (STEPS * SCAN_RBW_RFACTOR)) +
-                     "Mhz/tick");
+        both.println("Multi Screan Res: " + String(resolution) + "Mhz/tick");
+        both.println(
+            "Resolution: " + String((float)RANGE_PER_PAGE / (STEPS * SCAN_RBW_RFACTOR)) +
+            "Mhz/tick");
         for (int i = 0; i < 500; i++)
         {
             button.update();
@@ -221,10 +221,10 @@ void setup(void)
     {
         both.println("Multi Page Screen MODE");
         both.println("Single screen View Press P - button");
-        both.println("Single screen Resolution: " + String(resolution) + "Mhz/tick");
-        both.println("Curent Resolution: " +
-                     String((float)RANGE_PER_PAGE / (STEPS * SCAN_RBW_RFACTOR)) +
-                     "Mhz/tick");
+        both.println("Single screen Resol: " + String(resolution) + "Mhz/tick");
+        both.println(
+            "Resolution: " + String((float)RANGE_PER_PAGE / (STEPS * SCAN_RBW_RFACTOR)) +
+            "Mhz/tick");
         for (int i = 0; i < 500; i++)
         {
             button.update();
@@ -348,6 +348,11 @@ void loop(void)
         // horizontal (x axis) Frequency loop
         for (x = 0; x < STEPS * SCAN_RBW_RFACTOR; x++)
         {
+
+            if (x % SCAN_RBW_RFACTOR == 0)
+                new_pixel = true;
+            else
+                new_pixel = false;
 #if ANIMATED_RELOAD
             UI_drawCursor(x);
 #endif
@@ -427,6 +432,7 @@ void loop(void)
 #endif // SCAN_METHOD == METHOD_RSSI
 
             detected = false;
+            detected_y[dispaly_x] = false;
 
             for (y = 0; y < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE; y++)
             {
@@ -473,8 +479,9 @@ void loop(void)
                 // if (result[y] || y == drone_detection_level)
                 {
                     // check if we should alarm about a drone presence
-                    if ((filtered_result[y] == 1)        // we have some data and
-                        && (y <= drone_detection_level)) // detection threshold match
+                    if ((filtered_result[y] == 1) // we have some data and
+                        && (y <= drone_detection_level) &&
+                        detected_y[dispaly_x] == false) // detection threshold match
                     {
 
                         // Set LED to ON (filtered in UI component)
@@ -530,12 +537,13 @@ void loop(void)
                         // draw vertical line on top of display for "drone detected"
                         // frequencies
                         display.drawLine(dispaly_x, 1, dispaly_x, 6);
+                        detected_y[dispaly_x] = true;
 #endif
                     }
 
 #if (WATERFALL_ENABLED == true)
                     if ((filtered_result[y] == 1) && (y < drone_detection_level) &&
-                        (single_page_scan) && (waterfall[dispaly_x] != true))
+                        (single_page_scan) && (waterfall[dispaly_x] != true) && new_pixel)
                     {
                         // If drone not found set dark pixel on the waterfall
                         // TODO: make something like scrolling up if possible
@@ -556,13 +564,15 @@ void loop(void)
                         // Set signal level pixel
                         display.setPixel(dispaly_x, y);
                         if (!detected)
+                        {
                             detected = true;
+                        }
                     }
 
                     // -------------------------------------------------------------
                     // Draw "Detection Level line" every 2 pixel
                     // -------------------------------------------------------------
-                    if ((y == drone_detection_level) && (dispaly_x % 2 == 0))
+                    if ((y == drone_detection_level) && (dispaly_x % 2 == 0) && new_pixel)
                     {
                         display.setColor(WHITE);
                         if (filtered_result[y] == 1)
