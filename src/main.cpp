@@ -356,7 +356,8 @@ void loop(void)
             scan_start_time = millis();
 #endif
             // Real display pixel x - axis.
-            // Beacuse of the SCAN_RBW_RFACTOR x is not a display coordinate anymore.
+            // Because of the SCAN_RBW_RFACTOR x is not a display coordinate anymore
+            // x > STEPS on SCAN_RBW_RFACTOR
             int dispaly_x = x / SCAN_RBW_RFACTOR;
             waterfall[dispaly_x] = false;
             freq = fr_begin + (range * ((float)x / (STEPS * SCAN_RBW_RFACTOR)));
@@ -564,12 +565,13 @@ void loop(void)
                     if ((y == drone_detection_level) && (dispaly_x % 2 == 0))
                     {
                         display.setColor(WHITE);
-                        if (filtered_result[y] == 1 && filtered_result[y + 1] == 1)
+                        if (filtered_result[y] == 1)
                         {
                             display.setColor(INVERSE);
                         }
                         display.setPixel(dispaly_x, y);
-                        display.setPixel(dispaly_x, y + 1); // 2 px wide
+                        display.setPixel(dispaly_x, y - 1); // 2 px wide
+
                         display.setColor(WHITE);
                     }
                 }
