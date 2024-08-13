@@ -24,7 +24,7 @@
 #include <Arduino.h>
 #include <heltec_unofficial.h>
 // This file contains a binary patch for the SX1262
-#include "DFRobot_OSD.cpp"
+#include "DFRobot_OSD.h"
 #include "modules/SX126x/patches/SX126x_patch_scan.h"
 #define CS 47
 #define OSD_MISO 33
