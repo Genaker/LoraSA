@@ -52,7 +52,7 @@ void DFRobot_OSD::displayChar(unsigned char row, unsigned char col, unsigned sho
     writeAddrData(DMM, 0x40);
     writeAddrData(DMAH, addrH | 0x2);
     writeAddrData(DMAL, k);
-    j = CHAR_LBC << 5;
+    j = CHAR_LBC;
     if ((addr >> 8) != 0)
         j |= 0x10;
     writeAddrData(DMDI, j);
@@ -100,7 +100,7 @@ void DFRobot_OSD::displayString(unsigned char row, unsigned char col, const char
         writeAddrData(DMM, 0x40);
         writeAddrData(DMAH, addrH | 0x2);
         writeAddrData(DMAL, k);
-        j = CHAR_LBC << 5;
+        j = CHAR_LBC;
         if ((value >> 8) != 0)
             j |= 0x10;
         writeAddrData(DMDI, j);
@@ -157,7 +157,7 @@ void DFRobot_OSD::writeAT7456E(unsigned short addr, int *dt)
     writeAddrData(VM0, 0x01 << 3);
 }
 
-void DFRobot_OSD::storeChar(unsigned short addr, int temp[])
+void DFRobot_OSD::storeChar(unsigned short addr, const int temp[])
 {
     int buf[54] = {0};
     int dt[54] = {0};
