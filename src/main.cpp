@@ -24,7 +24,35 @@
 #include <Arduino.h>
 #include <heltec_unofficial.h>
 // This file contains a binary patch for the SX1262
+#include "DFRobot_OSD.cpp"
 #include "modules/SX126x/patches/SX126x_patch_scan.h"
+#define CS 47
+#define OSD_MISO 33
+#define OSD_MOSI 34
+#define OSD_SCK 26
+#define OSD_WIDTH 30
+#define OSD_HEIGHT 16
+#define OSD_CHART_WIDTH 15
+#define OSD_CHART_HEIGHT 5
+#define OSD_X_START 1
+#define OSD_Y_START 16
+
+int osd_chart_buffer[OSD_CHART_WIDTH];
+
+DFRobot_OSD osd(CS);
+
+/*Define Chinese characters*/
+int buf0[36] = {0x02, 0x80, 0x02, 0x40, 0x7F, 0xE0, 0x42, 0x00, 0x42, 0x00, 0x7A, 0x40,
+                0x4A, 0x40, 0x4A, 0x80, 0x49, 0x20, 0x5A, 0xA0, 0x44, 0x60, 0x88, 0x20};
+int buf1[36] = {0x20, 0x00, 0x25, 0xE0, 0x75, 0x20, 0x29, 0x20, 0xFD, 0x40, 0x21, 0x40,
+                0x7D, 0x20, 0xC5, 0x20, 0x7D, 0x20, 0x45, 0xC0, 0x7D, 0x00, 0x45, 0x00};
+int buf2[36] = {0x20, 0x00, 0x2F, 0xC0, 0x24, 0x40, 0xF4, 0x40, 0x24, 0x80, 0x64, 0xE0,
+                0x74, 0x20, 0xA6, 0x20, 0x25, 0x40, 0x28, 0x80, 0x29, 0x40, 0x32, 0x20};
+int buf3[36] = {0x3F, 0x00, 0x2A, 0xE0, 0xFA, 0x20, 0x2E, 0xA0, 0x2A, 0xA0, 0xFE, 0xA0,
+                0x2A, 0x40, 0xAB, 0x40, 0xBE, 0xA0, 0xA3, 0x20, 0xE2, 0x00, 0xBF, 0xE0};
+
+// SPI pins
+// .pio/libdeps/heltec_wifi_lora_32_V3/Heltec_ESP32_LoRa_v3/src/heltec_unofficial.h#L34-L35
 
 // project components
 #include "global_config.h"
@@ -52,6 +80,8 @@ uint64_t RANGE_PER_PAGE = FREQ_END - FREQ_BEGIN; // FREQ_END - FREQ_BEGIN
 
 // multiplies STEPS * N to increase scan resolution.
 #define SCAN_RBW_RFACTOR 2
+
+int OSD_PIXELS_PER_CHAR = (STEPS * SCAN_RBW_RFACTOR) / OSD_CHART_WIDTH;
 
 // To Enable Multi Screen scan
 //  uint64_t RANGE_PER_PAGE = 50;
@@ -108,7 +138,7 @@ uint64_t drone_detected_frequency_start = 0;
 uint64_t drone_detected_frequency_end = 0;
 uint64_t detection_count = 0;
 bool single_page_scan = false;
-bool SOUND_ON = true;
+bool SOUND_ON = false;
 
 #define PRINT_PROFILE_TIME
 
@@ -119,7 +149,8 @@ uint64_t scan_time = 0;
 uint64_t scan_start_time = 0;
 #endif
 
-uint64_t x, y, range_item, w = 0;
+uint64_t x, y, range_item, w, i = 0;
+int osd_x = 1, osd_y = 2;
 uint64_t ranges_count = 0;
 
 float freq = 0;
@@ -131,8 +162,77 @@ uint8_t button_pressed_counter = 0;
 
 uint64_t loop_cnt = 0;
 
+unsigned short selectFreqChar(int bin)
+{
+    if (bin > 26)
+    {
+        return 0x105;
+    }
+    if (bin == 25)
+    {
+        return 0x106;
+    }
+    if (bin == 24)
+    {
+        return 0x107;
+    }
+    if (bin == 23)
+    {
+        return 0x108;
+    }
+    if (bin == 22)
+    {
+        return 0x109;
+    }
+    if (bin == 21)
+    {
+        return 0x10a;
+    }
+    if (bin == 20)
+    {
+        return 0x10b;
+    }
+    if (bin == 19)
+    {
+        return 0x10c;
+    }
+    if (bin == 18)
+    {
+        return 0x10d;
+    }
+    if (bin == 17)
+    {
+        return 0x10e;
+    }
+    return 0x105;
+}
+
 void setup(void)
 {
+
+    osd.init(OSD_SCK, OSD_MISO, OSD_MOSI);
+    osd.clear();
+    /* Write the custom character to the OSD, replacing the original character*/
+    /* Expand 0xe0 to 0x0e0, the high 8 bits indicate page number and the low 8 bits
+     * indicate the inpage address.*/
+    osd.storeChar(0xe0, buf0);
+    osd.storeChar(0xe1, buf1);
+    osd.storeChar(0xe2, buf2);
+    osd.storeChar(0xe3, buf3);
+    /*Displays custom characters*/
+    osd.displayChar(2, 2, 0xe0);
+    osd.displayChar(2, 3, 0xe1);
+    osd.displayChar(2, 4, 0xe2);
+    osd.displayChar(2, 5, 0xe3);
+    /*display character*/
+    osd.displayChar(9, 9, 0x11d);
+    osd.displayChar(9, 10, 0x11e);
+    osd.displayChar(8, 11, 0x10f);
+    osd.displayChar(14, 0, 0x10f);
+    /*display String*/
+    osd.displayString(14, 15, "   Lora SA");
+    osd.displayString(2, 1, "   Spectral RF Analyzer");
+
     float vbat;
     float resolution;
     loop_cnt = 0;
@@ -148,7 +248,7 @@ void setup(void)
         delay(10);
         if (button.pressed())
         {
-            SOUND_ON = false;
+            SOUND_ON = !SOUND_ON;
             tone(BUZZER_PIN, 205, 100);
             delay(50);
             tone(BUZZER_PIN, 205, 100);
@@ -344,8 +444,16 @@ void loop(void)
 
         drone_detected_frequency_start = 0;
         display.setTextAlignment(TEXT_ALIGN_RIGHT);
+        int max_bins_array[30];
+        for (int i = 0; i < 30; i++)
+        {
+            max_bins_array[i] = 33;
+        }
+        // memset(max_bins_array, 33, 30);
 
         // horizontal (x axis) Frequency loop
+        int osd_x = 1, osd_y = 1, s = 0;
+        // x loop
         for (x = 0; x < STEPS * SCAN_RBW_RFACTOR; x++)
         {
 
@@ -365,7 +473,9 @@ void loop(void)
             // x > STEPS on SCAN_RBW_RFACTOR
             int dispaly_x = x / SCAN_RBW_RFACTOR;
             waterfall[dispaly_x] = false;
-            freq = fr_begin + (range * ((float)x / (STEPS * SCAN_RBW_RFACTOR)));
+            float step = (range * ((float)x / (STEPS * SCAN_RBW_RFACTOR)));
+
+            freq = fr_begin + step;
 
             radio.setFrequency(freq, false); // false = no calibration need here
 
@@ -386,6 +496,39 @@ void loop(void)
                 }
                 // read the results Array to which the results will be saved
                 radio.spectralScanGetResult(result);
+                int max_bin = 0;
+
+                int mhz_in_bin = 5;
+                int steps = 12;
+
+                for (int i = 1; i < 33; i++)
+                {
+                    if (result[i] > 0 && (result[i + 1] > 0))
+                    {
+                        max_bin = i;
+                        Serial.println(String(max_bin));
+                        break;
+                    }
+                }
+                if (max_bins_array[s] > max_bin)
+                {
+                    max_bins_array[s] = max_bin;
+                }
+                // Going to the next OSD step
+                if (x % steps == 0 && s < 30)
+                {
+                    // PRINT SIGNAL CHAR ROW, COL, VALUE
+                    osd.displayChar(14, s + 1, selectFreqChar(max_bins_array[s]));
+                    Serial.println("MAX:" + String(max_bins_array[s]));
+                    // osd.displayString(14, s, "" + String(max_bins_array[s]) + "");
+                    s++;
+                    if (s == 30)
+                    {
+                        s = 0;
+                    }
+                }
+                // osd.displayString(osd_y++, osd_x,
+                //                   String(freq) + "-" + String((max_bin * 4)) + "dB");
             }
 #endif
 #if SCAN_METHOD == METHOD_RSSI
@@ -399,8 +542,12 @@ void loop(void)
                 }
 
                 // memset
-                memset(result, 0, RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE);
-                result_index = 0u;
+                // memset(result, 0, RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE);
+                for (i = 0; i < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE; i++)
+                {
+                    result[i] = 0;
+                }
+                result_index = 0;
                 // N of samples
                 for (int r = 0; r < SAMPLES_RSSI; r++)
                 {
@@ -436,6 +583,7 @@ void loop(void)
 
             for (y = 0; y < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE; y++)
             {
+
 #ifdef PRINT_DEBUG
                 // Serial.printf("%04X,", result[y]);
 #endif
@@ -536,8 +684,11 @@ void loop(void)
 #if (DRAW_DETECTION_TICKS == true)
                         // draw vertical line on top of display for "drone detected"
                         // frequencies
-                        display.drawLine(dispaly_x, 1, dispaly_x, 6);
-                        detected_y[dispaly_x] = true;
+                        if (!detected_y[dispaly_x])
+                        {
+                            display.drawLine(dispaly_x, 1, dispaly_x, 6);
+                            detected_y[dispaly_x] = true;
+                        }
 #endif
                     }
 
@@ -572,7 +723,7 @@ void loop(void)
                     // -------------------------------------------------------------
                     // Draw "Detection Level line" every 2 pixel
                     // -------------------------------------------------------------
-                    if ((y == drone_detection_level) && (dispaly_x % 2 == 0) && new_pixel)
+                    if ((y == drone_detection_level) && (dispaly_x % 2 == 0))
                     {
                         display.setColor(WHITE);
                         if (filtered_result[y] == 1)
