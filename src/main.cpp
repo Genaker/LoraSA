@@ -170,101 +170,101 @@ uint64_t loop_cnt = 0;
 
 unsigned short selectFreqChar(int bin)
 {
-    if (bin >= 28)
+    if (bin >= 25)
     {
         return 0x105;
     }
-    if (bin == 27)
+    if (bin == 24)
     {
         return 0x106;
     }
-    if (bin == 26)
+    if (bin == 23)
     {
         return 0x107;
     }
-    if (bin == 25)
+    if (bin == 22)
     {
         return 0x108;
     }
-    if (bin == 24)
+    if (bin == 21)
     {
         return 0x109;
     }
-    if (bin == 23)
+    if (bin == 20)
     {
         return 0x10a;
     }
-    if (bin == 22)
+    if (bin == 19)
     {
         return 0x10b;
     }
-    if (bin == 21)
+    if (bin == 18)
     {
         return 0x10c;
     }
-    if (bin == 20)
+    if (bin == 17)
     {
         return 0x10d;
     }
-    if (bin == 19)
+    if (bin == 16)
     {
         return 0x10e;
     }
     // New upper line
-    if (bin == 18)
+    if (bin == 15)
     {
         return 0x106;
     }
-    if (bin == 17)
+    if (bin == 14)
     {
         return 0x107;
     }
-    if (bin == 16)
+    if (bin == 13)
     {
         return 0x108;
     }
-    if (bin == 15)
+    if (bin == 12)
     {
         return 0x109;
     }
-    if (bin == 14)
+    if (bin == 11)
     {
         return 0x10A;
     }
-    if (bin == 13)
+    if (bin == 10)
     {
         return 0x10B;
     }
-    if (bin == 12)
+    if (bin == 9)
     {
         return 0x10C;
     }
-    if (bin == 11)
+    if (bin == 8)
     {
         return 0x10D;
     }
-    if (bin == 10)
+    if (bin == 7)
     {
         return 0x10E;
     }
     // 3-d line
-    if (bin == 9)
+    if (bin == 6)
     {
         return 0x106;
     }
-    if (bin == 8)
+    if (bin == 5)
     {
         return 0x107;
     }
-    if (bin == 7)
+    if (bin == 4)
     {
         return 0x108;
     }
-    if (bin == 6)
+    if (bin == 3)
     {
         return 0x109;
     }
-    if (bin < 6)
+    if (bin < 2)
     {
         return 0x10A;
     }
