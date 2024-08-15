@@ -30,6 +30,7 @@
 #ifdef OSD_ENABLED
 #include "DFRobot_OSD.h"
 #define MAX_POWER_LEVELS 33
+#define OSD_SIDE_BAR true
 
 static const uint16_t power_level[MAX_POWER_LEVELS] = {
     0x10E, // 0
@@ -605,13 +606,14 @@ void loop(void)
                 // Going to the next OSD step
                 if (x % osd_steps == 0 && col < 30)
                 {
-                    // OSD SIDE BAR
-                    if (true)
+                    // OSD SIDE BAR with frequency log
+#ifdef OSD_SIDE_BAR
                     {
                         osd.displayString(col, 30 - 7,
                                           String(FREQ_BEGIN + (col * osd_mhz_in_bin)) +
                                               ":" + String(max_bins_array[col]));
                     }
+#endif
                     // Test with Random Result...
                     // max_bins_array[s] = rand() % 32;
 #ifdef METHOD_RSSI
