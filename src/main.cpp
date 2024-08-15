@@ -24,12 +24,58 @@
 #include <Arduino.h>
 #include <heltec_unofficial.h>
 // This file contains a binary patch for the SX1262
-#include "DFRobot_OSD.h"
 #include "modules/SX126x/patches/SX126x_patch_scan.h"
+#define OSD_ENABLED true
+
+#ifdef OSD_ENABLED
+#include "DFRobot_OSD.h"
+#define MAX_POWER_LEVELS 33
+#define OSD_SIDE_BAR true
+
+static const uint16_t power_level[MAX_POWER_LEVELS] = {
+    0x10E, // 0
+    0x10E, // 1
+    0x10D, // 2
+    0x10C, // 3
+    0x10B, // 4
+    0x10A, // 5
+    0x109, // 6
+    0x108, // 7
+    0x107, // 8
+    0x106, // 9
+    // new line
+    0x10E, // 10
+    0x10D, // 11
+    0x10C, // 12
+    0x10B, // 13
+    0x10A, // 14
+    0x109, // 15
+    0x108, // 16
+    0x107, // 17
+    0x106, // 18
+    // new line
+    0x10E, // 19
+    0x10D, // 20
+    0x10C, // 21
+    0x10B, // 22
+    0x10A, // 23
+    0x109, // 24
+    0x108, // 25
+    0x107, // 26
+    0x106, // 27
+    0x105, // 28
+    0x105, // 29
+    0x105, // 30
+    0x105, // 31
+    0x105  // 32
+};
+#endif
+// SPI pins
 #define CS 47
 #define OSD_MISO 33
 #define OSD_MOSI 34
 #define OSD_SCK 26
+
 #define OSD_WIDTH 30
 #define OSD_HEIGHT 16
 #define OSD_CHART_WIDTH 15
@@ -37,24 +83,20 @@
 #define OSD_X_START 1
 #define OSD_Y_START 16
 
-DFRobot_OSD osd(CS);
+// TODO: Calculate dinammicaly:
+// osd_steps = osd_mhz_in_bin / (FM range / LORA radio x Steps)
+int osd_mhz_in_bin = 5;
+int osd_steps = 12;
+int global_counter = 0;
 
-/*Define Chinese characters*/
+#ifdef OSD_ENABLED
+DFRobot_OSD osd(CS);
+#endif
+
+/*Define Custom characters Example*/
 static const int buf0[36] = {0x02, 0x80, 0x02, 0x40, 0x7F, 0xE0, 0x42, 0x00,
                              0x42, 0x00, 0x7A, 0x40, 0x4A, 0x40, 0x4A, 0x80,
                              0x49, 0x20, 0x5A, 0xA0, 0x44, 0x60, 0x88, 0x20};
-static const int buf1[36] = {0x20, 0x00, 0x25, 0xE0, 0x75, 0x20, 0x29, 0x20,
-                             0xFD, 0x40, 0x21, 0x40, 0x7D, 0x20, 0xC5, 0x20,
-                             0x7D, 0x20, 0x45, 0xC0, 0x7D, 0x00, 0x45, 0x00};
-static const int buf2[36] = {0x20, 0x00, 0x2F, 0xC0, 0x24, 0x40, 0xF4, 0x40,
-                             0x24, 0x80, 0x64, 0xE0, 0x74, 0x20, 0xA6, 0x20,
-                             0x25, 0x40, 0x28, 0x80, 0x29, 0x40, 0x32, 0x20};
-static const int buf3[36] = {0x3F, 0x00, 0x2A, 0xE0, 0xFA, 0x20, 0x2E, 0xA0,
-                             0x2A, 0xA0, 0xFE, 0xA0, 0x2A, 0x40, 0xAB, 0x40,
-                             0xBE, 0xA0, 0xA3, 0x20, 0xE2, 0x00, 0xBF, 0xE0};
-
-// SPI pins
-// .pio/libdeps/heltec_wifi_lora_32_V3/Heltec_ESP32_LoRa_v3/src/heltec_unofficial.h#L34-L35
 
 // project components
 #include "global_config.h"
@@ -70,7 +112,9 @@ typedef enum
     METHOD_SPECTRAL
 } TSCAN_METOD_ENUM;
 
-#define SCAN_METHOD METHOD_SPECTRAL
+#define SCAN_METHOD
+#define METHOD_SPECTRAL
+// #define METHOD_RSSI // Uncomment this and comment METHOD_SPECTRAL fot RSSI
 
 // Feature to scan diapazones. Other frequency settings will be ignored.
 // int SCAN_RANGES[] = {850890, 920950};
@@ -102,7 +146,7 @@ int OSD_PIXELS_PER_CHAR = (STEPS * SCAN_RBW_RFACTOR) / OSD_CHART_WIDTH;
 // if more than 100 it can freez
 #define SAMPLES 100 //(scan time = 1294)
 // number of samples for RSSI method
-#define SAMPLES_RSSI RADIOLIB_SX126X_SPECTRAL_SCAN_WINDOW_DEFAULT // 21 //
+#define SAMPLES_RSSI 21 // 21 //
 
 #define RANGE (int)(FREQ_END - FREQ_BEGIN)
 
@@ -117,7 +161,6 @@ uint64_t iterations = RANGE / RANGE_PER_PAGE;
 // uint64_t range_frequency = FREQ_END - FREQ_BEGIN;
 uint64_t median_frequency = FREQ_BEGIN + FREQ_END - FREQ_BEGIN / 2;
 
-// #define OSD_ENABLED true           // unused
 // #define DISABLE_PLOT_CHART false   // unused
 
 // Array to store the scan results
@@ -125,6 +168,8 @@ uint16_t result[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
 uint16_t result_display_set[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
 uint16_t result_detections[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
 uint16_t filtered_result[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
+uint16_t max_bins_array[OSD_WIDTH];
+int max_bins_array_value[OSD_WIDTH];
 
 // Waterfall array
 bool waterfall[STEPS], detected_y[STEPS]; // 20 - ??? steps of the waterfall
@@ -142,6 +187,7 @@ uint64_t detection_count = 0;
 bool single_page_scan = false;
 bool SOUND_ON = false;
 
+// #define PRINT_DEBUG
 #define PRINT_PROFILE_TIME
 
 #ifdef PRINT_PROFILE_TIME
@@ -166,75 +212,27 @@ uint64_t loop_cnt = 0;
 
 unsigned short selectFreqChar(int bin)
 {
-    if (bin > 26)
-    {
-        return 0x105;
-    }
-    if (bin == 25)
-    {
-        return 0x106;
-    }
-    if (bin == 24)
-    {
-        return 0x107;
-    }
-    if (bin == 23)
-    {
-        return 0x108;
-    }
-    if (bin == 22)
-    {
-        return 0x109;
-    }
-    if (bin == 21)
-    {
-        return 0x10a;
-    }
-    if (bin == 20)
-    {
-        return 0x10b;
-    }
-    if (bin == 19)
-    {
-        return 0x10c;
-    }
-    if (bin == 18)
-    {
-        return 0x10d;
-    }
-    if (bin == 17)
-    {
-        return 0x10e;
-    }
-    return 0x105;
+    if (bin >= 0 && bin < MAX_POWER_LEVELS)
+        return power_level[bin];
+    return 0x121;
 }
 
 void setup(void)
 {
-
+#ifdef OSD_ENABLED
     osd.init(OSD_SCK, OSD_MISO, OSD_MOSI);
     osd.clear();
     /* Write the custom character to the OSD, replacing the original character*/
     /* Expand 0xe0 to 0x0e0, the high 8 bits indicate page number and the low 8 bits
      * indicate the inpage address.*/
     osd.storeChar(0xe0, buf0);
-    osd.storeChar(0xe1, buf1);
-    osd.storeChar(0xe2, buf2);
-    osd.storeChar(0xe3, buf3);
-    /*Displays custom characters*/
-    osd.displayChar(2, 2, 0xe0);
-    osd.displayChar(2, 3, 0xe1);
-    osd.displayChar(2, 4, 0xe2);
-    osd.displayChar(2, 5, 0xe3);
-    /*display character*/
-    osd.displayChar(9, 9, 0x11d);
-    osd.displayChar(9, 10, 0x11e);
-    osd.displayChar(8, 11, 0x10f);
-    osd.displayChar(14, 0, 0x10f);
-    /*display String*/
-    osd.displayString(14, 15, "   Lora SA");
-    osd.displayString(2, 1, "   Spectral RF Analyzer");
 
+    // Display Satellite icon in the left bottom corner
+    osd.displayChar(14, 1, 0x10f);
+    /*display String*/
+    osd.displayString(14, 15, "    Lora SA");
+    osd.displayString(2, 1, "   Spectral RF Analyzer");
+#endif
     float vbat;
     float resolution;
     loop_cnt = 0;
@@ -280,7 +278,7 @@ void setup(void)
     both.println("Starting scanning...");
     vbat = heltec_vbat();
     both.printf("V battery: %.2fV (%d%%)\n", vbat, heltec_battery_percent(vbat));
-    delay(300);
+    delay(400);
     display.clear();
 
     resolution = RANGE / (STEPS * SCAN_RBW_RFACTOR);
@@ -291,7 +289,7 @@ void setup(void)
     // Adjust range if it is not even to RANGE_PER_PAGE
     if (!single_page_scan && range % RANGE_PER_PAGE != 0)
     {
-        // range = range + range % RANGE_PER_PAGE;
+        range = range + range % RANGE_PER_PAGE;
     }
 #endif
 
@@ -348,9 +346,46 @@ void setup(void)
     // TODO: check documentation (9.2.1) if we must calibrate in certain ranges
     radio.setFrequency(FREQ_BEGIN, true);
 
+#ifdef METHOD_RSSI
+    state = radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_NONE);
+    if (state != RADIOLIB_ERR_NONE)
+    {
+        Serial.print(F("Failed to start receive mode, error code: "));
+        Serial.println(state);
+    }
+#endif
     // waterfall start line y-axis
     w = WATERFALL_START;
 }
+
+void osdPrintSignalLevelChart(int col, int signal_value)
+{
+    // Third line
+    if (signal_value <= 7)
+    {
+        osd.displayChar(13, col + 2, 0x100);
+        osd.displayChar(14, col + 2, 0x100);
+        osd.displayChar(12, col + 2, selectFreqChar(signal_value));
+    }
+    // Second line
+    else if (max_bins_array[col] < 17)
+    {
+        osd.displayChar(12, col + 2, 0x100);
+        osd.displayChar(14, col + 2, 0x100);
+        osd.displayChar(13, col + 2, selectFreqChar(signal_value));
+    }
+    // First line
+    else
+    {
+        // Clean Up symbol
+        osd.displayChar(12, col + 2, 0x100);
+        osd.displayChar(13, col + 2, 0x100);
+        osd.displayChar(14, col + 2, selectFreqChar(signal_value));
+    }
+}
+
+// Formula to translate 33 bin to aproximate RSSI value
+int binToRSSI(int bin) { return bin * 4; }
 
 void loop(void)
 {
@@ -446,15 +481,9 @@ void loop(void)
 
         drone_detected_frequency_start = 0;
         display.setTextAlignment(TEXT_ALIGN_RIGHT);
-        int max_bins_array[30];
-        for (int i = 0; i < 30; i++)
-        {
-            max_bins_array[i] = 33;
-        }
-        // memset(max_bins_array, 33, 30);
 
         // horizontal (x axis) Frequency loop
-        int osd_x = 1, osd_y = 1, s = 0;
+        int osd_x = 1, osd_y = 1, col = 0, max_bin = 0;
         // x loop
         for (x = 0; x < STEPS * SCAN_RBW_RFACTOR; x++)
         {
@@ -482,10 +511,10 @@ void loop(void)
             radio.setFrequency(freq, false); // false = no calibration need here
 
 #ifdef PRINT_DEBUG
-            // Serial.printf("Step:%d Freq: %f\n",x,freq);
+            Serial.printf("Step:%d Freq: %f\n", x, freq);
 #endif
             // SpectralScan Method
-#if SCAN_METHOD == METHOD_SPECTRAL
+#ifdef METHOD_SPECTRAL
             {
                 // start spectral scan third parameter is a sleep interval
                 radio.spectralScanStart(SAMPLES, 1);
@@ -498,53 +527,18 @@ void loop(void)
                 }
                 // read the results Array to which the results will be saved
                 radio.spectralScanGetResult(result);
-                int max_bin = 0;
-
-                int mhz_in_bin = 5;
-                int steps = 12;
-
-                for (int i = 1; i < 33; i++)
-                {
-                    if (result[i] > 0 && (result[i + 1] > 0))
-                    {
-                        max_bin = i;
-                        Serial.println(String(max_bin));
-                        break;
-                    }
-                }
-                if (max_bins_array[s] > max_bin)
-                {
-                    max_bins_array[s] = max_bin;
-                }
-                // Going to the next OSD step
-                if (x % steps == 0 && s < 30)
-                {
-                    // PRINT SIGNAL CHAR ROW, COL, VALUE
-                    osd.displayChar(14, s + 1, selectFreqChar(max_bins_array[s]));
-                    Serial.println("MAX:" + String(max_bins_array[s]));
-                    // osd.displayString(14, s, "" + String(max_bins_array[s]) + "");
-                    s++;
-                    if (s == 30)
-                    {
-                        s = 0;
-                    }
-                }
-                // osd.displayString(osd_y++, osd_x,
-                //                   String(freq) + "-" + String((max_bin * 4)) + "dB");
             }
 #endif
-#if SCAN_METHOD == METHOD_RSSI
-            // Spectrum analyzer using getRSSI
+#ifdef METHOD_RSSI
+// Spectrum analyzer using getRSSI
+#ifdef PRINT_DEBUG
+            Serial.println("METHOD RSSI");
+#endif
             {
-                state = radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_NONE);
-                if (state != RADIOLIB_ERR_NONE)
-                {
-                    Serial.print(F("Failed to start receive mode, error code: "));
-                    Serial.println(state);
-                }
 
                 // memset
                 // memset(result, 0, RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE);
+                // Some issues with memset function
                 for (i = 0; i < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE; i++)
                 {
                     result[i] = 0;
@@ -559,7 +553,7 @@ void loop(void)
                     result_index = uint8_t(abs(rssi) / 4); /// still not clear formula
 
 #ifdef PRINT_DEBUG
-                    // Serial.printf("RSSI: %d IDX: %d\n",rssi,result_index);
+                    Serial.printf("RSSI: %d IDX: %d\n", rssi, result_index);
 #endif
                     // avoid buffer overflow
                     if (result_index < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE)
@@ -570,16 +564,71 @@ void loop(void)
                             result[result_index] = rssi;
                         }
                     }
-#ifdef PRINT_DEBUG
                     else
                     {
                         Serial.print("Out-of-Range: result_index %d\n");
                     }
-#endif
                 }
             }
 #endif // SCAN_METHOD == METHOD_RSSI
 
+#ifdef OSD_ENABLED
+            { // OSD enabled
+
+                for (int i = 0; i < OSD_WIDTH; i++)
+                {
+                    max_bins_array[i] = 33;
+                    max_bins_array_value[i] = 0;
+                }
+                // memset(max_bins_array, 33, 30);
+                max_bin = 0;
+
+                osd.displayString(12, 1, String(FREQ_BEGIN));
+                osd.displayString(12, 30 - 8, String(FREQ_END));
+                for (int i = 1; i < 32; i++)
+                {
+                    if (result[i] > 0 && (result[i + 1] > 0))
+                    {
+                        max_bin = i;
+#ifdef PRINT_DEBUG
+                        Serial.print("MAX in bin:" + String(max_bin));
+                        Serial.println();
+#endif
+                        break;
+                    }
+                }
+                if (max_bins_array[col] > max_bin)
+                {
+                    max_bins_array[col] = max_bin;
+                    // Store RSSI value for RSSI Method
+                    max_bins_array_value[col] = result[max_bin];
+                }
+                // Going to the next OSD step
+                if (x % osd_steps == 0 && col < 30)
+                {
+                    // OSD SIDE BAR with frequency log
+#ifdef OSD_SIDE_BAR
+                    {
+                        osd.displayString(col, 30 - 7,
+                                          String(FREQ_BEGIN + (col * osd_mhz_in_bin)) +
+                                              ":" + String(max_bins_array[col]));
+                    }
+#endif
+                    // Test with Random Result...
+                    // max_bins_array[s] = rand() % 32;
+#ifdef METHOD_RSSI
+                    // With THe RSSI method we can get real RSSI value not just a bin
+#endif
+                    // PRINT SIGNAL CHAR ROW, COL, VALUE
+                    osdPrintSignalLevelChart(col, max_bins_array[col]);
+
+#ifdef PRINT_DEBUG
+                    Serial.println("MAX:" + String(max_bins_array[s]));
+#endif
+                    col++;
+                }
+            }
+#endif // END OSD ENABLED
             detected = false;
             detected_y[dispaly_x] = false;
 
@@ -587,7 +636,8 @@ void loop(void)
             {
 
 #ifdef PRINT_DEBUG
-                // Serial.printf("%04X,", result[y]);
+                Serial.print(String(y) + ":");
+                Serial.print(String(result[y]) + ",");
 #endif
 
 #if FILTER_SPECTRUM_RESULTS == false
@@ -608,18 +658,12 @@ void loop(void)
                 // if RSSI method actual value is -xxx dB
                 if (result[y])
                 {
-                    // do not process 'first' and 'last' row to avoid out of index access
+                    // do not process 'first' and 'last' row to avoid out of index
+                    // access
                     if ((y != 0) && (y != (RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE - 1)))
                     {
                         if ((result[y + 1] != 0) || (result[y - 1] != 0))
                         {
-                            // Filling the empty pixel between signals int the level < 27
-                            // (noise level)
-                            /* if (y < 27 && result[y + 1] == 0 && result[y + 2] > 0)
-                                {
-                                result[y + 1] = 1;
-                                filtered_result[y + 1] = 1;
-                                }*/
                             filtered_result[y] = 1;
                         }
                     }
@@ -750,7 +794,7 @@ void loop(void)
             }
 
 #ifdef PRINT_DEBUG
-            // Serial.println("....");
+            Serial.println("....\n");
 #endif
             if (first_run || ANIMATED_RELOAD)
             {
@@ -792,7 +836,8 @@ void loop(void)
                 {
                     // Visually confirm it's off so user releases button
                     display.displayOff();
-                    // Deep sleep (has wait for release so we don't wake up immediately)
+                    // Deep sleep (has wait for release so we don't wake up
+                    // immediately)
                     heltec_deep_sleep();
                     break;
                 }
@@ -835,6 +880,15 @@ void loop(void)
 
         // Render display data here
         display.display();
+#ifdef OSD_ENABLED
+        if (global_counter != 0 && global_counter % 50 == 0)
+        {
+            osd.clear();
+            osd.displayChar(14, 1, 0x10f);
+            global_counter = 0;
+        }
+        global_counter++;
+#endif
     }
 
 #ifdef PRINT_DEBUG
