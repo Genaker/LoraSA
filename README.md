@@ -14,7 +14,7 @@ at that level.
 
 ```text
 N in Bin / dBm
-1 -11
+(0)1 -11
 2 -15
 3 -19
 4 -23
