@@ -157,7 +157,7 @@ class DFRobot_OSD
      * @brief Init function
      * @return None
      */
-    void init(int a, int b, int c);
+    void init(int OSD_SCK, int OSD_MISO, int OSD_MOSI);
 
     /**
      * @fn displayChar
