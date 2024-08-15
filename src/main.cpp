@@ -26,13 +26,55 @@
 // This file contains a binary patch for the SX1262
 #include "modules/SX126x/patches/SX126x_patch_scan.h"
 #define OSD_ENABLED true
+
 #ifdef OSD_ENABLED
 #include "DFRobot_OSD.h"
+#define MAX_POWER_LEVELS 33
+
+static const uint16_t power_level[MAX_POWER_LEVELS] = {
+    0x10E, // 0
+    0x10E, // 1
+    0x10D, // 2
+    0x10C, // 3
+    0x10B, // 4
+    0x10A, // 5
+    0x109, // 6
+    0x108, // 7
+    0x107, // 8
+    0x106, // 9
+    // new line
+    0x10E, // 10
+    0x10D, // 11
+    0x10C, // 12
+    0x10B, // 13
+    0x10A, // 14
+    0x109, // 15
+    0x108, // 16
+    0x107, // 17
+    0x106, // 18
+    // new line
+    0x10E, // 19
+    0x10D, // 20
+    0x10C, // 21
+    0x10B, // 22
+    0x10A, // 23
+    0x109, // 24
+    0x108, // 25
+    0x107, // 26
+    0x106, // 27
+    0x105, // 28
+    0x105, // 29
+    0x105, // 30
+    0x105, // 31
+    0x105  // 32
+};
 #endif
+// SPI pins
 #define CS 47
 #define OSD_MISO 33
 #define OSD_MOSI 34
 #define OSD_SCK 26
+
 #define OSD_WIDTH 30
 #define OSD_HEIGHT 16
 #define OSD_CHART_WIDTH 15
@@ -40,6 +82,8 @@
 #define OSD_X_START 1
 #define OSD_Y_START 16
 
+// TODO: Calculate dinammicaly:
+// osd_steps = osd_mhz_in_bin / (FM range / LORA radio x Steps)
 int osd_mhz_in_bin = 5;
 int osd_steps = 12;
 int global_counter = 0;
@@ -52,9 +96,6 @@ DFRobot_OSD osd(CS);
 static const int buf0[36] = {0x02, 0x80, 0x02, 0x40, 0x7F, 0xE0, 0x42, 0x00,
                              0x42, 0x00, 0x7A, 0x40, 0x4A, 0x40, 0x4A, 0x80,
                              0x49, 0x20, 0x5A, 0xA0, 0x44, 0x60, 0x88, 0x20};
-
-// SPI pins
-// .pio/libdeps/heltec_wifi_lora_32_V3/Heltec_ESP32_LoRa_v3/src/heltec_unofficial.h#L34-L35
 
 // project components
 #include "global_config.h"
@@ -72,7 +113,7 @@ typedef enum
 
 #define SCAN_METHOD
 #define METHOD_SPECTRAL
-// #define METHOD_RSSI
+// #define METHOD_RSSI // Uncomment this and comment METHOD_SPECTRAL fot RSSI
 
 // Feature to scan diapazones. Other frequency settings will be ignored.
 // int SCAN_RANGES[] = {850890, 920950};
@@ -170,105 +211,8 @@ uint64_t loop_cnt = 0;
 
 unsigned short selectFreqChar(int bin)
 {
-    if (bin >= 25)
-    {
-        return 0x105;
-    }
-    if (bin == 24)
-    {
-        return 0x106;
-    }
-    if (bin == 23)
-    {
-        return 0x107;
-    }
-    if (bin == 22)
-    {
-        return 0x108;
-    }
-    if (bin == 21)
-    {
-        return 0x109;
-    }
-    if (bin == 20)
-    {
-        return 0x10a;
-    }
-    if (bin == 19)
-    {
-        return 0x10b;
-    }
-    if (bin == 18)
-    {
-        return 0x10c;
-    }
-    if (bin == 17)
-    {
-        return 0x10d;
-    }
-    if (bin == 16)
-    {
-        return 0x10e;
-    }
-    // New upper line
-    if (bin == 15)
-    {
-        return 0x106;
-    }
-    if (bin == 14)
-    {
-        return 0x107;
-    }
-    if (bin == 13)
-    {
-        return 0x108;
-    }
-    if (bin == 12)
-    {
-        return 0x109;
-    }
-    if (bin == 11)
-    {
-        return 0x10A;
-    }
-    if (bin == 10)
-    {
-        return 0x10B;
-    }
-    if (bin == 9)
-    {
-        return 0x10C;
-    }
-    if (bin == 8)
-    {
-        return 0x10D;
-    }
-    if (bin == 7)
-    {
-        return 0x10E;
-    }
-    // 3-d line
-    if (bin == 6)
-    {
-        return 0x106;
-    }
-    if (bin == 5)
-    {
-        return 0x107;
-    }
-    if (bin == 4)
-    {
-        return 0x108;
-    }
-    if (bin == 3)
-    {
-        return 0x109;
-    }
-    if (bin < 2)
-    {
-        return 0x10A;
-    }
-
+    if (bin >= 0 && bin < MAX_POWER_LEVELS)
+        return power_level[bin];
     return 0x121;
 }
 
@@ -281,12 +225,8 @@ void setup(void)
     /* Expand 0xe0 to 0x0e0, the high 8 bits indicate page number and the low 8 bits
      * indicate the inpage address.*/
     osd.storeChar(0xe0, buf0);
-    /*Displays custom characters*/
-    // osd.displayChar(2, 2, 0xe0);
-    /*display character*/
-    osd.displayChar(9, 9, 0x11d);
-    osd.displayChar(9, 10, 0x11e);
-    osd.displayChar(8, 11, 0x10f);
+
+    // Display Satellite icon in the left bottom corner
     osd.displayChar(14, 1, 0x10f);
     /*display String*/
     osd.displayString(14, 15, "    Lora SA");
@@ -348,7 +288,7 @@ void setup(void)
     // Adjust range if it is not even to RANGE_PER_PAGE
     if (!single_page_scan && range % RANGE_PER_PAGE != 0)
     {
-        // range = range + range % RANGE_PER_PAGE;
+        range = range + range % RANGE_PER_PAGE;
     }
 #endif
 
@@ -413,7 +353,6 @@ void setup(void)
         Serial.println(state);
     }
 #endif
-
     // waterfall start line y-axis
     w = WATERFALL_START;
 }
@@ -517,7 +456,7 @@ void loop(void)
         display.setTextAlignment(TEXT_ALIGN_RIGHT);
 
         // horizontal (x axis) Frequency loop
-        int osd_x = 1, osd_y = 1, s = 0, max_bin = 0;
+        int osd_x = 1, osd_y = 1, col = 0, max_bin = 0;
         // x loop
         for (x = 0; x < STEPS * SCAN_RBW_RFACTOR; x++)
         {
@@ -631,53 +570,52 @@ void loop(void)
                         break;
                     }
                 }
-                if (max_bins_array[s] > max_bin)
+                if (max_bins_array[col] > max_bin)
                 {
-                    max_bins_array[s] = max_bin;
+                    max_bins_array[col] = max_bin;
                     // Store RSSI value for RSSI Method
-                    max_bins_array_value[s] = result[max_bin];
+                    max_bins_array_value[col] = result[max_bin];
                 }
                 // Going to the next OSD step
-                if (x % osd_steps == 0 && s < 30)
+                if (x % osd_steps == 0 && col < 30)
                 {
                     // OSD SIDE BAR
                     if (true)
                     {
-                        osd.displayString(s, 30 - 7,
-                                          String(FREQ_BEGIN + (s * osd_mhz_in_bin)) +
-                                              ":" + String(max_bins_array[s]));
+                        osd.displayString(col, 30 - 7,
+                                          String(FREQ_BEGIN + (col * osd_mhz_in_bin)) +
+                                              ":" + String(max_bins_array[col]));
                     }
                     // Test with Random Result...
                     // max_bins_array[s] = rand() % 32;
 #ifdef METHOD_RSSI
-                    // max_bins_array[s] = int(abs(max_bins_array_value[s]) / 4);
+                    // With THe RSSI method we can get real RSSI value not just a bin
 #endif
                     // PRINT SIGNAL CHAR ROW, COL, VALUE
-                    if (max_bins_array[s] <= 7)
+                    if (max_bins_array[col] <= 7)
                     {
-                        osd.displayChar(12, s + 2, selectFreqChar(max_bins_array[s]));
+                        osd.displayChar(13, col + 2, 0x100);
+                        osd.displayChar(14, col + 2, 0x100);
+                        osd.displayChar(12, col + 2, selectFreqChar(max_bins_array[col]));
                     }
-                    else if (max_bins_array[s] < 17)
+                    else if (max_bins_array[col] < 17)
                     {
-                        osd.displayChar(12, s + 2, 0x100);
-                        osd.displayChar(13, s + 2, selectFreqChar(max_bins_array[s]));
+                        osd.displayChar(12, col + 2, 0x100);
+                        osd.displayChar(14, col + 2, 0x100);
+                        osd.displayChar(13, col + 2, selectFreqChar(max_bins_array[col]));
                     }
                     else
                     {
                         // Clean Up symbol
-                        osd.displayChar(12, s + 2, 0x100);
-                        osd.displayChar(13, s + 2, 0x100);
-                        osd.displayChar(14, s + 2, selectFreqChar(max_bins_array[s]));
+                        osd.displayChar(12, col + 2, 0x100);
+                        osd.displayChar(13, col + 2, 0x100);
+                        osd.displayChar(14, col + 2, selectFreqChar(max_bins_array[col]));
                     }
 
 #ifdef PRINT_DEBUG
                     Serial.println("MAX:" + String(max_bins_array[s]));
 #endif
-                    s++;
-                    if (s == 30)
-                    {
-                        s = 0;
-                    }
+                    col++;
                 }
             }
 #endif // END OSD ENABLED
