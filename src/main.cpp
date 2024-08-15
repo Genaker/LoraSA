@@ -277,7 +277,7 @@ void setup(void)
     both.println("Starting scanning...");
     vbat = heltec_vbat();
     both.printf("V battery: %.2fV (%d%%)\n", vbat, heltec_battery_percent(vbat));
-    delay(300);
+    delay(400);
     display.clear();
 
     resolution = RANGE / (STEPS * SCAN_RBW_RFACTOR);
