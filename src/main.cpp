@@ -662,13 +662,6 @@ void loop(void)
                     {
                         if ((result[y + 1] != 0) || (result[y - 1] != 0))
                         {
-                            // Filling the empty pixel between signals int the level <
-                            // 27 (noise level)
-                            /* if (y < 27 && result[y + 1] == 0 && result[y + 2] > 0)
-                                {
-                                result[y + 1] = 1;
-                                filtered_result[y + 1] = 1;
-                                }*/
                             filtered_result[y] = 1;
                         }
                     }
