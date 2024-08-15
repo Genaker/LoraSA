@@ -357,6 +357,29 @@ void setup(void)
     w = WATERFALL_START;
 }
 
+void osdPrintSignalLevelChart(int col, int signal_value)
+{
+    if (signal_value <= 7)
+    {
+        osd.displayChar(13, col + 2, 0x100);
+        osd.displayChar(14, col + 2, 0x100);
+        osd.displayChar(12, col + 2, selectFreqChar(signal_value));
+    }
+    else if (max_bins_array[col] < 17)
+    {
+        osd.displayChar(12, col + 2, 0x100);
+        osd.displayChar(14, col + 2, 0x100);
+        osd.displayChar(13, col + 2, selectFreqChar(signal_value));
+    }
+    else
+    {
+        // Clean Up symbol
+        osd.displayChar(12, col + 2, 0x100);
+        osd.displayChar(13, col + 2, 0x100);
+        osd.displayChar(14, col + 2, selectFreqChar(signal_value));
+    }
+}
+
 // Formula to translate 33 bin to aproximate RSSI value
 int binToRSSI(int bin) { return bin * 4; }
 
@@ -592,25 +615,7 @@ void loop(void)
                     // With THe RSSI method we can get real RSSI value not just a bin
 #endif
                     // PRINT SIGNAL CHAR ROW, COL, VALUE
-                    if (max_bins_array[col] <= 7)
-                    {
-                        osd.displayChar(13, col + 2, 0x100);
-                        osd.displayChar(14, col + 2, 0x100);
-                        osd.displayChar(12, col + 2, selectFreqChar(max_bins_array[col]));
-                    }
-                    else if (max_bins_array[col] < 17)
-                    {
-                        osd.displayChar(12, col + 2, 0x100);
-                        osd.displayChar(14, col + 2, 0x100);
-                        osd.displayChar(13, col + 2, selectFreqChar(max_bins_array[col]));
-                    }
-                    else
-                    {
-                        // Clean Up symbol
-                        osd.displayChar(12, col + 2, 0x100);
-                        osd.displayChar(13, col + 2, 0x100);
-                        osd.displayChar(14, col + 2, selectFreqChar(max_bins_array[col]));
-                    }
+                    osdPrintSignalLevelChart(col, max_bins_array[col]);
 
 #ifdef PRINT_DEBUG
                     Serial.println("MAX:" + String(max_bins_array[s]));
@@ -878,7 +883,7 @@ void loop(void)
         // Render display data here
         display.display();
 #ifdef OSD_ENABLED
-        if (global_counter % 50 == 0)
+        if (global_counter != 0 && global_counter % 50 == 0)
         {
             osd.clear();
             osd.displayChar(14, 1, 0x10f);
