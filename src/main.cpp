@@ -359,18 +359,21 @@ void setup(void)
 
 void osdPrintSignalLevelChart(int col, int signal_value)
 {
+    // Third line
     if (signal_value <= 7)
     {
         osd.displayChar(13, col + 2, 0x100);
         osd.displayChar(14, col + 2, 0x100);
         osd.displayChar(12, col + 2, selectFreqChar(signal_value));
     }
+    // Second line
     else if (max_bins_array[col] < 17)
     {
         osd.displayChar(12, col + 2, 0x100);
         osd.displayChar(14, col + 2, 0x100);
         osd.displayChar(13, col + 2, selectFreqChar(signal_value));
     }
+    // First line
     else
     {
         // Clean Up symbol
