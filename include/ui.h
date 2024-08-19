@@ -13,6 +13,8 @@
 #define MINOR_TICKS 5
 
 #define ONE_MILLISEC 1
+#define ONE_SEC 1000
+#define ONE_MINUTE 60 * 1000
 
 // Prints debug information and the scan measurement bins from the SX1262 in
 // hex Change spectrum plot values at once or by line

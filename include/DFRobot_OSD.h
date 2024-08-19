@@ -146,10 +146,10 @@ class DFRobot_OSD
     /**
      * @fn DFRobot_OSD
      * @brief Constructor
-     * @param CS -  CS selection pin
+     * @param OSD_CS -  CS selection pin
      * @return None
      */
-    DFRobot_OSD(int CS);
+    DFRobot_OSD(int OSD_CS);
     ~DFRobot_OSD();
 
     /**
