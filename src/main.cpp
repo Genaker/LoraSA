@@ -230,7 +230,7 @@ uint64_t detection_count = 0;
 bool single_page_scan = false;
 bool SOUND_ON = false;
 
-// #define PRINT_DEBUG
+#define PRINT_DEBUG
 #define PRINT_PROFILE_TIME
 
 #ifdef PRINT_PROFILE_TIME
@@ -241,7 +241,7 @@ uint64_t scan_start_time = 0;
 #endif
 
 uint64_t x, y, range_item, w, i = 0;
-int osd_x = 1, osd_y = 2, col = 0, max_bin = 0;
+int osd_x = 1, osd_y = 2, col = 0, max_bin = 32;
 uint64_t ranges_count = 0;
 
 float freq = 0;
@@ -399,17 +399,17 @@ void osd_spectrum()
 { // OSD enabled
 
     // memset(max_bins_array, 33, 30);
-    max_bin = 0;
+    max_bin = 32;
 
     osd.displayString(12, 1, String(FREQ_BEGIN));
     osd.displayString(12, 30 - 8, String(FREQ_END));
     // Finding biggest in result
     //  Skiping 0 to avoid overflow
-    for (int i = 1; i < 30 - 1; i++)
+    for (int i = 1; i < 30; i++)
     {
         // filter
         if (result[i] > 0 &&
-            (result[i + 1] != 0 || (result[i - 1] != 0 && result[i - 2] != 0)))
+            ((result[i + 1] != 0 && result[i + 2] != 0) || result[i - 1] != 0))
         {
             max_bin = i;
 #ifdef PRINT_DEBUG
@@ -420,7 +420,7 @@ void osd_spectrum()
         }
     }
     // max_bin contains fist not 0 index of the bin
-    if (max_step_range > max_bin)
+    if (max_step_range > max_bin && max_bin != 0)
     {
         max_step_range = max_bin;
 // Store RSSI value for RSSI Method
@@ -863,10 +863,10 @@ void loop(void)
                 {
                     // do not process 'first' and 'last' row to avoid out of index
                     // access
-                    if ((y != 0) && (y != (RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE - 2)))
+                    if ((y != 0) && (y != (RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE - 3)))
                     {
-                        if ((result[y + 1] != 0) ||
-                            ((result[y - 1] != 0) && (result[y - 2] != 0)))
+                        if (((result[y + 1] != 0) && (result[y + 2] != 0)) ||
+                            (result[y - 1] != 0))
                         {
                             filtered_result[y] = 1;
                         }
