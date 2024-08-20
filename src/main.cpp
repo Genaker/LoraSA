@@ -230,7 +230,7 @@ uint64_t detection_count = 0;
 bool single_page_scan = false;
 bool SOUND_ON = false;
 
-#define PRINT_DEBUG
+// #define PRINT_DEBUG
 #define PRINT_PROFILE_TIME
 
 #ifdef PRINT_PROFILE_TIME
