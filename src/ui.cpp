@@ -143,10 +143,11 @@ void drawTicks(float every, int length)
 
 void UI_drawCursor(int16_t possition)
 {
-    // Draw animated cursor on reload process
+    // Draw animated vertical cursor on reload process
     display_instance->setColor(BLACK);
     display_instance->drawVerticalLine(possition, 0, HEIGHT);
     display_instance->drawVerticalLine(possition + 1, 0, HEIGHT);
+    display_instance->drawVerticalLine(possition + 2, 0, HEIGHT);
     display_instance->setColor(WHITE);
 }
 

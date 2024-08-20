@@ -25,8 +25,8 @@
 #include <heltec_unofficial.h>
 // This file contains a binary patch for the SX1262
 #include "modules/SX126x/patches/SX126x_patch_scan.h"
-// #define OSD_ENABLED true
-//  #define WIFI_SCANNING_ENABLED true
+#define OSD_ENABLED true
+// #define WIFI_SCANNING_ENABLED true
 
 #define BT_SCAN_DELAY 60 * 1 * 1000
 #define WF_SCAN_DELAY 60 * 2 * 1000
@@ -44,6 +44,19 @@ uint64_t bt_start = 0;
 #define MAX_POWER_LEVELS 33
 #define OSD_SIDE_BAR true
 
+static const uint16_t levels[10] = {
+    0x105, // 0
+    0x10E, // 1
+    0x10D, // 2
+    0x10C, // 3
+    0x10B, // 4
+    0x10A, // 5
+    0x109, // 6
+    0x108, // 7
+    0x107, // 8
+    0x106, // 9
+};
+
 static const uint16_t power_level[MAX_POWER_LEVELS + 1] = {
     0x10E, // 0
     0x10E, // 1
@@ -54,7 +67,7 @@ static const uint16_t power_level[MAX_POWER_LEVELS + 1] = {
     0x109, // 6
     0x108, // 7
     0x107, // 8
-    0x107, // 9 not using 106
+    0x106, // 9 not using 106 to accent rise
     // new line
     0x10E, // 10
     0x10D, // 11
@@ -64,7 +77,7 @@ static const uint16_t power_level[MAX_POWER_LEVELS + 1] = {
     0x109, // 15
     0x108, // 16
     0x107, // 17
-    0x107, // 18 not using 106
+    0x106, // 18 not using 106
     // new line
     0x10E, // 19
     0x10D, // 20
@@ -75,7 +88,7 @@ static const uint16_t power_level[MAX_POWER_LEVELS + 1] = {
     0x108, // 25
     0x107, // 26
     0x106, // 27
-    0x105, // 28
+    0x105, // 28 ---
     0x105, // 29
     0x105, // 30
     0x105, // 31
@@ -113,8 +126,18 @@ static const int buf0[36] = {0x02, 0x80, 0x02, 0x40, 0x7F, 0xE0, 0x42, 0x00,
 
 // project components
 #if defined(WIFI_SCANNING_ENABLED) && defined(BT_SCANNING_ENABLED)
-#include "BT_WIFI_scan.h"
+
+#include "WiFi.h"
+// #define BT_SCANNING_ENABLED true
+#ifdef BT_SCANNING_ENABLED
+#include <BLEAdvertisedDevice.h>
+#include <BLEDevice.h>
+#include <BLEScan.h>
+#include <BLEUtils.h>
 #endif
+
+#endif
+
 #include "global_config.h"
 #include "ui.h"
 
@@ -151,12 +174,16 @@ int OSD_PIXELS_PER_CHAR = (STEPS * SCAN_RBW_FACTOR) / OSD_CHART_WIDTH;
 
 #define DEFAULT_RANGE_PER_PAGE 50
 
+// Prints debug information and the scan measurement bins from the SX1262 in
+// hex Change spectrum plot values at once or by line
+bool ANIMATED_RELOAD = false;
+
 // TODO: Ignore power lines
 #define UP_FILTER 5
 #define LOW_FILTER 3
 // Remove reading without neighbors
 #define FILTER_SPECTRUM_RESULTS true
-#define DRAW_DETECTION_TICKS true
+const bool DRAW_DETECTION_TICKS = true;
 
 // Number of samples for each frequency scan. Fewer samples = better temporal resolution.
 // if more than 100 it can freez
@@ -184,8 +211,9 @@ uint16_t result[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
 uint16_t result_display_set[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
 uint16_t result_detections[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
 uint16_t filtered_result[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
-uint16_t max_bins_array[OSD_WIDTH];
-int max_bins_array_value[OSD_WIDTH];
+uint16_t max_bins_array[MAX_POWER_LEVELS];
+int max_bins_array_value[MAX_POWER_LEVELS];
+int max_step_range = 32;
 
 // Waterfall array
 bool waterfall[STEPS], detected_y[STEPS]; // 20 - ??? steps of the waterfall
@@ -214,7 +242,7 @@ uint64_t scan_start_time = 0;
 #endif
 
 uint64_t x, y, range_item, w, i = 0;
-int osd_x = 1, osd_y = 2;
+int osd_x = 1, osd_y = 2, col = 0, max_bin = 0;
 uint64_t ranges_count = 0;
 
 float freq = 0;
@@ -226,7 +254,213 @@ uint8_t button_pressed_counter = 0;
 
 uint64_t loop_cnt = 0;
 
-#include "OSD.h"
+#ifdef WIFI_SCANNING_ENABLED
+// WiFi Scan
+// TODO: Make Async Scan
+// https://arduino-esp8266.readthedocs.io/en/latest/esp8266wifi/scan-examples.html#async-scan
+void scanWiFiWithOSDOut()
+{
+    osd.clear();
+    osd.displayString(14, 2, "Scanning WiFi..");
+    int n = WiFi.scanNetworks();
+#ifdef PRINT_DEBUG
+    Serial.println("scan done");
+    if (n == 0)
+    {
+        Serial.println("no networks found");
+    }
+#endif
+    if (n > 0)
+    {
+#ifdef PRINT_DEBUG
+        Serial.print(n);
+        Serial.println(" networks found");
+#endif
+        for (int i = 0; i < n; ++i)
+        {
+// Print SSID and RSSI for each network found
+#ifdef PRINT_DEBUG
+            Serial.print(i + 1);
+            Serial.print(": ");
+            Serial.print(WiFi.SSID(i));
+            Serial.print(" (");
+            Serial.print(WiFi.RSSI(i));
+            Serial.print(")");
+            Serial.println((WiFi.encryptionType(i) == WIFI_AUTH_OPEN) ? " " : "*");
+#endif
+            osd.displayString(i + 1, 1,
+                              "WF:" + String((WiFi.SSID(i) + ":" + WiFi.RSSI(i))));
+        }
+    }
+    osd.displayChar(14, 1, 0x10f);
+}
+#endif
+
+#ifdef BT_SCANNING_ENABLED
+//**********************
+// BLE devices scan.
+//***********************
+// TODO: Make Async Scan
+// https://github.com/nkolban/esp32-snippets/blob/master/cpp_utils/tests/BLETests/SampleAsyncScan.cpp
+void scanBTWithOSDOut()
+{
+    osd.clear();
+    osd.displayString(14, 2, "Scanning BT...");
+    cycleCnt++;
+
+    BLEDevice::init("");
+    BLEScan *pBLEScan = BLEDevice::getScan();
+    // active scan uses more power, but get results faster
+    pBLEScan->setActiveScan(true);
+    pBLEScan->setInterval(0x50);
+    pBLEScan->setWindow(0x30);
+
+#ifdef SERIAL_PRINT
+    Serial.printf("Start BLE scan for %d seconds...\n", BT_SCAN_TIME);
+#endif
+
+    BLEScanResults foundDevices = pBLEScan->start(BT_SCAN_TIME);
+    int count = foundDevices.getCount();
+#ifdef PRINT_DEBUG
+    Serial.printf("Found devices: %d  \n", count);
+#endif
+    present = false;
+    for (int i = 0; i < count; i++)
+    {
+        BLEAdvertisedDevice device = foundDevices.getDevice(i);
+        String currDevAddr = device.getAddress().toString().c_str();
+        String deviceName;
+        if (device.haveName())
+        {
+            deviceName = device.getName().c_str();
+        }
+        else
+        {
+            deviceName = currDevAddr;
+        }
+
+#ifdef PRINT_DEBUG
+        Serial.printf("Found device #%s/%s with RSSI: %d \n", currDevAddr, deviceName,
+                      device.getRSSI());
+#endif
+        osd.displayString(i + 1, 1,
+                          "BT:" + deviceName + ":" + String(device.getRSSI()) + " \n");
+    }
+#ifdef PRINT_DEBUG
+    Serial.println("Scan done!");
+    Serial.printf("Cycle counter: %d, Free heap: %d \n", cycleCnt, ESP.getFreeHeap());
+#endif
+    osd.displayChar(14, 1, 0x10f);
+    scanFinished = true;
+}
+#endif
+
+#ifdef OSD_ENABLED
+unsigned short selectFreqChar(int bin, int start_level = 0)
+{
+    if (bin >= start_level)
+    {
+        // level when we are starting show levels symbols
+        // you can override with your own character for example 0x100 = " " empty char
+        return power_level[33];
+    }
+    else if (bin >= 0 && bin < MAX_POWER_LEVELS)
+        return power_level[bin];
+    // when wrong bin number or noc har assigned we are showing "!" char
+    return 0x121;
+}
+
+void osdPrintSignalLevelChart(int col, int signal_value)
+{
+    // Third line
+    if (signal_value <= 9)
+    {
+        osd.displayChar(13, col + 2, 0x100);
+        osd.displayChar(14, col + 2, 0x100);
+        osd.displayChar(12, col + 2, selectFreqChar(signal_value, drone_detection_level));
+    }
+    // Second line
+    else if (signal_value < 19)
+    {
+        osd.displayChar(12, col + 2, 0x100);
+        osd.displayChar(14, col + 2, 0x100);
+        osd.displayChar(13, col + 2, selectFreqChar(signal_value, drone_detection_level));
+    }
+    // First line
+    else
+    {
+        // Clean Up symbol
+        osd.displayChar(12, col + 2, 0x100);
+        osd.displayChar(13, col + 2, 0x100);
+        osd.displayChar(14, col + 2, selectFreqChar(signal_value, drone_detection_level));
+    }
+}
+
+void osd_spectrum()
+{ // OSD enabled
+
+    // memset(max_bins_array, 33, 30);
+    max_bin = 0;
+
+    osd.displayString(12, 1, String(FREQ_BEGIN));
+    osd.displayString(12, 30 - 8, String(FREQ_END));
+    // Finding biggest in result
+    //  Skiping 0 to avoid overflow
+    for (int i = 1; i < 30 - 1; i++)
+    {
+        // filter
+        if (result[i] > 0 &&
+            (result[i + 1] != 0 || (result[i - 1] != 0 && result[i - 2] != 0)))
+        {
+            max_bin = i;
+#ifdef PRINT_DEBUG
+            Serial.print("MAX in bin:" + String(max_bin));
+            Serial.println();
+#endif
+            break;
+        }
+    }
+    // max_bin contains fist not 0 index of the bin
+    if (max_step_range > max_bin)
+    {
+        max_step_range = max_bin;
+// Store RSSI value for RSSI Method
+#ifdef METHOD_RSSI
+        max_bins_array_value[col] = result[max_bin];
+#endif
+    }
+    // Going to the next OSD step
+    if (x % osd_steps == 0 && col < 30)
+    {
+        // some issue when median  = 0
+        if (max_step_range == 0)
+        {
+            max_step_range = 32;
+        }
+        // OSD SIDE BAR with frequency log
+#ifdef OSD_SIDE_BAR
+        {
+            osd.displayString(col, 30 - 7,
+                              String(FREQ_BEGIN + (col * osd_mhz_in_bin)) + "-" +
+                                  String(max_step_range) + " ");
+        }
+#endif
+        // Test with Random Result...
+        // max_bins_array[s] = rand() % 32;
+#ifdef METHOD_RSSI
+        // With THe RSSI method we can get real RSSI value not just a bin
+#endif
+        // PRINT SIGNAL CHAR ROW, COL, VALUE
+        osdPrintSignalLevelChart(col, max_step_range);
+
+#ifdef PRINT_DEBUG
+        Serial.println("MAX:" + String(max_step_range));
+#endif
+        max_step_range = 32;
+        col++;
+    }
+}
+#endif
 
 void setup(void)
 {
@@ -410,13 +644,11 @@ void loop(void)
     loop_start = millis();
 #endif
 
-#ifdef DISABLED_CODE
     if (!ANIMATED_RELOAD || !single_page_scan)
     {
         // clear the scan plot rectangle
         UI_clearPlotter();
     }
-#endif
 
     // do the scan
     range = FREQ_END - FREQ_BEGIN;
@@ -492,8 +724,14 @@ void loop(void)
         drone_detected_frequency_start = 0;
         display.setTextAlignment(TEXT_ALIGN_RIGHT);
 
+        for (int i = 0; i < MAX_POWER_LEVELS; i++)
+        {
+            max_bins_array[i] = 32;
+            max_bins_array_value[i] = 0;
+        }
+
         // horizontal (x axis) Frequency loop
-        int osd_x = 1, osd_y = 1, col = 0, max_bin = 0;
+        osd_x = 1, osd_y = 2, col = 0, max_bin = 0;
         // x loop
         for (x = 0; x < STEPS * SCAN_RBW_FACTOR; x++)
         {
@@ -502,10 +740,11 @@ void loop(void)
                 new_pixel = true;
             else
                 new_pixel = false;
-#if ANIMATED_RELOAD
-            UI_drawCursor(x);
-#endif
-            if (new_pixel)
+            if (ANIMATED_RELOAD && SCAN_RBW_FACTOR == 1)
+            {
+                UI_drawCursor(x);
+            }
+            if (new_pixel && ANIMATED_RELOAD && SCAN_RBW_FACTOR > 1)
             {
                 UI_drawCursor((int)(x / SCAN_RBW_FACTOR));
             }
@@ -537,7 +776,7 @@ void loop(void)
                 {
                     Serial.print("radio.spectralScanGetStatus ERROR: ");
                     Serial.println(radio.spectralScanGetStatus());
-                    heltec_delay(ONE_MILLISEC * 50);
+                    heltec_delay(ONE_MILLISEC * 10);
                 }
                 // read the results Array to which the results will be saved
                 radio.spectralScanGetResult(result);
@@ -549,7 +788,6 @@ void loop(void)
             Serial.println("METHOD RSSI");
 #endif
             {
-
                 // memset
                 // memset(result, 0, RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE);
                 // Some issues with memset function
@@ -588,15 +826,14 @@ void loop(void)
 
             // if this code is not executed LORA radio doesn't work
             // basicaly SX1262 requers delay
-            //  osd.displayString(12, 1, String(FREQ_BEGIN));
+            // osd.displayString(12, 1, String(FREQ_BEGIN));
             // osd.displayString(12, 30 - 8, String(FREQ_END));
             // delay(2);
 
 #ifdef OSD_ENABLED
-            void osd_spectrum()
+            osd_spectrum();
 #endif
-
-                detected = false;
+            detected = false;
             detected_y[dispaly_x] = false;
 
             for (y = 0; y < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE; y++)
@@ -627,9 +864,10 @@ void loop(void)
                 {
                     // do not process 'first' and 'last' row to avoid out of index
                     // access
-                    if ((y != 0) && (y != (RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE - 1)))
+                    if ((y != 0) && (y != (RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE - 2)))
                     {
-                        if ((result[y + 1] != 0) || (result[y - 1] != 0))
+                        if ((result[y + 1] != 0) ||
+                            ((result[y - 1] != 0) && (result[y - 2] != 0)))
                         {
                             filtered_result[y] = 1;
                         }
@@ -691,19 +929,20 @@ void loop(void)
                         }
                     }
 
-#if (DRAW_DETECTION_TICKS == true)
-                    // draw vertical line on top of display for "drone detected"
-                    // frequencies
-                    if (!detected_y[dispaly_x])
+                    if (DRAW_DETECTION_TICKS == true)
                     {
-                        display.drawLine(dispaly_x, 1, dispaly_x, 6);
-                        detected_y[dispaly_x] = true;
+                        // draw vertical line on top of display for "drone detected"
+                        // frequencies
+                        if (!detected_y[dispaly_x])
+                        {
+                            display.drawLine(dispaly_x, 1, dispaly_x, 6);
+                            detected_y[dispaly_x] = true;
+                        }
                     }
-#endif
                 }
 
 #if (WATERFALL_ENABLED == true)
-                if ((filtered_result[y] == 1) && (y < drone_detection_level) &&
+                if ((filtered_result[y] == 1) && (y <= drone_detection_level) &&
                     (single_page_scan) && (waterfall[dispaly_x] != true) && new_pixel)
                 {
                     // If drone not found set dark pixel on the waterfall
@@ -834,8 +1073,10 @@ void loop(void)
                 {
                     Serial.println("spectralScanGetStatus ERROR(" +
                                    String(radio.spectralScanGetStatus()) +
-                                   ") hard delay(1) - " + String(delay_cnt));
-                    heltec_delay(1);
+                                   ") hard delay(2) - " + String(delay_cnt));
+                    // if error than speed is slow animating chart
+                    ANIMATED_RELOAD = true;
+                    heltec_delay(ONE_MILLISEC * 2);
                 }
                 delay_cnt++;
             }
@@ -860,7 +1101,10 @@ void loop(void)
         // Render display data here
         display.display();
 #ifdef OSD_ENABLED
-        if (global_counter != 0 && global_counter % 50 == 0)
+        // Sometimes OSD prints entire screan with the digits.
+        // We need clean the screan to fix it.
+        // We can do it every time but to optimise doing every N times
+        if (global_counter != 0 && global_counter % 10 == 0)
         {
 #if !defined(BT_SCANNING_ENABLED) && !defined(WIFI_SCANNING_ENABLED)
             osd.clear();
@@ -868,6 +1112,7 @@ void loop(void)
             global_counter = 0;
 #endif
         }
+        ANIMATED_RELOAD = false;
         global_counter++;
 #endif
     }
