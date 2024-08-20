@@ -26,7 +26,8 @@
 // This file contains a binary patch for the SX1262
 #include "modules/SX126x/patches/SX126x_patch_scan.h"
 #define OSD_ENABLED true
-// #define WIFI_SCANNING_ENABLED true
+//  #define WIFI_SCANNING_ENABLED true
+//  #define BT_SCANNING_ENABLED true
 
 #define BT_SCAN_DELAY 60 * 1 * 1000
 #define WF_SCAN_DELAY 60 * 2 * 1000
@@ -126,9 +127,7 @@ static const int buf0[36] = {0x02, 0x80, 0x02, 0x40, 0x7F, 0xE0, 0x42, 0x00,
 
 // project components
 #if defined(WIFI_SCANNING_ENABLED) && defined(BT_SCANNING_ENABLED)
-
 #include "WiFi.h"
-// #define BT_SCANNING_ENABLED true
 #ifdef BT_SCANNING_ENABLED
 #include <BLEAdvertisedDevice.h>
 #include <BLEDevice.h>
