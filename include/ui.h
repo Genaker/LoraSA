@@ -1,6 +1,5 @@
 
-#ifndef __UI_H__
-#define __UI_H__
+#pragma once
 
 #include "OLEDDisplayUi.h"
 #include "SSD1306Wire.h"
@@ -35,5 +34,3 @@ extern void UI_displayDecorate(int, int, bool);
 extern void UI_setLedFlag(bool);
 extern void UI_clearPlotter(void);
 extern void UI_drawCursor(int16_t);
-
-#endif // __UI_H__

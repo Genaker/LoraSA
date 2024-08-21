@@ -1,7 +1,4 @@
-#ifndef _BT_WIFI_SCAN_H_
-#define _BT_WIFI_SCAN_H_
+#pragma once
 
 extern void scanWiFiWithOSDOut();
 extern void scanBTWithOSDOut();
-
-#endif

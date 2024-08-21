@@ -25,7 +25,7 @@
 #include <heltec_unofficial.h>
 // This file contains a binary patch for the SX1262
 #include "modules/SX126x/patches/SX126x_patch_scan.h"
-#define OSD_ENABLED true
+//  #define OSD_ENABLED true
 //  #define WIFI_SCANNING_ENABLED true
 //  #define BT_SCANNING_ENABLED true
 
@@ -45,7 +45,7 @@ uint64_t bt_start = 0;
 #define MAX_POWER_LEVELS 33
 #define OSD_SIDE_BAR true
 
-static const uint16_t levels[10] = {
+static constexpr uint16_t levels[10] = {
     0x105, // 0
     0x10E, // 1
     0x10D, // 2
@@ -58,7 +58,7 @@ static const uint16_t levels[10] = {
     0x106, // 9
 };
 
-static const uint16_t power_level[MAX_POWER_LEVELS + 1] = {
+static constexpr uint16_t power_level[MAX_POWER_LEVELS + 1] = {
     0x10E, // 0
     0x10E, // 1
     0x10D, // 2
@@ -126,15 +126,14 @@ static const int buf0[36] = {0x02, 0x80, 0x02, 0x40, 0x7F, 0xE0, 0x42, 0x00,
                              0x49, 0x20, 0x5A, 0xA0, 0x44, 0x60, 0x88, 0x20};
 
 // project components
-#if defined(WIFI_SCANNING_ENABLED) && defined(BT_SCANNING_ENABLED)
+#ifdef WIFI_SCANNING_ENABLED
 #include "WiFi.h"
+#endif
 #ifdef BT_SCANNING_ENABLED
 #include <BLEAdvertisedDevice.h>
 #include <BLEDevice.h>
 #include <BLEScan.h>
 #include <BLEUtils.h>
-#endif
-
 #endif
 
 #include "global_config.h"
@@ -165,7 +164,7 @@ uint64_t RANGE_PER_PAGE = FREQ_END - FREQ_BEGIN; // FREQ_END - FREQ_BEGIN
 // multiplies STEPS * N to increase scan resolution.
 #define SCAN_RBW_FACTOR 2
 
-int OSD_PIXELS_PER_CHAR = (STEPS * SCAN_RBW_FACTOR) / OSD_CHART_WIDTH;
+constexpr int OSD_PIXELS_PER_CHAR = (STEPS * SCAN_RBW_FACTOR) / OSD_CHART_WIDTH;
 
 // To Enable Multi Screen scan
 //  uint64_t RANGE_PER_PAGE = 50;
@@ -173,8 +172,7 @@ int OSD_PIXELS_PER_CHAR = (STEPS * SCAN_RBW_FACTOR) / OSD_CHART_WIDTH;
 
 #define DEFAULT_RANGE_PER_PAGE 50
 
-// Prints debug information and the scan measurement bins from the SX1262 in
-// hex Change spectrum plot values at once or by line
+// Print spectrum values pixels at once or by line
 bool ANIMATED_RELOAD = false;
 
 // TODO: Ignore power lines
@@ -182,11 +180,11 @@ bool ANIMATED_RELOAD = false;
 #define LOW_FILTER 3
 // Remove reading without neighbors
 #define FILTER_SPECTRUM_RESULTS true
-const bool DRAW_DETECTION_TICKS = true;
+constexpr bool DRAW_DETECTION_TICKS = true;
 
 // Number of samples for each frequency scan. Fewer samples = better temporal resolution.
 // if more than 100 it can freez
-#define SAMPLES 200 //(scan time = 1294)
+#define SAMPLES 100 //(scan time = 1294)
 // number of samples for RSSI method
 #define SAMPLES_RSSI 20 // 21 //
 
@@ -210,7 +208,7 @@ uint16_t result[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
 uint16_t result_display_set[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
 uint16_t result_detections[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
 uint16_t filtered_result[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
-uint16_t max_bins_array[MAX_POWER_LEVELS];
+
 int max_bins_array_value[MAX_POWER_LEVELS];
 int max_step_range = 32;
 
@@ -248,9 +246,7 @@ float freq = 0;
 int rssi = 0;
 int state = 0;
 uint8_t result_index = 0;
-
 uint8_t button_pressed_counter = 0;
-
 uint64_t loop_cnt = 0;
 
 #ifdef WIFI_SCANNING_ENABLED
@@ -311,6 +307,7 @@ void scanBTWithOSDOut()
     BLEScan *pBLEScan = BLEDevice::getScan();
     // active scan uses more power, but get results faster
     pBLEScan->setActiveScan(true);
+    // TODO: adjust interval and window
     pBLEScan->setInterval(0x50);
     pBLEScan->setWindow(0x30);
 
@@ -398,14 +395,14 @@ void osdPrintSignalLevelChart(int col, int signal_value)
 void osdProcess()
 { // OSD enabled
 
-    // memset(max_bins_array, 33, 30);
+    // memset(max_step_range, 33, 30);
     max_bin = 32;
 
     osd.displayString(12, 1, String(FREQ_BEGIN));
-    osd.displayString(12, 30 - 8, String(FREQ_END));
+    osd.displayString(12, OSD_WIDTH - 8, String(FREQ_END));
     // Finding biggest in result
-    //  Skiping 0 to avoid overflow
-    for (int i = 1; i < 30; i++)
+    //  Skiping 0 and 32 31 to avoid overflow
+    for (int i = 1; i < MAX_POWER_LEVELS - 3; i++)
     {
         // filter
         if (result[i] > 0 &&
@@ -429,23 +426,23 @@ void osdProcess()
 #endif
     }
     // Going to the next OSD step
-    if (x % osd_steps == 0 && col < 30)
+    if (x % osd_steps == 0 && col < OSD_WIDTH)
     {
         // some issue when median  = 0
         if (max_step_range == 0)
         {
-            max_step_range = 32;
+            max_step_range = OSD_WIDTH - 1;
         }
         // OSD SIDE BAR with frequency log
 #ifdef OSD_SIDE_BAR
         {
-            osd.displayString(col, 30 - 7,
+            osd.displayString(col, OSD_WIDTH - 7,
                               String(FREQ_BEGIN + (col * osd_mhz_in_bin)) + "-" +
                                   String(max_step_range) + " ");
         }
 #endif
         // Test with Random Result...
-        // max_bins_array[s] = rand() % 32;
+        // max_step_range = rand() % 32;
 #ifdef METHOD_RSSI
         // With THe RSSI method we can get real RSSI value not just a bin
 #endif
@@ -725,7 +722,6 @@ void loop(void)
 
         for (int i = 0; i < MAX_POWER_LEVELS; i++)
         {
-            max_bins_array[i] = 32;
             max_bins_array_value[i] = 0;
         }
 
