@@ -255,7 +255,7 @@ uint64_t loop_cnt = 0;
 // WiFi Scan
 // TODO: Make Async Scan
 // https://arduino-esp8266.readthedocs.io/en/latest/esp8266wifi/scan-examples.html#async-scan
-void scanWiFiWithOSDOut()
+void scanWiFi()
 {
     osd.clear();
     osd.displayString(14, 2, "Scanning WiFi..");
@@ -299,7 +299,7 @@ void scanWiFiWithOSDOut()
 //***********************
 // TODO: Make Async Scan
 // https://github.com/nkolban/esp32-snippets/blob/master/cpp_utils/tests/BLETests/SampleAsyncScan.cpp
-void scanBTWithOSDOut()
+void scanBT()
 {
     osd.clear();
     osd.displayString(14, 2, "Scanning BT...");
@@ -1128,7 +1128,7 @@ void loop(void)
 #ifdef WIFI_SCANNING_ENABLED
     if ((millis() - wf_start) > WF_SCAN_DELAY)
     {
-        scanWiFiWithOSDOut();
+        scanWiFi();
         wf_start = millis();
         // prevent BT scanning after scanning WF
         bt_start = millis();
@@ -1138,7 +1138,7 @@ void loop(void)
     if ((millis() - bt_start) > BT_SCAN_DELAY)
     {
 
-        scanBTWithOSDOut();
+        scanBT();
         bt_start = millis();
     }
 #endif
