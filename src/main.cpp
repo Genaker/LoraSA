@@ -41,6 +41,7 @@ bool scanFinished = true;
 uint64_t wf_start = 0;
 uint64_t bt_start = 0;
 
+#ifndef OSD_ENABLED
 #include "DFRobot_OSD.h"
 #define MAX_POWER_LEVELS 33
 #define OSD_SIDE_BAR true
@@ -102,6 +103,7 @@ static constexpr uint16_t power_level[MAX_POWER_LEVELS + 1] = {
 #define OSD_MISO 33
 #define OSD_MOSI 34
 #define OSD_SCK 26
+#endif
 
 #define OSD_WIDTH 30
 #define OSD_HEIGHT 16
