@@ -830,7 +830,7 @@ void loop(void)
             // delay(2);
 
 #ifdef OSD_ENABLED
-            osd_spectrum();
+            osdProcess();
 #endif
             detected = false;
             detected_y[dispaly_x] = false;
