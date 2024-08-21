@@ -395,7 +395,7 @@ void osdPrintSignalLevelChart(int col, int signal_value)
     }
 }
 
-void osd_spectrum()
+void osdProcess()
 { // OSD enabled
 
     // memset(max_bins_array, 33, 30);

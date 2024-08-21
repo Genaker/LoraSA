@@ -13,8 +13,8 @@
 #define MINOR_TICKS 5
 
 #define ONE_MILLISEC 1
-#define ONE_SEC 1000
-#define ONE_MINUTE 60 * 1000
+#define ONE_SEC_MIL 1000
+#define ONE_MINUTE_MIL 60 * 1000
 
 #define MAJOR_TICK_LENGTH 2
 #define MINOR_TICK_LENGTH 1
