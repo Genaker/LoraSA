@@ -187,7 +187,7 @@ constexpr bool DRAW_DETECTION_TICKS = true;
 
 // Number of samples for each frequency scan. Fewer samples = better temporal resolution.
 // if more than 100 it can freez
-#define SAMPLES 1 //(scan time = 1294)
+#define SAMPLES 35 //(scan time = 1294)
 // number of samples for RSSI method
 #define SAMPLES_RSSI 20 // 21 //
 
