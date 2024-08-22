@@ -182,11 +182,12 @@ bool ANIMATED_RELOAD = false;
 #define LOW_FILTER 3
 // Remove reading without neighbors
 #define FILTER_SPECTRUM_RESULTS true
+#define FILTER_SAMPLES_MIN
 constexpr bool DRAW_DETECTION_TICKS = true;
 
 // Number of samples for each frequency scan. Fewer samples = better temporal resolution.
 // if more than 100 it can freez
-#define SAMPLES 35 //(scan time = 1294)
+#define SAMPLES 1 //(scan time = 1294)
 // number of samples for RSSI method
 #define SAMPLES_RSSI 20 // 21 //
 
@@ -567,7 +568,7 @@ void setup(void)
         both.println("Multi Screan Res: " + String(resolution) + "Mhz/tick");
         both.println(
             "Resolution: " + String((float)RANGE_PER_PAGE / (STEPS * SCAN_RBW_FACTOR)) +
-            "Mhz/tick");
+            "MHz/tick");
         for (int i = 0; i < 500; i++)
         {
             button.update();
@@ -792,11 +793,11 @@ void loop(void)
             }
 #endif
 #ifdef METHOD_RSSI
-// Spectrum analyzer using getRSSI
-#ifdef PRINT_DEBUG
-            Serial.println("METHOD RSSI");
-#endif
+            // Spectrum analyzer using getRSSI
             {
+#ifdef PRINT_DEBUG
+                Serial.println("METHOD RSSI");
+#endif
                 // memset
                 // memset(result, 0, RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE);
                 // Some issues with memset function
@@ -866,7 +867,6 @@ void loop(void)
 
 // if samples low ~1 filter removes all values
 #if FILTER_SPECTRUM_RESULTS
-
                 filtered_result[y] = 0;
                 // Filter Elements without neighbors
                 // if RSSI method actual value is -xxx dB
@@ -881,6 +881,12 @@ void loop(void)
                         {
                             filtered_result[y] = 1;
                         }
+                        else
+                        {
+#ifdef PRINT_DEBUG
+                            Serial.print("Filtered:" + String(x) + ":" + String(y) + ",");
+#endif
+                        }
                     }
                 } // not filtering if samples == 1
                 else if (result[y] > 0 && samples == 1)
@@ -888,7 +894,6 @@ void loop(void)
                     filtered_result[y] = 1;
                 }
 #endif
-
                 // check if we should alarm about a drone presence
                 if ((filtered_result[y] == 1) // we have some data and
                     && (y <= drone_detection_level) &&
@@ -975,6 +980,10 @@ void loop(void)
                 // next 2 If's ... adds !!!! 10ms of runtime ......tfk ???
                 if (filtered_result[y] == 1)
                 {
+#ifdef PRINT_DEBUG
+                    Serial.print("Pixel:" + String(dispaly_x) + "(" + String(x) + ")" +
+                                 ":" + String(y) + ",");
+#endif
                     // Set signal level pixel
                     display.setPixel(dispaly_x, y);
                     if (!detected)
