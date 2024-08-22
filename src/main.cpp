@@ -186,7 +186,7 @@ constexpr bool DRAW_DETECTION_TICKS = true;
 
 // Number of samples for each frequency scan. Fewer samples = better temporal resolution.
 // if more than 100 it can freez
-#define SAMPLES 100 //(scan time = 1294)
+#define SAMPLES 60 //(scan time = 1294)
 // number of samples for RSSI method
 #define SAMPLES_RSSI 20 // 21 //
 
@@ -247,6 +247,14 @@ uint64_t ranges_count = 0;
 float freq = 0;
 int rssi = 0;
 int state = 0;
+
+#ifdef METHOD_SPECTRAL
+constexpr int samples = SAMPLES;
+#endif
+#ifdef METHOD_RSSI
+constexpr int samples = SAMPLES_RSSI;
+#endif
+
 uint8_t result_index = 0;
 uint8_t button_pressed_counter = 0;
 uint64_t loop_cnt = 0;
@@ -406,9 +414,13 @@ void osdProcess()
     //  Skiping 0 and 32 31 to avoid overflow
     for (int i = 1; i < MAX_POWER_LEVELS - 3; i++)
     {
+
         // filter
-        if (result[i] > 0 &&
-            ((result[i + 1] != 0 && result[i + 2] != 0) || result[i - 1] != 0))
+        if (result[i] > 0
+#if FILTER_SPECTRUM_RESULTS
+            && ((result[i + 1] != 0 && result[i + 2] != 0) || result[i - 1] != 0)
+#endif
+        )
         {
             max_bin = i;
 #ifdef PRINT_DEBUG
@@ -841,7 +853,7 @@ void loop(void)
                 Serial.print(String(result[y]) + ",");
 #endif
 
-#if FILTER_SPECTRUM_RESULTS == false
+#if !defined(FILTER_SPECTRUM_RESULTS) || FILTER_SPECTRUM_RESULTS == false
                 if (result[y] && result[y] != 0)
                 {
                     filtered_result[y] = 1;
@@ -852,12 +864,13 @@ void loop(void)
                 }
 #endif
 
+// if samples low ~1 filter removes all values
 #if FILTER_SPECTRUM_RESULTS
 
                 filtered_result[y] = 0;
                 // Filter Elements without neighbors
                 // if RSSI method actual value is -xxx dB
-                if (result[y])
+                if (result[y] > 0 && samples > 1)
                 {
                     // do not process 'first' and 'last' row to avoid out of index
                     // access
@@ -869,6 +882,10 @@ void loop(void)
                             filtered_result[y] = 1;
                         }
                     }
+                } // not filtering if samples == 1
+                else if (result[y] > 0 && samples == 1)
+                {
+                    filtered_result[y] = 1;
                 }
 #endif
 
@@ -1068,13 +1085,15 @@ void loop(void)
                 }
                 else
                 {
-                    Serial.println("spectralScanGetStatus ERROR(" +
-                                   String(radio.spectralScanGetStatus()) +
-                                   ") hard delay(2) - " + String(delay_cnt));
-                    // if error than speed is slow animating chart
-                    ANIMATED_RELOAD = true;
                     heltec_delay(ONE_MILLISEC * 2);
                 }
+
+                Serial.println("spectralScanGetStatus ERROR(" +
+                               String(radio.spectralScanGetStatus()) +
+                               ") hard delay(2) - " + String(delay_cnt));
+                // if error than speed is slow animating chart
+                ANIMATED_RELOAD = true;
+
                 delay_cnt++;
             }
             // TODO: move osd logic here as a dalay ;)
