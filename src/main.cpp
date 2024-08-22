@@ -186,7 +186,7 @@ constexpr bool DRAW_DETECTION_TICKS = true;
 
 // Number of samples for each frequency scan. Fewer samples = better temporal resolution.
 // if more than 100 it can freez
-#define SAMPLES 60 //(scan time = 1294)
+#define SAMPLES 35 //(scan time = 1294)
 // number of samples for RSSI method
 #define SAMPLES_RSSI 20 // 21 //
 
@@ -874,7 +874,7 @@ void loop(void)
                 {
                     // do not process 'first' and 'last' row to avoid out of index
                     // access
-                    if ((y != 0) && (y != (RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE - 3)))
+                    if ((y > 0) && (y != (RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE - 3)))
                     {
                         if (((result[y + 1] != 0) && (result[y + 2] != 0)) ||
                             (result[y - 1] != 0))
