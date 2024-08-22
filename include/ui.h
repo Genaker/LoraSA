@@ -1,6 +1,5 @@
 
-#ifndef __UI_H__
-#define __UI_H__
+#pragma once
 
 #include "OLEDDisplayUi.h"
 #include "SSD1306Wire.h"
@@ -13,10 +12,8 @@
 #define MINOR_TICKS 5
 
 #define ONE_MILLISEC 1
-
-// Prints debug information and the scan measurement bins from the SX1262 in
-// hex Change spectrum plot values at once or by line
-#define ANIMATED_RELOAD false
+#define ONE_SEC_MIL 1000
+#define ONE_MINUTE_MIL 60 * 1000
 
 #define MAJOR_TICK_LENGTH 2
 #define MINOR_TICK_LENGTH 1
@@ -37,5 +34,3 @@ extern void UI_displayDecorate(int, int, bool);
 extern void UI_setLedFlag(bool);
 extern void UI_clearPlotter(void);
 extern void UI_drawCursor(int16_t);
-
-#endif // __UI_H__
