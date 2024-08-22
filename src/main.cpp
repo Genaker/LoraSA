@@ -873,7 +873,7 @@ void loop(void)
                 if (result[y] > 0 && samples > 1)
                 {
                     // do not process 'first' and 'last' row to avoid out of index
-                    // access
+                    // access.
                     if ((y > 0) && (y != (RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE - 3)))
                     {
                         if (((result[y + 1] != 0) && (result[y + 2] != 0)) ||
