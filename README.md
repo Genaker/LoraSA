@@ -182,6 +182,16 @@ Heltec ESP32 Lora V3:
 <https://heltec.org/project/wifi-lora-32-v3/>
 <https://www.aliexpress.us/item/3256807037422978.html>
 
+Or Heltec Wireless Stick. The same hardware but without or with a smaller display 
+https://heltec.org/project/wireless-stick-v3/
+https://heltec.org/project/wireless-stick-lite-v2/
+
+Heltec Vision Master E290 - With large e-ink display 293x128:
+
+https://heltec.org/project/vision-master-e290/
+https://www.aliexpress.us/item/3256807048047234.html
+**NOTE: to upload a new code, you need to press BOOT + RESET button**
+
 Battery with Wire JT connector :
 <https://www.amazon.com/EEMB-2000mAh-Battery-Rechargeable-Connector/dp/B08214DJLJ>
 
