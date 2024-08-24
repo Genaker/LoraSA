@@ -21,6 +21,8 @@
   https://jgromes.github.io/RadioLib/
 */
 
+// #define HELTEC_NO_DISPLAY
+
 #include <Arduino.h>
 #include <heltec_unofficial.h>
 // This file contains a binary patch for the SX1262
@@ -241,7 +243,7 @@ uint64_t scan_time = 0;
 uint64_t scan_start_time = 0;
 #endif
 
-uint64_t x, y, range_item, w, i = 0;
+uint64_t x, y, range_item, w = WATERFALL_START, i = 0;
 int osd_x = 1, osd_y = 2, col = 0, max_bin = 32;
 uint64_t ranges_count = 0;
 
@@ -473,6 +475,35 @@ void osdProcess()
 }
 #endif
 
+void init_radio()
+{
+    // initialize SX1262 FSK modem at the initial frequency
+    both.println("Init radio");
+    RADIOLIB_OR_HALT(radio.beginFSK(FREQ_BEGIN));
+
+    // upload a patch to the SX1262 to enable spectral scan
+    // NOTE: this patch is uploaded into volatile memory,
+    // and must be re-uploaded on every power up
+    both.println("Upload SX1262 patch");
+
+    // Upload binary patch into the SX126x device RAM. Patch is needed to e.g.,
+    // enable spectral scan and must be uploaded again on every power cycle.
+    RADIOLIB_OR_HALT(radio.uploadPatch(sx126x_patch_scan, sizeof(sx126x_patch_scan)));
+    // configure scan bandwidth and disable the data shaping
+
+    both.println("Setting up radio");
+    RADIOLIB_OR_HALT(radio.setRxBandwidth(BANDWIDTH));
+
+    // and disable the data shaping
+    RADIOLIB_OR_HALT(radio.setDataShaping(RADIOLIB_SHAPING_NONE));
+    both.println("Starting scanning...");
+
+    // calibrate only once ,,, at startup
+    // TODO: check documentation (9.2.1) if we must calibrate in certain ranges
+    radio.setFrequency(FREQ_BEGIN, true);
+    delay(50);
+}
+
 void setup(void)
 {
     // LED brightness
@@ -517,26 +548,8 @@ void setup(void)
         }
     }
 
-    // initialize SX1262 FSK modem at the initial frequency
-    both.println("Init radio");
-    RADIOLIB_OR_HALT(radio.beginFSK(FREQ_BEGIN));
+    init_radio();
 
-    // upload a patch to the SX1262 to enable spectral scan
-    // NOTE: this patch is uploaded into volatile memory,
-    // and must be re-uploaded on every power up
-    both.println("Upload SX1262 patch");
-
-    // Upload binary patch into the SX126x device RAM. Patch is needed to e.g.,
-    // enable spectral scan and must be uploaded again on every power cycle.
-    RADIOLIB_OR_HALT(radio.uploadPatch(sx126x_patch_scan, sizeof(sx126x_patch_scan)));
-    // configure scan bandwidth and disable the data shaping
-
-    both.println("Setting up radio");
-    RADIOLIB_OR_HALT(radio.setRxBandwidth(BANDWIDTH));
-
-    // and disable the data shaping
-    RADIOLIB_OR_HALT(radio.setDataShaping(RADIOLIB_SHAPING_NONE));
-    both.println("Starting scanning...");
     vbat = heltec_vbat();
     both.printf("V battery: %.2fV (%d%%)\n", vbat, heltec_battery_percent(vbat));
 #ifdef WIFI_SCANNING_ENABLED
@@ -609,11 +622,6 @@ void setup(void)
     }
     display.clear();
     Serial.println();
-
-    // calibrate only once ,,, at startup
-    // TODO: check documentation (9.2.1) if we must calibrate in certain ranges
-    radio.setFrequency(FREQ_BEGIN, true);
-    delay(50);
 
 #ifdef METHOD_RSSI
     // TODO: try RADIOLIB_SX126X_RX_TIMEOUT_INF
