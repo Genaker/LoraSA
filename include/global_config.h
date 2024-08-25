@@ -12,7 +12,7 @@
 #define BANDWIDTH 467.0
 
 // Detection level from the 33 levels. The higher number is more sensitive
-#define DEFAULT_DRONE_DETECTION_LEVEL 20
+#define DEFAULT_DRONE_DETECTION_LEVEL 18
 
 #define BUZZER_PIN 41
 
