@@ -25,7 +25,7 @@
 #include <heltec_unofficial.h>
 // This file contains a binary patch for the SX1262
 #include "modules/SX126x/patches/SX126x_patch_scan.h"
-//  #define OSD_ENABLED true
+// #define OSD_ENABLED true
 //  #define WIFI_SCANNING_ENABLED true
 //  #define BT_SCANNING_ENABLED true
 
@@ -41,9 +41,9 @@ bool scanFinished = true;
 uint64_t wf_start = 0;
 uint64_t bt_start = 0;
 
-#ifndef OSD_ENABLED
-#include "DFRobot_OSD.h"
 #define MAX_POWER_LEVELS 33
+#ifdef OSD_ENABLED
+#include "DFRobot_OSD.h"
 #define OSD_SIDE_BAR true
 
 static constexpr uint16_t levels[10] = {
@@ -380,14 +380,14 @@ unsigned short selectFreqChar(int bin, int start_level = 0)
 void osdPrintSignalLevelChart(int col, int signal_value)
 {
     // Third line
-    if (signal_value <= 9)
+    if (signal_value <= 9 && signal_value <= drone_detection_level)
     {
         osd.displayChar(13, col + 2, 0x100);
         osd.displayChar(14, col + 2, 0x100);
         osd.displayChar(12, col + 2, selectFreqChar(signal_value, drone_detection_level));
     }
     // Second line
-    else if (signal_value < 19)
+    else if (signal_value < 19 && signal_value <= drone_detection_level)
     {
         osd.displayChar(12, col + 2, 0x100);
         osd.displayChar(14, col + 2, 0x100);
@@ -419,7 +419,7 @@ void osdProcess()
         // filter
         if (result[i] > 0
 #if FILTER_SPECTRUM_RESULTS
-            && ((result[i + 1] != 0 && result[i + 2] != 0) || result[i - 1] != 0)
+            && ((result[i + 1] != 0 /*&& result[i + 2] != 0*/) || result[i - 1] != 0)
 #endif
         )
         {
@@ -443,11 +443,6 @@ void osdProcess()
     // Going to the next OSD step
     if (x % osd_steps == 0 && col < OSD_WIDTH)
     {
-        // some issue when median  = 0
-        if (max_step_range == 0)
-        {
-            max_step_range = OSD_WIDTH - 1;
-        }
         // OSD SIDE BAR with frequency log
 #ifdef OSD_SIDE_BAR
         {
