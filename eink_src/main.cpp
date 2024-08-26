@@ -2,29 +2,35 @@
  * NOTE!!!: to upload we neew code you need to press button BOOT and RESET or you will
  * have serial error. After upload you need reset device...
  *
- * Function:
- * 1. Ink screen full brush demonstration
- *
  * Description:
  * 1.Inherited from ssd1306 for drawing points, lines, and functions
  *
+ * All code e link examples you cand find here:
  * */
-
+// Varriables requred to boot Heltec E290 defined at platformio.ini
+// #define HELTEC_BOARD 37
+// #define SLOW_CLK_TPYE 1
+// #define ARDUINO_USB_CDC_ON_BOOT 1
+// #define LoRaWAN_DEBUG_LEVEL 0
 #include "HT_DEPG0290BxS800FxX_BW.h"
 #include "global_config.h"
 #include "images.h"
 #include "ui.h"
 #include <Arduino.h>
 
-// Disabling default lib display
+// Disabling default Heltec lib OLED display
 #define HELTEC_NO_DISPLAY
 #define DISPLAY_WIDTH 296
 #define DISPLAY_HEIGHT 128
-// Without this line Lora Radio doesn't work
+// Without this line Lora Radio doesn't work with heltec lib
 #define ARDUINO_heltec_wifi_32_lora_V3
 #include "heltec_unofficial.h"
-#include "modules/SX126x/patches/SX126x_patch_scan.h"
 
+// We are not using spectral scan here only RSSI method
+// #include "modules/SX126x/patches/SX126x_patch_scan.h"
+#define PRINT_DEBUG
+
+// TODO: move varriables to common file
 // <--- Spectrum display Varriables START
 #define SCAN_METHOD
 #define METHOD_SPECTRAL
@@ -56,12 +62,12 @@ uint64_t range = (int)(FREQ_END - FREQ_BEGIN);
 uint64_t fr_begin = FREQ_BEGIN;
 uint64_t fr_end = FREQ_BEGIN;
 
-// Feature to scan diapazones. Other frequency settings will be ignored.
+// Feature to scan diapasones. Other frequency settings will be ignored.
 // int SCAN_RANGES[] = {850890, 920950};
 int SCAN_RANGES[] = {};
 
 // MHZ per page
-// to put everething into one page set RANGE_PER_PAGE = FREQ_END - 800
+// to put everything into one page set RANGE_PER_PAGE = FREQ_END - 800
 // uint64_t RANGE_PER_PAGE = FREQ_END - FREQ_BEGIN; // FREQ_END - FREQ_BEGIN
 
 // Override or e-ink
@@ -89,7 +95,7 @@ bool waterfall[STEPS], detected_y[STEPS]; // 20 - ??? steps of the waterfall
 bool first_run, new_pixel, detected_x = false;
 // drone detection flag
 bool detected = false;
-uint64_t drone_detection_level = DEFAULT_DRONE_DETECTION_LEVEL;
+uint64_t drone_detection_level = 90;
 uint64_t drone_detected_frequency_start = 0;
 uint64_t drone_detected_frequency_end = 0;
 uint64_t detection_count = 0;
@@ -124,12 +130,11 @@ constexpr int samples = SAMPLES_RSSI;
 uint8_t result_index = 0;
 uint8_t button_pressed_counter = 0;
 uint64_t loop_cnt = 0;
-// <--- Spectrum display Varriables END
+// <--- Spectrum display Variables END
 
 // Initialize the display
 DEPG0290BxS800FxX_BW display(5, 4, 3, 6, 2, 1, -1,
                              6000000); // rst,dc,cs,busy,sck,mosi,miso,frequency
-typedef void (*Demo)(void);
 /* screen rotation
  * ANGLE_0_DEGREE
  * ANGLE_90_DEGREE
@@ -137,8 +142,8 @@ typedef void (*Demo)(void);
  * ANGLE_270_DEGREE
  */
 #define DIRECTION ANGLE_0_DEGREE
-int demoMode = 0;
 
+// TODO: move to common file
 void init_radio()
 {
     // initialize SX1262 FSK modem at the initial frequency
@@ -152,7 +157,7 @@ void init_radio()
 
     // Upload binary patch into the SX126x device RAM. Patch is needed to e.g.,
     // enable spectral scan and must be uploaded again on every power cycle.
-    RADIOLIB_OR_HALT(radio.uploadPatch(sx126x_patch_scan, sizeof(sx126x_patch_scan)));
+    // RADIOLIB_OR_HALT(radio.uploadPatch(sx126x_patch_scan, sizeof(sx126x_patch_scan)));
     // configure scan bandwidth and disable the data shaping
 
     Serial.println("Setting up radio");
@@ -169,166 +174,69 @@ void init_radio()
 }
 
 #define HEIGHT 4
-DEPG0290BxS800FxX_BW display_instance = display;
-/**
- * @brief Draws ticks on the display at regular whole intervals.
- *
- * @param every The interval between ticks in MHz.
- * @param length The length of each tick in pixels.
- */
-void drawTicks(float every, int length)
-{
-    int first_tick;
-    bool correction;
-    int pixels_per_step;
-    int correction_number;
-    int tick;
-    int tick_minor;
-    int median;
 
-    first_tick = 0;
-    //+ (every - (fr_begin - (int)(fr_begin / every) * every));
-    /*if (first_tick < fr_begin)
-    {
-        first_tick += every;
-    }*/
-    correction = false;
-    pixels_per_step = STEPS / (RANGE_PER_PAGE / every);
-    if (STEPS / RANGE_PER_PAGE != 0)
-    {
-        correction = true;
-    }
-    correction_number = STEPS - (int)(pixels_per_step * (RANGE_PER_PAGE / every));
-    tick = 0;
-    tick_minor = 0;
-    median = (RANGE_PER_PAGE / every) / 2;
-    // TODO: (RANGE_PER_PAGE / every)
-    //	* 2 has twice extra steps we need to figureout correct logic or minor
-    // ticks is not showing to the end
-    for (int t = 0; t <= (RANGE_PER_PAGE / every) * 2; t++)
-    {
-        // fix if pixels per step is not int and we have shift
-        if (correction && t % 2 != 0 && correction_number > 1)
-        {
-            // pixels_per_step++;
-            correction_number--;
-        }
-        tick += pixels_per_step;
-        tick_minor = tick / 2;
-        if (tick <= 128 - 3)
-        {
-            display_instance.drawLine(tick, HEIGHT + X_AXIS_WEIGHT, tick,
-                                      HEIGHT + X_AXIS_WEIGHT + length);
-            // Central tick
-            if (tick > (128 / 2) - 3 && tick < (128 / 2) + 3)
-            {
-                display_instance.drawLine(tick + 1, HEIGHT + X_AXIS_WEIGHT, tick + 1,
-                                          HEIGHT + X_AXIS_WEIGHT + length);
-            }
-        }
-#ifdef MINOR_TICKS
-        // Fix two ticks together
-        if ((tick_minor + 1 != tick) && (tick_minor - 1 != tick) &&
-            (tick_minor + 2 != tick) && (tick_minor - 2 != tick))
-        {
-            display_instance.drawLine(tick_minor, HEIGHT + X_AXIS_WEIGHT, tick_minor,
-                                      HEIGHT + X_AXIS_WEIGHT + MINOR_TICK_LENGTH);
-        }
-        // Central tick
-        if (tick_minor > (128 / 2) - 3 && tick_minor < (128 / 2) + 3)
-        {
-            display_instance.drawLine(tick_minor + 1, HEIGHT + X_AXIS_WEIGHT,
-                                      tick_minor + 1,
-                                      HEIGHT + X_AXIS_WEIGHT + MINOR_TICK_LENGTH);
-        }
-#endif
-    }
-}
-
-void drawFontFaceDemo()
+void drawSetupText()
 {
-    // Font Demo1
     // create more fonts at http://oleddisplay.squix.ch/
     display.setTextAlignment(TEXT_ALIGN_LEFT);
     display.setFont(ArialMT_Plain_10);
-    display.drawString(0, 0, "Spectrum Analizer Lora SA");
+    display.drawString(0, 0, "Spectrum Analyzer Lora SA");
     display.setFont(ArialMT_Plain_16);
     display.drawString(0, 10, "SX 1262");
     display.setFont(ArialMT_Plain_24);
     display.drawString(0, 26, "e-ink display");
+    display.drawString(0, 56, "RF Spectrum X-Ray");
+    display.setFont(ArialMT_Plain_24);
 }
-void drawTextFlowDemo()
+
+#define battery_w 13
+#define battery_h 13
+#define BATTERY_PIN 7
+
+void battery()
 {
-    display.setFont(ArialMT_Plain_10);
-    display.setTextAlignment(TEXT_ALIGN_LEFT);
-    display.drawStringMaxWidth(
-        0, 0, DISPLAY_HEIGHT,
-        "Lorem ipsum\n dolor sit amet, consetetur sadipscing elitr, sed diam nonumy "
-        "eirmod tempor invidunt ut labore.");
-}
-void drawTextAlignmentDemo()
-{
-    // Text alignment demo
-    char str[30];
-    int x = 0;
-    int y = 0;
-    display.setFont(ArialMT_Plain_10);
-    // The coordinates define the left starting point of the text
-    display.setTextAlignment(TEXT_ALIGN_LEFT);
-    display.drawString(x, y, "Left aligned (0,0)");
-    // The coordinates define the center of the text
-    display.setTextAlignment(TEXT_ALIGN_CENTER);
-    x = display.width() / 2;
-    y = display.height() / 2 - 5;
-    sprintf(str, "Center aligned (%d,%d)", x, y);
-    display.drawString(x, y, str);
-    // The coordinates define the right end of the text
-    display.setTextAlignment(TEXT_ALIGN_RIGHT);
-    x = display.width();
-    y = display.height() - 12;
-    sprintf(str, "Right aligned (%d,%d)", x, y);
-    display.drawString(x, y, str);
-}
-void drawRectDemo()
-{
-    // Draw a pixel at given position
-    for (int i = 0; i < 10; i++)
+    analogReadResolution(12);
+    int battery_levl = analogRead(BATTERY_PIN) / 238.7; // battary/4096*3.3* coefficient
+    float battery_one = 0.4125;
+#ifdef PRINT_DEBUG
+    Serial.printf("ADC analog value = %.2f\n", battery_levl);
+#endif
+    display.drawString(257, 0, String(heltec_battery_percent(battery_levl)) + "%");
+    // TODO: battery voltage doesn't work
+    if (battery_levl < battery_one)
     {
-        display.setPixel(i, i);
-        display.setPixel(10 - i, i);
+        display.drawXbm(275, 0, battery_w, battery_h, battery0);
     }
-    display.drawRect(12, 12, 20, 20);
-    // Fill the rectangle
-    display.fillRect(14, 14, 17, 17);
-    // Draw a line horizontally
-    display.drawHorizontalLine(0, 40, 20);
-    // Draw a line horizontally
-    display.drawVerticalLine(40, 0, 20);
-}
-void drawCircleDemo()
-{
-    int x = display.width() / 4;
-    int y = display.height() / 2;
-    for (int i = 1; i < 8; i++)
+    else if (battery_levl < 2 * battery_one && battery_levl > battery_one)
     {
-        display.setColor(WHITE);
-        display.drawCircle(x, y, i * 3);
-        if (i % 2 == 0)
-        {
-            display.setColor(BLACK);
-        }
-        int x = display.width() / 4 * 3;
-        display.fillCircle(x, y, 32 - i * 3);
+        display.drawXbm(285, 0, battery_w, battery_h, battery1);
+    }
+    else if (battery_levl < 3 * battery_one && battery_levl > 2 * battery_one)
+    {
+        display.drawXbm(285, 0, battery_w, battery_h, battery2);
+    }
+    else if (battery_levl < 4 * battery_one && battery_levl > 3 * battery_one)
+    {
+        display.drawXbm(285, 0, battery_w, battery_h, battery3);
+    }
+    else if (battery_levl < 5 * battery_one && battery_levl > 4 * battery_one)
+    {
+        display.drawXbm(285, 0, battery_w, battery_h, battery4);
+    }
+    else if (battery_levl < 6 * battery_one && battery_levl > 5 * battery_one)
+    {
+        display.drawXbm(285, 0, battery_w, battery_h, battery5);
+    }
+    else if (battery_levl < 7 * battery_one && battery_levl > 6 * battery_one)
+    {
+        display.drawXbm(285, 0, battery_w, battery_h, battery6);
+    }
+    else if (battery_levl < 7 * battery_one && battery_levl > 6 * battery_one)
+    {
+        display.drawXbm(285, 0, battery_w, battery_h, batteryfull);
     }
 }
-void drawImageDemo()
-{
-    // see http://blog.squix.org/2015/05/esp8266-nodemcu-how-to-create-xbm.html
-    // on how to create xbm files
-    int x = display.width() / 2 - WiFi_Logo_width / 2;
-    int y = display.height() / 2 - WiFi_Logo_height / 2;
-    display.drawXbm(x, y, WiFi_Logo_width, WiFi_Logo_height, WiFi_Logo_bits);
-}
+
 void VextON(void)
 {
     pinMode(18, OUTPUT);
@@ -356,17 +264,29 @@ int rssiToPix(int rssi)
     return abs(rssi);
 }
 
-Demo demos[] = {drawFontFaceDemo, drawTextFlowDemo, drawTextAlignmentDemo,
-                drawRectDemo,     drawCircleDemo,   drawImageDemo};
-int demoLength = (sizeof(demos) / sizeof(Demo));
 long timeSinceLastModeSwitch = 0;
 
-float fr = FREQ_BEGIN;
+float fr = FREQ_BEGIN, vbat = 0;
 int rssi2 = 0;
 int x1 = 0, y2 = 0;
-unsigned int loop_counter = 1;
+unsigned int screen_update_loop_counter = 0;
+unsigned int x_screan_update = 0;
+int rssi_printed = 0;
+constexpr int rssi_window_size = 30;
+int max_i_rssi = -999;
+long display_scan_start = 0;
+long display_scan_end = 0;
+int scan_iterations = 0;
+
+constexpr unsigned int SCANS_PER_DISPLAY = 5;
+constexpr unsigned int STATUS_BAR_HEIGHT = 5;
+
 void loop()
 {
+    if (screen_update_loop_counter == 0)
+    {
+        display_scan_start = millis();
+    }
     radio.setFrequency(fr, false); // false = no calibration need here
     for (int i = 0; i < SAMPLES_RSSI; i++)
     {
@@ -375,22 +295,57 @@ void loop()
         else if (i % 3 == 0)
             radio.setFrequency((float)fr + 0.33, false);
         rssi2 = radio.getRSSI(false);
+        scan_iterations++;
         if (rssi2 > lower_level)
             continue;
-        // Serial.println(String(fr) + ":" + String(rssi2));
-        //  display.drawString(x1, (int)y2, String(fr) + ":" + String(rssi2));
+#ifdef PRINT_DEBUG
+        Serial.println(String(fr) + ":" + String(rssi2));
+#endif
+        // display.drawString(x1, (int)y2, String(fr) + ":" + String(rssi2));
         display.setPixel(x1, rssiToPix(rssi2));
+
+        if (max_i_rssi < rssi2)
+        {
+            max_i_rssi = rssi2;
+        }
     }
 
+    if (abs(max_i_rssi) < drone_detection_level && x1 - rssi_printed > rssi_window_size &&
+        (x1 > rssi_window_size / 2 && x1 < STEPS - rssi_window_size / 2))
+    {
+        rssi_printed = x1;
+
+        y2 = (screen_update_loop_counter + 1) * 10;
+
+        display.setFont(ArialMT_Plain_10);
+        display.drawStringMaxWidth(x1 - (rssi_window_size / 2), y2, rssi_window_size,
+                                   String(max_i_rssi) + "dB");
+    }
+    max_i_rssi = -999;
+
+    // drone detection level line
+    if (x1 % 2 == 0)
+    {
+        display.setPixel(x1, rssiToPix(drone_detection_level));
+    }
     fr++;
     x1++;
+    // Main N x-axis full loop end logic
     if (x1 >= STEPS)
     {
-        if (loop_counter > STEPS * 5)
+        if (screen_update_loop_counter == SCANS_PER_DISPLAY)
         {
-            loop_counter = 0;
+            display_scan_end = millis();
+
+            display.drawString(
+                1, 1, "T:" + String((display_scan_end - display_scan_start) / 1000));
+
+            battery();
             // Draw a line horizontally
+            display.drawString(DISPLAY_WIDTH - ((DISPLAY_WIDTH / 6) * 2), 1,
+                               "i:" + String(scan_iterations));
             display.drawHorizontalLine(0, lower_level + 1, DISPLAY_WIDTH);
+            // Generate Ticks
             for (int x = 0; x < DISPLAY_WIDTH; x++)
             {
                 if (x % (DISPLAY_WIDTH / 2) == 0 && x > 5)
@@ -412,29 +367,35 @@ void loop()
                                String(FREQ_BEGIN + ((fr - FREQ_BEGIN) / 2)));
 
             display.display();
-            // delay(2000);
-            if (loop_counter == 0)
-            {
-                display.clear();
-            }
+            // display will be cleared next scan iteration. it is just buffer clear
+            // memset(buffer, 0, displayBufferSize);
+            display.clear();
+            screen_update_loop_counter = 0;
+            scan_iterations = 0;
         }
         fr = FREQ_BEGIN;
         x1 = 0;
+        rssi_printed = 0;
+        screen_update_loop_counter++;
     }
-    loop_counter++;
+#ifdef PRINT_DEBUG
+    Serial.println("Full Scan:" + String(screen_update_loop_counter));
+#endif
 }
 
 void setup()
 {
     // Initialising the UI will init the display too.
     display.init();
+    // Of not this screen doesn't work
+    VextON();
     display.screenRotate(DIRECTION);
     display.setFont(ArialMT_Plain_10);
     display.clear();
     display.drawXbm((DISPLAY_WIDTH / 3) - 10, DISPLAY_HEIGHT / 4, 128, 60,
                     epd_bitmap_ucog);
     display.display();
-    delay(2000);
+    delay(1000);
     display.clear();
     Serial.begin(115200);
     w = WATERFALL_START;
@@ -448,9 +409,8 @@ void setup()
     heltec_setup();
     Serial.println();
     Serial.println();
-    drawFontFaceDemo();
+    drawSetupText();
     display.display();
-    delay(1000);
-    VextON();
     display.clear();
+    delay(1000);
 }
