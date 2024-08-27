@@ -1,5 +1,5 @@
 /* Heltec Automation Ink screen example
- * NOTE!!!: to upload we neew code you need to press button BOOT and RESET or you will
+ * NOTE!!!: to upload we new code you need to press button BOOT and RESET or you will
  * have serial error. After upload you need reset device...
  *
  * Description:
@@ -7,7 +7,7 @@
  *
  * All code e link examples you cand find here:
  * */
-// Varriables requred to boot Heltec E290 defined at platformio.ini
+// Variables required to boot Heltec E290 defined at platformio.ini
 // #define HELTEC_BOARD 37
 // #define SLOW_CLK_TPYE 1
 // #define ARDUINO_USB_CDC_ON_BOOT 1
@@ -28,13 +28,13 @@
 
 // We are not using spectral scan here only RSSI method
 // #include "modules/SX126x/patches/SX126x_patch_scan.h"
-#define PRINT_DEBUG
+// #define PRINT_DEBUG
 
-// TODO: move varriables to common file
-// <--- Spectrum display Varriables START
+// TODO: move variables to common file
+// <--- Spectrum display Variables START
 #define SCAN_METHOD
 #define METHOD_SPECTRAL
-//  numbers of the spectrum screan lines = width of screan
+//  numbers of the spectrum screen lines = width of screen
 #define STEPS 296 // 128
 // Number of samples for each scan. Fewer samples = better temporal resolution.
 #define MAX_POWER_LEVELS 33
@@ -266,7 +266,7 @@ int rssiToPix(int rssi)
 
 long timeSinceLastModeSwitch = 0;
 
-float fr = FREQ_BEGIN, vbat = 0;
+float fr = FREQ_BEGIN, fr_x[STEPS + 5], vbat = 0;
 int rssi2 = 0;
 int x1 = 0, y2 = 0;
 unsigned int screen_update_loop_counter = 0;
@@ -274,6 +274,9 @@ unsigned int x_screan_update = 0;
 int rssi_printed = 0;
 constexpr int rssi_window_size = 30;
 int max_i_rssi = -999;
+int window_max_rssi = -999;
+int window_max_fr = -999;
+int max_scan_rssi[STEPS + 2];
 long display_scan_start = 0;
 long display_scan_end = 0;
 int scan_iterations = 0;
@@ -285,9 +288,15 @@ void loop()
 {
     if (screen_update_loop_counter == 0)
     {
+        for (int i = 0; i < STEPS; i++)
+        {
+            fr_x[x1] = 0;
+            max_scan_rssi[i] = -999;
+        }
         display_scan_start = millis();
     }
     radio.setFrequency(fr, false); // false = no calibration need here
+    fr_x[x1] = fr;
     for (int i = 0; i < SAMPLES_RSSI; i++)
     {
         if (i % 2 == 0)
@@ -304,24 +313,11 @@ void loop()
         // display.drawString(x1, (int)y2, String(fr) + ":" + String(rssi2));
         display.setPixel(x1, rssiToPix(rssi2));
 
-        if (max_i_rssi < rssi2)
+        if (max_scan_rssi[x1] < rssi2)
         {
-            max_i_rssi = rssi2;
+            max_scan_rssi[x1] = rssi2;
         }
     }
-
-    if (abs(max_i_rssi) < drone_detection_level && x1 - rssi_printed > rssi_window_size &&
-        (x1 > rssi_window_size / 2 && x1 < STEPS - rssi_window_size / 2))
-    {
-        rssi_printed = x1;
-
-        y2 = (screen_update_loop_counter + 1) * 10;
-
-        display.setFont(ArialMT_Plain_10);
-        display.drawStringMaxWidth(x1 - (rssi_window_size / 2), y2, rssi_window_size,
-                                   String(max_i_rssi) + "dB");
-    }
-    max_i_rssi = -999;
 
     // drone detection level line
     if (x1 % 2 == 0)
@@ -335,14 +331,47 @@ void loop()
     {
         if (screen_update_loop_counter == SCANS_PER_DISPLAY)
         {
-            display_scan_end = millis();
+            // max Mhz and dB in window
+            for (int i = 0; i < STEPS; i++)
+            {
+                // Max dB in window
+                if (window_max_rssi < max_scan_rssi[i])
+                {
+                    // Max Mhz in window
+                    window_max_fr = fr_x[i];
+                    window_max_rssi = max_scan_rssi[i];
+                }
+                if (i % rssi_window_size == 0)
+                {
 
-            display.drawString(
-                1, 1, "T:" + String((display_scan_end - display_scan_start) / 1000));
+                    if (abs(window_max_rssi) < drone_detection_level)
+                    {
+                        y2 = 10;
+
+                        display.setFont(ArialMT_Plain_10);
+                        display.drawStringMaxWidth(i - rssi_window_size, y2,
+                                                   rssi_window_size,
+                                                   String(window_max_rssi) + "dB");
+                        display.drawString(i - rssi_window_size + 5, y2 + 10,
+                                           String(window_max_fr));
+                        // Vertical lines between windows
+                        for (int l = y2; l < 100; l += 4)
+                        {
+                            display.setPixel(i, l);
+                        }
+                    }
+                    window_max_rssi = -999;
+                }
+            }
+
+            display_scan_end = millis();
+            display.setFont(ArialMT_Plain_10);
+            display.drawString(0, 0,
+                               "T:" + String(display_scan_end - display_scan_start));
 
             battery();
             // Draw a line horizontally
-            display.drawString(DISPLAY_WIDTH - ((DISPLAY_WIDTH / 6) * 2), 1,
+            display.drawString(DISPLAY_WIDTH - ((DISPLAY_WIDTH / 6) * 2), 0,
                                "i:" + String(scan_iterations));
             display.drawHorizontalLine(0, lower_level + 1, DISPLAY_WIDTH);
             // Generate Ticks
@@ -361,10 +390,20 @@ void loop()
             }
             display.setFont(ArialMT_Plain_10);
 
+            // Begin Mhz
             display.drawString(1, DISPLAY_HEIGHT - 10, String(FREQ_BEGIN));
-            display.drawString(DISPLAY_WIDTH - 24, DISPLAY_HEIGHT - 10, String(fr));
+            // Median -1/2 Mhz
+            display.drawString((DISPLAY_WIDTH / 4) - 10, DISPLAY_HEIGHT - 10,
+                               String(FREQ_BEGIN + ((fr - FREQ_BEGIN) / 4)));
+            // Median Mhz
             display.drawString((DISPLAY_WIDTH / 2) - 10, DISPLAY_HEIGHT - 10,
                                String(FREQ_BEGIN + ((fr - FREQ_BEGIN) / 2)));
+            // Median + 1/2 Mhz
+            display.drawString(
+                (DISPLAY_WIDTH - (DISPLAY_WIDTH / 4)) - 10, DISPLAY_HEIGHT - 10,
+                String(FREQ_BEGIN + ((fr - FREQ_BEGIN) - (fr - FREQ_BEGIN) / 4)));
+            // End Mhz
+            display.drawString(DISPLAY_WIDTH - 24, DISPLAY_HEIGHT - 10, String(fr));
 
             display.display();
             // display will be cleared next scan iteration. it is just buffer clear
@@ -376,7 +415,11 @@ void loop()
         fr = FREQ_BEGIN;
         x1 = 0;
         rssi_printed = 0;
-        screen_update_loop_counter++;
+        // Prevent screen_update_loop_counter++ when it is just nulled
+        if (scan_iterations > 0)
+        {
+            screen_update_loop_counter++;
+        }
     }
 #ifdef PRINT_DEBUG
     Serial.println("Full Scan:" + String(screen_update_loop_counter));
@@ -412,5 +455,5 @@ void setup()
     drawSetupText();
     display.display();
     display.clear();
-    delay(1000);
+    delay(500);
 }
