@@ -7,7 +7,7 @@
  *
  * All code e link examples you cand find here:
  * */
-// Varriables requred to boot Heltec E290 defined at platformio.ini
+// Variables required to boot Heltec E290 defined at platformio.ini
 // #define HELTEC_BOARD 37
 // #define SLOW_CLK_TPYE 1
 // #define ARDUINO_USB_CDC_ON_BOOT 1
