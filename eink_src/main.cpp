@@ -52,7 +52,7 @@ constexpr bool DRAW_DETECTION_TICKS = true;
 // number of samples for RSSI method
 #define SAMPLES_RSSI 30 // 21 //
 
-#define FREQ_BEGIN 750
+#define FREQ_BEGIN 650
 
 #define RANGE (int)(FREQ_END - FREQ_BEGIN)
 
@@ -267,6 +267,12 @@ int rssiToPix(int rssi)
 long timeSinceLastModeSwitch = 0;
 
 float fr = FREQ_BEGIN, fr_x[STEPS + 5], vbat = 0;
+// MHz in one screen pix step
+// END will be Begin + 289 * mhz_step
+int mhz_step = 1;
+// TODO: make end_freq
+// Measure RSS every step
+float rssi_mhz_step = 0.33;
 int rssi2 = 0;
 int x1 = 0, y2 = 0;
 unsigned int screen_update_loop_counter = 0;
@@ -288,6 +294,7 @@ void loop()
 {
     if (screen_update_loop_counter == 0)
     {
+        // Zero arrays
         for (int i = 0; i < STEPS; i++)
         {
             fr_x[x1] = 0;
@@ -295,14 +302,19 @@ void loop()
         }
         display_scan_start = millis();
     }
-    radio.setFrequency(fr, false); // false = no calibration need here
     fr_x[x1] = fr;
+    int u = 0;
     for (int i = 0; i < SAMPLES_RSSI; i++)
     {
-        if (i % 2 == 0)
-            radio.setFrequency((float)fr + 0.33, false);
-        else if (i % 3 == 0)
-            radio.setFrequency((float)fr + 0.33, false);
+
+        radio.setFrequency((float)fr + (float)(rssi_mhz_step * u),
+                           false); // false = no calibration need here
+        u++;
+        if (rssi_mhz_step * u >= mhz_step)
+        {
+            u = 0;
+        }
+
         rssi2 = radio.getRSSI(false);
         scan_iterations++;
         if (rssi2 > lower_level)
@@ -324,7 +336,7 @@ void loop()
     {
         display.setPixel(x1, rssiToPix(drone_detection_level));
     }
-    fr++;
+    fr += mhz_step;
     x1++;
     // Main N x-axis full loop end logic
     if (x1 >= STEPS)
