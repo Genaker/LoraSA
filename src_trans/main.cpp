@@ -8,6 +8,8 @@
  * This works on the stick, but the output on the screen gets cut off.
  */
 
+#include <Arduino.h> // must be first
+
 // Turns the 'PRG' button into the power button, long press is off
 #define HELTEC_POWER_BUTTON // must be before "#include <heltec_unofficial.h>"
 #include <heltec_unofficial.h>

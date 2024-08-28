@@ -27,6 +27,10 @@
 #include <heltec_unofficial.h>
 // This file contains a binary patch for the SX1262
 #include "modules/SX126x/patches/SX126x_patch_scan.h"
+
+#include "global_config.h"
+#include "ui.h"
+
 // #define OSD_ENABLED true
 //  #define WIFI_SCANNING_ENABLED true
 //  #define BT_SCANNING_ENABLED true
@@ -139,9 +143,6 @@ static const int buf0[36] = {0x02, 0x80, 0x02, 0x40, 0x7F, 0xE0, 0x42, 0x00,
 #include <BLEScan.h>
 #include <BLEUtils.h>
 #endif
-
-#include "global_config.h"
-#include "ui.h"
 
 // -----------------------------------------------------------------
 // CONFIGURATION OPTIONS

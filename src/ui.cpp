@@ -3,6 +3,10 @@
 #include "global_config.h"
 #include "images.h"
 
+#ifdef Vision_Master_E290
+#include "HT_DEPG0290BxS800FxX_BW.h"
+#endif
+
 // -------------------------------------------------
 // LOCAL DEFINES
 // Height of the plotter area
@@ -42,19 +46,6 @@ extern uint64_t loop_time;
 
 #ifndef Vision_Master_E290
 void UI_Init(SSD1306Wire *display_ptr)
-{
-    // init pointer to display instance.
-    display_instance = display_ptr;
-    // check for null ???
-    display_instance->clear();
-    // draw the UCOG welcome logo
-    display_instance->drawXbm(0, 2, 128, 64, epd_bitmap_ucog);
-    display_instance->display();
-}
-#endif
-
-#ifdef Vision_Master_E290
-void UI_Init(DEPG0290BxS800FxX_BW *display_ptr)
 {
     // init pointer to display instance.
     display_instance = display_ptr;

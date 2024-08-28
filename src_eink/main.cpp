@@ -7,6 +7,9 @@
  *
  * All code e link examples you cand find here:
  * */
+
+#include <Arduino.h>
+
 // Variables required to boot Heltec E290 defined at platformio.ini
 // #define HELTEC_BOARD 37
 // #define SLOW_CLK_TPYE 1
@@ -16,7 +19,6 @@
 #include "global_config.h"
 #include "images.h"
 #include "ui.h"
-#include <Arduino.h>
 
 // Disabling default Heltec lib OLED display
 #define HELTEC_NO_DISPLAY

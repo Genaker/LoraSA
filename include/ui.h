@@ -1,11 +1,10 @@
 #pragma once
 
-#ifdef Vision_Master_E290
-#include "HT_DEPG0290BxS800FxX_BW.h"
-#else
+#include <Arduino.h>
+
+#ifndef Vision_Master_E290
 #include "OLEDDisplayUi.h"
 #include "SSD1306Wire.h"
-#include <Arduino.h>
 #endif
 
 // #include <heltec_unofficial.h>
@@ -32,9 +31,7 @@
 #define SCREEN_HEIGHT 64 // ???? not used
 
 // publish functions
-#ifdef Vision_Master_E290
-extern void UI_Init(DEPG0290BxS800FxX_BW *);
-#else
+#ifndef Vision_Master_E290
 extern void UI_Init(SSD1306Wire *);
 #endif
 extern void UI_displayDecorate(int, int, bool);
