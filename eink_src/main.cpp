@@ -276,7 +276,7 @@ float rssi_mhz_step = 0.33;
 int rssi2 = 0;
 int x1 = 0, y2 = 0;
 unsigned int screen_update_loop_counter = 0;
-unsigned int x_screan_update = 0;
+unsigned int x_screen_update = 0;
 int rssi_printed = 0;
 constexpr int rssi_window_size = 30;
 int max_i_rssi = -999;
@@ -285,6 +285,7 @@ int window_max_fr = -999;
 int max_scan_rssi[STEPS + 2];
 long display_scan_start = 0;
 long display_scan_end = 0;
+long display_scan_i_end = 0;
 int scan_iterations = 0;
 
 constexpr unsigned int SCANS_PER_DISPLAY = 5;
@@ -338,6 +339,10 @@ void loop()
     }
     fr += mhz_step;
     x1++;
+    if (display_scan_i_end == 0)
+    {
+        display_scan_i_end = millis();
+    }
     // Main N x-axis full loop end logic
     if (x1 >= STEPS)
     {
@@ -353,7 +358,7 @@ void loop()
                     window_max_fr = fr_x[i];
                     window_max_rssi = max_scan_rssi[i];
                 }
-                if (i % rssi_window_size == 0)
+                if (i % rssi_window_size == 0 || (i % (DISPLAY_WIDTH - 1)) == 0)
                 {
 
                     if (abs(window_max_rssi) < drone_detection_level)
@@ -377,23 +382,42 @@ void loop()
             }
 
             display_scan_end = millis();
+
             display.setFont(ArialMT_Plain_10);
             display.drawString(0, 0,
-                               "T:" + String(display_scan_end - display_scan_start));
+                               "T:" + String(display_scan_end - display_scan_start) +
+                                   "/" + String(display_scan_i_end - display_scan_start));
+
+            // some issues with the performance.
+            // TODO: fix this issue
+            if (display_scan_end - display_scan_start > 20000)
+            {
+                esp_restart();
+            }
 
             battery();
+            // iteration full scan / samples pixel step / numbers of scan per display
+            display.drawString(DISPLAY_WIDTH - ((DISPLAY_WIDTH / 6) * 2) - 5, 0,
+                               "i:" + String(scan_iterations) + "/" + String(SAMPLES) +
+                                   "/" + String(SCANS_PER_DISPLAY));
+            // Scan resolution
+            display.drawString(DISPLAY_WIDTH - ((DISPLAY_WIDTH / 6) * 2) - 35, 0,
+                               "r:" + String(rssi_mhz_step));
+            // Mhz in pixel
+            display.drawString(DISPLAY_WIDTH - ((DISPLAY_WIDTH / 6) * 2) - 55, 0,
+                               "s:" + String(mhz_step));
+
             // Draw a line horizontally
-            display.drawString(DISPLAY_WIDTH - ((DISPLAY_WIDTH / 6) * 2), 0,
-                               "i:" + String(scan_iterations));
             display.drawHorizontalLine(0, lower_level + 1, DISPLAY_WIDTH);
             // Generate Ticks
             for (int x = 0; x < DISPLAY_WIDTH; x++)
             {
                 if (x % (DISPLAY_WIDTH / 2) == 0 && x > 5)
                 {
-                    display.drawVerticalLine(x, lower_level + 1, 8);
-                    display.drawVerticalLine(x - 1, lower_level + 1, 8);
-                    display.drawVerticalLine(x + 1, lower_level + 1, 8);
+                    display.drawVerticalLine(x, lower_level + 1, 11);
+                    // central tick width
+                    // display.drawVerticalLine(x - 1, lower_level + 1, 8);
+                    // display.drawVerticalLine(x + 1, lower_level + 1, 8);
                 }
                 if (x % 10 == 0 || x == 0)
                     display.drawVerticalLine(x, lower_level + 1, 6);
@@ -406,16 +430,17 @@ void loop()
             display.drawString(1, DISPLAY_HEIGHT - 10, String(FREQ_BEGIN));
             // Median -1/2 Mhz
             display.drawString((DISPLAY_WIDTH / 4) - 10, DISPLAY_HEIGHT - 10,
-                               String(FREQ_BEGIN + ((fr - FREQ_BEGIN) / 4)));
+                               String(FREQ_BEGIN + (((int)fr - FREQ_BEGIN) / 4)));
             // Median Mhz
             display.drawString((DISPLAY_WIDTH / 2) - 10, DISPLAY_HEIGHT - 10,
-                               String(FREQ_BEGIN + ((fr - FREQ_BEGIN) / 2)));
+                               String(FREQ_BEGIN + (((int)fr - FREQ_BEGIN) / 2)));
             // Median + 1/2 Mhz
-            display.drawString(
-                (DISPLAY_WIDTH - (DISPLAY_WIDTH / 4)) - 10, DISPLAY_HEIGHT - 10,
-                String(FREQ_BEGIN + ((fr - FREQ_BEGIN) - (fr - FREQ_BEGIN) / 4)));
+            display.drawString((DISPLAY_WIDTH - (DISPLAY_WIDTH / 4)) - 10,
+                               DISPLAY_HEIGHT - 10,
+                               String(FREQ_BEGIN + (((int)fr - FREQ_BEGIN) -
+                                                    ((int)fr - FREQ_BEGIN) / 4)));
             // End Mhz
-            display.drawString(DISPLAY_WIDTH - 24, DISPLAY_HEIGHT - 10, String(fr));
+            display.drawString(DISPLAY_WIDTH - 24, DISPLAY_HEIGHT - 10, String((int)fr));
 
             display.display();
             // display will be cleared next scan iteration. it is just buffer clear
@@ -423,6 +448,7 @@ void loop()
             display.clear();
             screen_update_loop_counter = 0;
             scan_iterations = 0;
+            display_scan_i_end = 0;
         }
         fr = FREQ_BEGIN;
         x1 = 0;
@@ -467,5 +493,5 @@ void setup()
     drawSetupText();
     display.display();
     display.clear();
-    delay(500);
+    delay(100);
 }
