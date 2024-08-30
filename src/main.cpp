@@ -268,6 +268,7 @@ constexpr int JOY_X_PIN = 19;
 int cursor_x_position = 0;
 // Not integrated yet constexpr int JOY_Y_PIN = N/A;
 constexpr int JOY_BTN_PIN = 46;
+// #define JOYSTICK_ENABLED
 
 bool joy_btn_click()
 {
@@ -586,12 +587,14 @@ void setup(void)
     bt_start = millis();
     wf_start = millis();
 
-    pinMode(JOY_BTN_PIN, INPUT_PULLUP);
     pinMode(LED, OUTPUT);
     pinMode(BUZZER_PIN, OUTPUT);
     pinMode(REB_PIN, OUTPUT);
     heltec_setup();
+#ifdef JOYSTICK_ENABLED
     calibrate_joy();
+    pinMode(JOY_BTN_PIN, INPUT_PULLUP);
+#endif
     UI_Init(&display);
     for (int i = 0; i < 200; i++)
     {
@@ -1077,11 +1080,13 @@ void loop(void)
                     display.setColor(WHITE);
                 }
             }
+#ifdef JOYSTICK_ENABLED
             if (dispaly_x == cursor_x_position)
             {
                 display.drawString(dispaly_x, 0, String((int)freq));
                 display.drawLine(dispaly_x, 1, dispaly_x, 10);
             }
+#endif
 
 #ifdef PRINT_PROFILE_TIME
             scan_time += (millis() - scan_start_time);
@@ -1101,12 +1106,20 @@ void loop(void)
             }
 
             // Detection level button short press
-            if (button.pressedFor(100) || joy_btn_click())
+            if (button.pressedFor(100)
+#ifdef JOYSTICK_ENABLED
+                || joy_btn_click()
+#endif
+            )
             {
                 button.update();
                 button_pressed_counter = 0;
                 // if long press stop
-                while (button.pressedNow() || joy_btn_click())
+                while (button.pressedNow()
+#ifdef JOYSTICK_ENABLED
+                       || joy_btn_click()
+#endif
+                )
                 {
                     delay(10);
                     // Print Curent frequency
@@ -1182,7 +1195,8 @@ void loop(void)
             // TODO: move osd logic here as a dalay ;)
             // Loop is needed if heltec_delay(1) not used
             heltec_loop();
-            // Move joystick
+// Move joystick
+#ifdef JOYSTICK_ENABLED
             int joy_x_pressed = get_joy_x(true);
             if (joy_x_pressed > 0)
             {
@@ -1208,6 +1222,7 @@ void loop(void)
                 display.display();
                 delay(10);
             }
+#endif
         }
         w++;
         if (w > ROW_STATUS_TEXT + 1)
