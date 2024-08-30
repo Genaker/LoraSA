@@ -179,9 +179,10 @@ constexpr int OSD_PIXELS_PER_CHAR = (STEPS * SCAN_RBW_FACTOR) / OSD_CHART_WIDTH;
 // Print spectrum values pixels at once or by line
 bool ANIMATED_RELOAD = false;
 
-// TODO: Ignore power lines
+// TODO: Ignore max power lines
 #define UP_FILTER 5
-#define LOW_FILTER 3
+// Trim low signals - nose level
+#define START_LOW 6
 // Remove reading without neighbors
 #define FILTER_SPECTRUM_RESULTS true
 #define FILTER_SAMPLES_MIN
@@ -261,6 +262,67 @@ constexpr int samples = SAMPLES_RSSI;
 uint8_t result_index = 0;
 uint8_t button_pressed_counter = 0;
 uint64_t loop_cnt = 0;
+
+// Joystick integration
+constexpr int JOY_X_PIN = 19;
+int cursor_x_position = 0;
+// Not integrated yet constexpr int JOY_Y_PIN = N/A;
+constexpr int JOY_BTN_PIN = 46;
+
+bool joy_btn_click()
+{
+    // is the output from the pushbutton inside the joystick. It’s normally open. If we
+    // use a pull-up resistor in this pin, the SW pin will be  HIGH
+    // when it is not pressed, and LOW when Pressed.
+    return digitalRead(JOY_BTN_PIN) == HIGH ? false : true;
+}
+
+int joyXMid = 0;
+int cal_X = 0, cal_Y = 0;
+
+void calibrate_joy()
+{
+    for (int i = 0; i < 100; i++)
+    {
+        cal_X += analogRead(JOY_X_PIN);
+    }
+    // calibrate center
+    joyXMid = cal_X / 100;
+}
+
+int MID = 100; // 10 mid point delta arduino, use 4 for attiny
+int get_joy_x(bool logical = false)
+{
+    int joyX = analogRead(JOY_X_PIN);
+
+    /*
+        Serial.print("Calibrated_X_Voltage = ");
+        Serial.print(joyXMid);
+        Serial.print("X_Voltage = ");
+        Serial.print(joyX);
+        Serial.print("\t");
+    */
+
+    if (logical)
+    {
+        // 4095
+        if (joyX < joyXMid - MID)
+        {
+            return -1;
+        }
+        // 0-5
+        else if (joyX > joyXMid + MID)
+        {
+            return 1;
+        }
+        else
+        {
+            return 0;
+        }
+    }
+
+    return joyX;
+}
 
 #ifdef WIFI_SCANNING_ENABLED
 // WiFi Scan
@@ -524,10 +586,12 @@ void setup(void)
     bt_start = millis();
     wf_start = millis();
 
+    pinMode(JOY_BTN_PIN, INPUT_PULLUP);
     pinMode(LED, OUTPUT);
     pinMode(BUZZER_PIN, OUTPUT);
     pinMode(REB_PIN, OUTPUT);
     heltec_setup();
+    calibrate_joy();
     UI_Init(&display);
     for (int i = 0; i < 200; i++)
     {
@@ -957,12 +1021,11 @@ void loop(void)
                         // frequencies
                         if (!detected_y[dispaly_x])
                         {
-                            display.drawLine(dispaly_x, 1, dispaly_x, 6);
+                            display.drawLine(dispaly_x, 1, dispaly_x, 4);
                             detected_y[dispaly_x] = true;
                         }
                     }
                 }
-
 #if (WATERFALL_ENABLED == true)
                 if ((filtered_result[y] == 1) && (y <= drone_detection_level) &&
                     (single_page_scan) && (waterfall[dispaly_x] != true) && new_pixel)
@@ -988,7 +1051,10 @@ void loop(void)
                                  ":" + String(y) + ",");
 #endif
                     // Set signal level pixel
-                    display.setPixel(dispaly_x, y);
+                    if (y < MAX_POWER_LEVELS - START_LOW)
+                    {
+                        display.setPixel(dispaly_x, y + START_LOW);
+                    }
                     if (!detected)
                     {
                         detected = true;
@@ -1005,11 +1071,16 @@ void loop(void)
                     {
                         display.setColor(INVERSE);
                     }
-                    display.setPixel(dispaly_x, y);
-                    display.setPixel(dispaly_x, y - 1); // 2 px wide
+                    display.setPixel(dispaly_x, y + START_LOW);
+                    // display.setPixel(dispaly_x, y + START_LOW - 1); // 2 px wide
 
                     display.setColor(WHITE);
                 }
+            }
+            if (dispaly_x == cursor_x_position)
+            {
+                display.drawString(dispaly_x, 0, String((int)freq));
+                display.drawLine(dispaly_x, 1, dispaly_x, 10);
             }
 
 #ifdef PRINT_PROFILE_TIME
@@ -1030,12 +1101,12 @@ void loop(void)
             }
 
             // Detection level button short press
-            if (button.pressedFor(100))
+            if (button.pressedFor(100) || joy_btn_click())
             {
                 button.update();
                 button_pressed_counter = 0;
                 // if long press stop
-                while (button.pressedNow())
+                while (button.pressedNow() || joy_btn_click())
                 {
                     delay(10);
                     // Print Curent frequency
@@ -1111,6 +1182,32 @@ void loop(void)
             // TODO: move osd logic here as a dalay ;)
             // Loop is needed if heltec_delay(1) not used
             heltec_loop();
+            // Move joystick
+            int joy_x_pressed = get_joy_x(true);
+            if (joy_x_pressed > 0)
+            {
+                cursor_x_position--;
+                display.drawString(cursor_x_position, 0, String((int)freq));
+                display.drawLine(cursor_x_position, 1, cursor_x_position, 10);
+                display.display();
+                delay(10);
+            }
+            else if (joy_x_pressed < 0)
+            {
+                cursor_x_position++;
+                display.drawString(cursor_x_position, 0, String((int)freq));
+                display.drawLine(cursor_x_position, 1, cursor_x_position, 10);
+                display.display();
+                delay(10);
+            }
+            if (cursor_x_position > DISPLAY_WIDTH || cursor_x_position < 0)
+            {
+                cursor_x_position = 0;
+                display.drawString(cursor_x_position, 0, String((int)freq));
+                display.drawLine(cursor_x_position, 1, cursor_x_position, 10);
+                display.display();
+                delay(10);
+            }
         }
         w++;
         if (w > ROW_STATUS_TEXT + 1)
