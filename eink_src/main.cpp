@@ -248,8 +248,8 @@ void VextOFF(void) // Vext default OFF
     digitalWrite(18, LOW);
 }
 
-int lower_level = 108;
-int up_level = 40;
+constexpr int lower_level = 108;
+constexpr int up_level = 40;
 int rssiToPix(int rssi)
 {
     // Bigger is lower signal
@@ -269,10 +269,10 @@ long timeSinceLastModeSwitch = 0;
 float fr = FREQ_BEGIN, fr_x[STEPS + 5], vbat = 0;
 // MHz in one screen pix step
 // END will be Begin + 289 * mhz_step
-int mhz_step = 1;
+constexpr int mhz_step = 1;
 // TODO: make end_freq
 // Measure RSS every step
-float rssi_mhz_step = 0.33;
+constexpr float rssi_mhz_step = 0.33;
 int rssi2 = 0;
 int x1 = 0, y2 = 0;
 unsigned int screen_update_loop_counter = 0;
@@ -386,7 +386,8 @@ void loop()
             display.setFont(ArialMT_Plain_10);
             display.drawString(0, 0,
                                "T:" + String(display_scan_end - display_scan_start) +
-                                   "/" + String(display_scan_i_end - display_scan_start));
+                                   "/" + String(display_scan_i_end - display_scan_start) +
+                                   " L:-" + String(drone_detection_level) + "dB");
 
             // some issues with the performance.
             // TODO: fix this issue
@@ -488,8 +489,7 @@ void setup()
         Serial.println(state);
     }
     heltec_setup();
-    Serial.println();
-    Serial.println();
+
     drawSetupText();
     display.display();
     display.clear();
