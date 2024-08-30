@@ -268,10 +268,12 @@ constexpr int JOY_X_PIN = 19;
 int cursor_x_position = 0;
 // Not integrated yet constexpr int JOY_Y_PIN = N/A;
 constexpr int JOY_BTN_PIN = 46;
-// #define JOYSTICK_ENABLED
+bool joy_btn_clicked = false;
+#define JOYSTICK_ENABLED
 
 bool joy_btn_click()
 {
+    joy_btn_clicked = true;
     // is the output from the pushbutton inside the joystick. It’s normally open. If we
     // use a pull-up resistor in this pin, the SW pin will be  HIGH
     // when it is not pressed, and LOW when Pressed.
@@ -708,6 +710,8 @@ int binToRSSI(int bin)
     return 11 + (bin * 4);
 }
 
+// MAX Frequency RSSI value of the samples
+int max_rssi_x = 999;
 void loop(void)
 {
     UI_displayDecorate(0, 0, false); // some default values
@@ -835,8 +839,8 @@ void loop(void)
             // Real display pixel x - axis.
             // Because of the SCAN_RBW_FACTOR x is not a display coordinate anymore
             // x > STEPS on SCAN_RBW_FACTOR
-            int dispaly_x = x / SCAN_RBW_FACTOR;
-            waterfall[dispaly_x] = false;
+            int display_x = x / SCAN_RBW_FACTOR;
+            waterfall[display_x] = false;
             float step = (range * ((float)x / (STEPS * SCAN_RBW_FACTOR)));
 
             freq = fr_begin + step;
@@ -905,7 +909,7 @@ void loop(void)
 #endif // SCAN_METHOD == METHOD_RSSI
 
             // if this code is not executed LORA radio doesn't work
-            // basicaly SX1262 requers delay
+            // basically SX1262 requires delay
             // osd.displayString(12, 1, String(FREQ_BEGIN));
             // osd.displayString(12, 30 - 8, String(FREQ_END));
             // delay(2);
@@ -913,9 +917,17 @@ void loop(void)
 #ifdef OSD_ENABLED
             osdProcess();
 #endif
+#ifdef JOYSTICK_ENABLED
+            if (display_x == cursor_x_position)
+            {
+                display.setColor(BLACK);
+                display.fillRect(display_x - 20, 3, 36, 11);
+                display.setColor(WHITE);
+            }
+#endif
             detected = false;
-            detected_y[dispaly_x] = false;
-
+            detected_y[display_x] = false;
+            max_rssi_x = 999;
             for (y = 0; y < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE; y++)
             {
 
@@ -967,7 +979,7 @@ void loop(void)
                 // check if we should alarm about a drone presence
                 if ((filtered_result[y] == 1) // we have some data and
                     && (y <= drone_detection_level) &&
-                    detected_y[dispaly_x] == false) // detection threshold match
+                    detected_y[display_x] == false) // detection threshold match
                 {
                     // Set LED to ON (filtered in UI component)
                     UI_setLedFlag(true);
@@ -976,11 +988,11 @@ void loop(void)
                     if (single_page_scan)
                     {
                         // Drone detection true for waterfall
-                        if (!waterfall[dispaly_x])
+                        if (!waterfall[display_x])
                         {
-                            waterfall[dispaly_x] = true;
+                            waterfall[display_x] = true;
                             display.setColor(WHITE);
-                            display.setPixel(dispaly_x, w);
+                            display.setPixel(display_x, w);
                         }
                     }
 #endif
@@ -1022,22 +1034,22 @@ void loop(void)
                     {
                         // draw vertical line on top of display for "drone detected"
                         // frequencies
-                        if (!detected_y[dispaly_x])
+                        if (!detected_y[display_x])
                         {
-                            display.drawLine(dispaly_x, 1, dispaly_x, 4);
-                            detected_y[dispaly_x] = true;
+                            display.drawLine(display_x, 1, display_x, 4);
+                            detected_y[display_x] = true;
                         }
                     }
                 }
 #if (WATERFALL_ENABLED == true)
                 if ((filtered_result[y] == 1) && (y <= drone_detection_level) &&
-                    (single_page_scan) && (waterfall[dispaly_x] != true) && new_pixel)
+                    (single_page_scan) && (waterfall[display_x] != true) && new_pixel)
                 {
                     // If drone not found set dark pixel on the waterfall
                     // TODO: make something like scrolling up if possible
-                    waterfall[dispaly_x] = false;
+                    waterfall[display_x] = false;
                     display.setColor(BLACK);
-                    display.setPixel(dispaly_x, w);
+                    display.setPixel(display_x, w);
                     display.setColor(WHITE);
                 }
 #endif
@@ -1050,13 +1062,17 @@ void loop(void)
                 if (filtered_result[y] == 1)
                 {
 #ifdef PRINT_DEBUG
-                    Serial.print("Pixel:" + String(dispaly_x) + "(" + String(x) + ")" +
+                    Serial.print("Pixel:" + String(display_x) + "(" + String(x) + ")" +
                                  ":" + String(y) + ",");
 #endif
+                    if (max_rssi_x > y)
+                    {
+                        max_rssi_x = y;
+                    }
                     // Set signal level pixel
                     if (y < MAX_POWER_LEVELS - START_LOW)
                     {
-                        display.setPixel(dispaly_x, y + START_LOW);
+                        display.setPixel(display_x, y + START_LOW);
                     }
                     if (!detected)
                     {
@@ -1067,24 +1083,27 @@ void loop(void)
                 // -------------------------------------------------------------
                 // Draw "Detection Level line" every 2 pixel
                 // -------------------------------------------------------------
-                if ((y == drone_detection_level) && (dispaly_x % 2 == 0))
+                if ((y == drone_detection_level) && (display_x % 2 == 0))
                 {
                     display.setColor(WHITE);
                     if (filtered_result[y] == 1)
                     {
                         display.setColor(INVERSE);
                     }
-                    display.setPixel(dispaly_x, y + START_LOW);
-                    // display.setPixel(dispaly_x, y + START_LOW - 1); // 2 px wide
+                    display.setPixel(display_x, y + START_LOW);
+                    // display.setPixel(display_x, y + START_LOW - 1); // 2 px wide
 
                     display.setColor(WHITE);
                 }
             }
 #ifdef JOYSTICK_ENABLED
-            if (dispaly_x == cursor_x_position)
+            if (display_x == cursor_x_position)
             {
-                display.drawString(dispaly_x, 0, String((int)freq));
-                display.drawLine(dispaly_x, 1, dispaly_x, 10);
+
+                display.drawString(display_x - 1, 0, String((int)freq));
+                display.drawLine(display_x, 1, display_x, 12);
+                // if method scan RSSI we can get exact RSSI value
+                display.drawString(display_x + 17, 0, "-" + String((int)max_rssi_x * 4));
             }
 #endif
 
@@ -1136,7 +1155,7 @@ void loop(void)
                 }
                 if (button_pressed_counter > 150)
                 {
-                    // Remove Curent Freqancy Text
+                    // Remove Curent Frequency Text
                     display.setTextAlignment(TEXT_ALIGN_CENTER);
                     display.setColor(BLACK);
                     display.drawString(128 / 2, 0, String(freq));
@@ -1146,11 +1165,15 @@ void loop(void)
                 }
                 if (button_pressed_counter > 50 && button_pressed_counter < 150)
                 {
-                    // Visually confirm it's off so user releases button
-                    display.displayOff();
-                    // Deep sleep (has wait for release so we don't wake up
-                    // immediately)
-                    heltec_deep_sleep();
+
+                    if (!joy_btn_clicked)
+                    {
+                        // Visually confirm it's off so user releases button
+                        display.displayOff();
+                        // Deep sleep (has wait for release so we don't wake up
+                        // immediately)
+                        heltec_deep_sleep();
+                    }
                     break;
                 }
                 button.update();
@@ -1262,6 +1285,7 @@ void loop(void)
 #endif
 
     loop_time = millis() - loop_start;
+    joy_btn_clicked = false;
 
 #ifdef PRINT_PROFILE_TIME
     Serial.printf("LOOP: %lld ms; SCAN: %lld ms;\n  ", loop_time, scan_time);
