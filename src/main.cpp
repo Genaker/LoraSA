@@ -24,12 +24,26 @@
 // #define HELTEC_NO_DISPLAY
 
 #include <Arduino.h>
+
+//  #define OSD_ENABLED true
+//  #define WIFI_SCANNING_ENABLED true
+//  #define BT_SCANNING_ENABLED true
+
+#ifndef LILYGO
 #include <heltec_unofficial.h>
 // This file contains a binary patch for the SX1262
 #include "modules/SX126x/patches/SX126x_patch_scan.h"
-// #define OSD_ENABLED true
-//  #define WIFI_SCANNING_ENABLED true
-//  #define BT_SCANNING_ENABLED true
+#elif defined(LILYGO)
+// LiLyGO device does not support the auto download mode, you need to get into the
+// download mode manually. To do so, press and hold the BOOT button and then press the
+// RESET button once. After that release the BOOT button. Or OFF->ON together with BOOT
+
+// Default LilyGO code
+#include "utilities.h"
+// Our Code
+#include "LiLyGo.h"
+
+#endif // end LILYGO
 
 #define BT_SCAN_DELAY 60 * 1 * 1000
 #define WF_SCAN_DELAY 60 * 2 * 1000
@@ -114,7 +128,7 @@ static constexpr uint16_t power_level[MAX_POWER_LEVELS + 1] = {
 #define OSD_X_START 1
 #define OSD_Y_START 16
 
-// TODO: Calculate dinammicaly:
+// TODO: Calculate dynamically:
 // osd_steps = osd_mhz_in_bin / (FM range / LORA radio x Steps)
 int osd_mhz_in_bin = 5;
 int osd_steps = 12;
@@ -154,15 +168,19 @@ typedef enum
 } TSCAN_METOD_ENUM;
 
 #define SCAN_METHOD
-#define METHOD_SPECTRAL
-// #define METHOD_RSSI // Uncomment this and comment METHOD_SPECTRAL fot RSSI
+// #define METHOD_SPECTRAL // Spectral scan method
+#define METHOD_RSSI // Uncomment this and comment METHOD_SPECTRAL fot RSSI
 
-// Feature to scan diapazones. Other frequency settings will be ignored.
+// Output Pixel Formula
+// 1 = rssi / 4, 2 = (rssi / 2) - 22 or 20
+constexpr int RSSI_OUTPUT_FORMULA = 2;
+
+// Feature to scan diapasones. Other frequency settings will be ignored.
 // int SCAN_RANGES[] = {850890, 920950};
 int SCAN_RANGES[] = {};
 
 // MHZ per page
-// to put everething into one page set RANGE_PER_PAGE = FREQ_END - 800
+// to put everything into one page set RANGE_PER_PAGE = FREQ_END - 800
 uint64_t RANGE_PER_PAGE = FREQ_END - FREQ_BEGIN; // FREQ_END - FREQ_BEGIN
 
 // multiplies STEPS * N to increase scan resolution.
@@ -189,7 +207,7 @@ bool ANIMATED_RELOAD = false;
 constexpr bool DRAW_DETECTION_TICKS = true;
 
 // Number of samples for each frequency scan. Fewer samples = better temporal resolution.
-// if more than 100 it can freez
+// if more than 100 it can freeze
 #define SAMPLES 35 //(scan time = 1294)
 // number of samples for RSSI method
 #define SAMPLES_RSSI 20 // 21 //
@@ -263,69 +281,11 @@ uint8_t result_index = 0;
 uint8_t button_pressed_counter = 0;
 uint64_t loop_cnt = 0;
 
-// Joystick integration
-constexpr int JOY_X_PIN = 19;
-int cursor_x_position = 0;
-// Not integrated yet constexpr int JOY_Y_PIN = N/A;
-constexpr int JOY_BTN_PIN = 46;
-bool joy_btn_clicked = false;
-#define JOYSTICK_ENABLED
+#ifndef LILYGO
+// #define JOYSTICK_ENABLED
+#endif
 
-bool joy_btn_click()
-{
-    joy_btn_clicked = true;
-    // is the output from the pushbutton inside the joystick. It’s normally open. If we
-    // use a pull-up resistor in this pin, the SW pin will be  HIGH
-    // when it is not pressed, and LOW when Pressed.
-    return digitalRead(JOY_BTN_PIN) == HIGH ? false : true;
-}
-
-int joyXMid = 0;
-int cal_X = 0, cal_Y = 0;
-
-void calibrate_joy()
-{
-    for (int i = 0; i < 100; i++)
-    {
-        cal_X += analogRead(JOY_X_PIN);
-    }
-    // calibrate center
-    joyXMid = cal_X / 100;
-}
-
-int MID = 100; // 10 mid point delta arduino, use 4 for attiny
-int get_joy_x(bool logical = false)
-{
-    int joyX = analogRead(JOY_X_PIN);
-
-    /*
-        Serial.print("Calibrated_X_Voltage = ");
-        Serial.print(joyXMid);
-        Serial.print("X_Voltage = ");
-        Serial.print(joyX);
-        Serial.print("\t");
-    */
-
-    if (logical)
-    {
-        // 4095
-        if (joyX < joyXMid - MID)
-        {
-            return -1;
-        }
-        // 0-5
-        else if (joyX > joyXMid + MID)
-        {
-            return 1;
-        }
-        else
-        {
-            return 0;
-        }
-    }
-
-    return joyX;
-}
+#include "joyStick.h"
 
 #ifdef WIFI_SCANNING_ENABLED
 // WiFi Scan
@@ -539,7 +499,21 @@ void init_radio()
 {
     // initialize SX1262 FSK modem at the initial frequency
     both.println("Init radio");
-    RADIOLIB_OR_HALT(radio.beginFSK(FREQ_BEGIN));
+    state == radio.beginFSK(FREQ_BEGIN);
+
+    if (state == RADIOLIB_ERR_NONE)
+    {
+        Serial.println(F("success!"));
+    }
+    else
+    {
+        Serial.print(F("failed, code "));
+        Serial.println(state);
+        while (true)
+        {
+            delay(5);
+        }
+    }
 
     // upload a patch to the SX1262 to enable spectral scan
     // NOTE: this patch is uploaded into volatile memory,
@@ -613,9 +587,10 @@ void setup(void)
     }
 
     init_radio();
-
+#ifndef LILYGO
     vbat = heltec_vbat();
     both.printf("V battery: %.2fV (%d%%)\n", vbat, heltec_battery_percent(vbat));
+#endif // end not LILYGO
 #ifdef WIFI_SCANNING_ENABLED
     WiFi.mode(WIFI_STA);
     WiFi.disconnect();
@@ -642,7 +617,7 @@ void setup(void)
     {
         both.println("Single Page Screen MODE");
         both.println("Multi Screen View Press P - button");
-        both.println("Multi Screan Res: " + String(resolution) + "Mhz/tick");
+        both.println("Multi Screen Res: " + String(resolution) + "Mhz/tick");
         both.println(
             "Resolution: " + String((float)RANGE_PER_PAGE / (STEPS * SCAN_RBW_FACTOR)) +
             "MHz/tick");
@@ -693,6 +668,9 @@ void setup(void)
     if (state != RADIOLIB_ERR_NONE)
     {
         Serial.print(F("Failed to start receive mode, error code: "));
+        display.drawString(0, 64 - 10, "E:startReceive");
+        display.display();
+        delay(500);
         Serial.println(state);
     }
 #endif
@@ -703,51 +681,83 @@ void setup(void)
 #endif
 }
 
-// Formula to translate 33 bin to aproximate RSSI value
+// Formula to translate 33 bin to approximate RSSI value
 int binToRSSI(int bin)
 {
     // the first the strongest RSSI in bin value is 0
     return 11 + (bin * 4);
 }
 
+void drone_sound_alarm(int drone_detection_level, int detection_count)
+{
+    // If level is set to sensitive,
+    // start beeping every 10th frequency and shorter
+    // it improves performance less short beep delays...
+    if (drone_detection_level <= 25)
+    {
+        if (detection_count == 1 && SOUND_ON)
+        {
+            tone(BUZZER_PIN, 205,
+                 10); // same action ??? but first time
+        }
+        if (detection_count % 5 == 0 && SOUND_ON)
+        {
+            tone(BUZZER_PIN, 205,
+                 10); // same action ??? but every 5th time
+        }
+    }
+    else
+    {
+        if (detection_count % 20 == 0 && SOUND_ON)
+        {
+            tone(BUZZER_PIN, 205,
+                 10); // same action ??? but every 20th detection
+        }
+    }
+}
+
 // MAX Frequency RSSI value of the samples
 int max_rssi_x = 999;
+
 void loop(void)
 {
-    UI_displayDecorate(0, 0, false); // some default values
-    detection_count = 0;
-    drone_detected_frequency_start = 0;
-    ranges_count = 0;
 
-    // reset scan time
-    scan_time = 0;
+    {
+        UI_displayDecorate(0, 0, false); // some default values
 
-    // general purpose loop conter
-    loop_cnt++;
+        detection_count = 0;
+        drone_detected_frequency_start = 0;
+        ranges_count = 0;
+
+        // reset scan time
+        scan_time = 0;
+
+        // general purpose loop counter
+        loop_cnt++;
 
 #ifdef PRINT_PROFILE_TIME
-    loop_start = millis();
+        loop_start = millis();
 #endif
 
-    if (!ANIMATED_RELOAD || !single_page_scan)
-    {
-        // clear the scan plot rectangle
-        UI_clearPlotter();
-    }
+        if (!ANIMATED_RELOAD || !single_page_scan)
+        {
+            // clear the scan plot rectangle
+            UI_clearPlotter();
+        }
 
-    // do the scan
-    range = FREQ_END - FREQ_BEGIN;
-    if (RANGE_PER_PAGE > range)
-    {
-        RANGE_PER_PAGE = range;
-    }
+        // do the scan
+        range = FREQ_END - FREQ_BEGIN;
+        if (RANGE_PER_PAGE > range)
+        {
+            RANGE_PER_PAGE = range;
+        }
 
-    fr_begin = FREQ_BEGIN;
-    fr_end = fr_begin;
+        fr_begin = FREQ_BEGIN;
+        fr_end = fr_begin;
 
-    // 50 is a single-screen range
-    // TODO: Make 50 a variable with the option to show the full range
-    iterations = range / RANGE_PER_PAGE;
+        // 50 is a single-screen range
+        // TODO: Make 50 a variable with the option to show the full range
+        iterations = range / RANGE_PER_PAGE;
 
 #if 0 // disabled code
     if (range % RANGE_PER_PAGE != 0)
@@ -757,529 +767,563 @@ void loop(void)
     }
 #endif
 
-    if (RANGE_PER_PAGE == range)
-    {
-        single_page_scan = true;
-    }
-    else
-    {
-        single_page_scan = false;
-    }
-
-    for (int range : SCAN_RANGES)
-    {
-        ranges_count++;
-    }
-
-    if (ranges_count > 0)
-    {
-        iterations = ranges_count;
-        single_page_scan = false;
-    }
-
-    // Iterating by small ranges by 50 Mhz each pixel is 0.4 Mhz
-    for (range_item = 0; range_item < iterations; range_item++)
-    {
-        range = RANGE_PER_PAGE;
-        if (ranges_count == 0)
+        if (RANGE_PER_PAGE == range)
         {
-            fr_begin = (range_item == 0) ? fr_begin : fr_begin += range;
-            fr_end = fr_begin + RANGE_PER_PAGE;
+            single_page_scan = true;
         }
         else
         {
-            fr_begin = SCAN_RANGES[range_item] / 1000;
-            fr_end = SCAN_RANGES[range_item] % 1000;
-            range = fr_end - fr_begin;
+            single_page_scan = false;
         }
+
+        for (int range : SCAN_RANGES)
+        {
+            ranges_count++;
+        }
+
+        if (ranges_count > 0)
+        {
+            iterations = ranges_count;
+            single_page_scan = false;
+        }
+
+        // Iterating by small ranges by 50 Mhz each pixel is 0.4 Mhz
+        for (range_item = 0; range_item < iterations; range_item++)
+        {
+            range = RANGE_PER_PAGE;
+            if (ranges_count == 0)
+            {
+                fr_begin = (range_item == 0) ? fr_begin : fr_begin += range;
+                fr_end = fr_begin + RANGE_PER_PAGE;
+            }
+            else
+            {
+                fr_begin = SCAN_RANGES[range_item] / 1000;
+                fr_end = SCAN_RANGES[range_item] % 1000;
+                range = fr_end - fr_begin;
+            }
 
 #ifdef DISABLED_CODE
-        if (!ANIMATED_RELOAD || !single_page_scan)
-        {
-            // clear the scan plot rectangle
-            UI_clearPlotter();
-        }
+            if (!ANIMATED_RELOAD || !single_page_scan)
+            {
+                // clear the scan plot rectangle
+                UI_clearPlotter();
+            }
 #endif
 
-        if (single_page_scan == false)
-        {
-            UI_displayDecorate(fr_begin, fr_end, true);
-        }
-
-        drone_detected_frequency_start = 0;
-        display.setTextAlignment(TEXT_ALIGN_RIGHT);
-
-        for (int i = 0; i < MAX_POWER_LEVELS; i++)
-        {
-            max_bins_array_value[i] = 0;
-        }
-
-        // horizontal (x axis) Frequency loop
-        osd_x = 1, osd_y = 2, col = 0, max_bin = 0;
-        // x loop
-        for (x = 0; x < STEPS * SCAN_RBW_FACTOR; x++)
-        {
-
-            if (x % SCAN_RBW_FACTOR == 0)
-                new_pixel = true;
-            else
-                new_pixel = false;
-            if (ANIMATED_RELOAD && SCAN_RBW_FACTOR == 1)
+            if (single_page_scan == false)
             {
-                UI_drawCursor(x);
+                UI_displayDecorate(fr_begin, fr_end, true);
             }
-            if (new_pixel && ANIMATED_RELOAD && SCAN_RBW_FACTOR > 1)
+
+            drone_detected_frequency_start = 0;
+            display.setTextAlignment(TEXT_ALIGN_RIGHT);
+
+            for (int i = 0; i < MAX_POWER_LEVELS; i++)
             {
-                UI_drawCursor((int)(x / SCAN_RBW_FACTOR));
+                max_bins_array_value[i] = 0;
             }
+
+            // horizontal (x axis) Frequency loop
+            osd_x = 1, osd_y = 2, col = 0, max_bin = 0;
+            // x loop
+            for (x = 0; x < STEPS * SCAN_RBW_FACTOR; x++)
+            {
+            start:
+
+                if (x % SCAN_RBW_FACTOR == 0)
+                    new_pixel = true;
+                else
+                    new_pixel = false;
+                if (ANIMATED_RELOAD && SCAN_RBW_FACTOR == 1)
+                {
+                    UI_drawCursor(x);
+                }
+                if (new_pixel && ANIMATED_RELOAD && SCAN_RBW_FACTOR > 1)
+                {
+                    UI_drawCursor((int)(x / SCAN_RBW_FACTOR));
+                }
 
 #ifdef PRINT_PROFILE_TIME
-            scan_start_time = millis();
+                scan_start_time = millis();
 #endif
-            // Real display pixel x - axis.
-            // Because of the SCAN_RBW_FACTOR x is not a display coordinate anymore
-            // x > STEPS on SCAN_RBW_FACTOR
-            int display_x = x / SCAN_RBW_FACTOR;
-            waterfall[display_x] = false;
-            float step = (range * ((float)x / (STEPS * SCAN_RBW_FACTOR)));
+                // Real display pixel x - axis.
+                // Because of the SCAN_RBW_FACTOR x is not a display coordinate anymore
+                // x > STEPS on SCAN_RBW_FACTOR
+                int display_x = x / SCAN_RBW_FACTOR;
+                waterfall[display_x] = false;
+                float step = (range * ((float)x / (STEPS * SCAN_RBW_FACTOR)));
 
-            freq = fr_begin + step;
+                freq = fr_begin + step;
+#ifdef PRINT_DEBUG
+                Serial.println("setFrequency:" + String(freq));
+#endif
 
-            radio.setFrequency(freq, false); // false = no calibration need here
+#ifdef LILYGO
+                state =
+                    radio.setFrequency(freq, false); // false = no calibration need here
+#else
+                state =
+                    radio.setFrequency(freq, false); // false = no calibration need here
+#endif
+                int radio_error_count = 0;
+                if (state != RADIOLIB_ERR_NONE)
+                {
+                    display.drawString(0, 64 - 10, "E:setFrequency:" + String(freq));
+                    // display.drawString(0, 64 - 10, "E:setFrequency:" + String(freq));
+                    Serial.println("E:setFrequency:" + String(freq));
+                    display.display();
+                    delay(2);
+                    radio_error_count++;
+                    if (radio_error_count > 10)
+                        continue;
+                }
 
 #ifdef PRINT_DEBUG
-            Serial.printf("Step:%d Freq: %f\n", x, freq);
+                Serial.printf("Step:%d Freq: %f\n", x, freq);
 #endif
-            // SpectralScan Method
+                // SpectralScan Method
 #ifdef METHOD_SPECTRAL
-            {
-                // start spectral scan third parameter is a sleep interval
-                radio.spectralScanStart(SAMPLES, 1);
-                // wait for spectral scan to finish
-                while (radio.spectralScanGetStatus() != RADIOLIB_ERR_NONE)
                 {
-                    Serial.print("radio.spectralScanGetStatus ERROR: ");
-                    Serial.println(radio.spectralScanGetStatus());
-                    heltec_delay(ONE_MILLISEC * 10);
+                    // start spectral scan third parameter is a sleep interval
+                    radio.spectralScanStart(SAMPLES, 1);
+                    // wait for spectral scan to finish
+                    radio_error_count = 0;
+                    while (radio.spectralScanGetStatus() != RADIOLIB_ERR_NONE)
+                    {
+                        Serial.println("radio.spectralScanGetStatus ERROR: ");
+                        Serial.println(radio.spectralScanGetStatus());
+                        display.drawString(0, 64 - 20,
+                                           "E:specScSta:" +
+                                               String(radio.spectralScanGetStatus()));
+                        display.display();
+                        heltec_delay(ONE_MILLISEC * 2);
+                        radio_error_count++;
+                        if (radio_error_count > 10)
+                            continue;
+                    }
+
+                    // read the results Array to which the results will be saved
+                    state = radio.spectralScanGetResult(result);
+                    display.drawString(0, 64 - 10, "scanGetResult:" + String(state));
                 }
-                // read the results Array to which the results will be saved
-                radio.spectralScanGetResult(result);
-            }
+
 #endif
 #ifdef METHOD_RSSI
-            // Spectrum analyzer using getRSSI
-            {
+                // Spectrum analyzer using getRSSI
+                {
 #ifdef PRINT_DEBUG
-                Serial.println("METHOD RSSI");
+                    Serial.println("METHOD RSSI");
 #endif
-                // memset
-                // memset(result, 0, RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE);
-                // Some issues with memset function
-                for (i = 0; i < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE; i++)
-                {
-                    result[i] = 0;
-                }
-                result_index = 0;
-                // N of samples
-                for (int r = 0; r < SAMPLES_RSSI; r++)
-                {
-                    rssi = radio.getRSSI(false);
-                    // delay(ONE_MILLISEC);
-                    // ToDO: check if 4 is correct value for 33 power bins
-                    result_index = uint8_t(abs(rssi) / 4); /// still not clear formula
+                    // memset
+                    // memset(result, 0, RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE);
+                    // Some issues with memset function
+                    for (i = 0; i < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE; i++)
+                    {
+                        result[i] = 0;
+                    }
+                    result_index = 0;
+                    // N of samples
+                    for (int r = 0; r < SAMPLES_RSSI; r++)
+                    {
+                        rssi = radio.getRSSI(false);
+                        // ToDO: check if 4 is correct value for 33 power bins
+                        // Now we have more space because we are ignoring low dB values
+                        // we can  / 3 default 4
+                        if (RSSI_OUTPUT_FORMULA == 1)
+                        {
+                            result_index =
+                                /// still not clear formula but it works
+                                uint8_t(abs(rssi) / 4);
+                        }
+                        else if (RSSI_OUTPUT_FORMULA == 2)
+                        {
+                            // I like this formula better
+                            result_index = uint8_t(abs(rssi) / 2) - 22;
+                        }
 
 #ifdef PRINT_DEBUG
-                    Serial.printf("RSSI: %d IDX: %d\n", rssi, result_index);
+                        Serial.printf("RSSI: %d IDX: %d\n", rssi, result_index);
 #endif
-                    // avoid buffer overflow
-                    if (result_index < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE)
-                    {
-                        // Saving max value only rss is negative so smaller is bigger
-                        if (result[result_index] > rssi)
+                        // avoid buffer overflow
+                        if (result_index < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE)
                         {
-                            result[result_index] = rssi;
+                            // Saving max value only rss is negative so smaller is bigger
+                            if (result[result_index] > rssi)
+                            {
+                                result[result_index] = rssi;
+                            }
                         }
+                        else
+                        {
+                            Serial.print("Out-of-Range: result_index %d\n");
+                        }
+                    }
+                }
+#endif // SCAN_METHOD == METHOD_RSSI
+
+                // if this code is not executed LORA radio doesn't work
+                // basically SX1262 requires delay
+                // osd.displayString(12, 1, String(FREQ_BEGIN));
+                // osd.displayString(12, 30 - 8, String(FREQ_END));
+                // delay(2);
+
+#ifdef OSD_ENABLED
+                osdProcess();
+#endif
+#ifdef JOYSTICK_ENABLED
+                if (display_x == cursor_x_position)
+                {
+                    display.setColor(BLACK);
+                    display.fillRect(display_x - 20, 3, 36, 11);
+                    display.setColor(WHITE);
+                }
+#endif
+                detected = false;
+                detected_y[display_x] = false;
+                max_rssi_x = 999;
+
+                for (y = 0; y < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE; y++)
+                {
+
+#ifdef PRINT_DEBUG
+                    Serial.print(String(y) + ":");
+                    Serial.print(String(result[y]) + ",");
+#endif
+#if !defined(FILTER_SPECTRUM_RESULTS) || FILTER_SPECTRUM_RESULTS == false
+                    if (result[y] && result[y] != 0)
+                    {
+                        filtered_result[y] = 1;
                     }
                     else
                     {
-                        Serial.print("Out-of-Range: result_index %d\n");
+                        filtered_result[y] = 0;
                     }
-                }
-            }
-#endif // SCAN_METHOD == METHOD_RSSI
-
-            // if this code is not executed LORA radio doesn't work
-            // basically SX1262 requires delay
-            // osd.displayString(12, 1, String(FREQ_BEGIN));
-            // osd.displayString(12, 30 - 8, String(FREQ_END));
-            // delay(2);
-
-#ifdef OSD_ENABLED
-            osdProcess();
-#endif
-#ifdef JOYSTICK_ENABLED
-            if (display_x == cursor_x_position)
-            {
-                display.setColor(BLACK);
-                display.fillRect(display_x - 20, 3, 36, 11);
-                display.setColor(WHITE);
-            }
-#endif
-            detected = false;
-            detected_y[display_x] = false;
-            max_rssi_x = 999;
-            for (y = 0; y < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE; y++)
-            {
-
-#ifdef PRINT_DEBUG
-                Serial.print(String(y) + ":");
-                Serial.print(String(result[y]) + ",");
-#endif
-
-#if !defined(FILTER_SPECTRUM_RESULTS) || FILTER_SPECTRUM_RESULTS == false
-                if (result[y] && result[y] != 0)
-                {
-                    filtered_result[y] = 1;
-                }
-                else
-                {
-                    filtered_result[y] = 0;
-                }
 #endif
 
 // if samples low ~1 filter removes all values
 #if FILTER_SPECTRUM_RESULTS
-                filtered_result[y] = 0;
-                // Filter Elements without neighbors
-                // if RSSI method actual value is -xxx dB
-                if (result[y] > 0 && samples > 1)
-                {
-                    // do not process 'first' and 'last' row to avoid out of index
-                    // access.
-                    if ((y > 0) && (y != (RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE - 3)))
+
+                    filtered_result[y] = 0;
+                    // Filter Elements without neighbors
+                    // if RSSI method actual value is -xxx dB
+                    if (result[y] > 0 && samples > 1)
                     {
-                        if (((result[y + 1] != 0) && (result[y + 2] != 0)) ||
-                            (result[y - 1] != 0))
+                        // do not process 'first' and 'last' row to avoid out of index
+                        // access.
+                        if ((y > 0) &&
+                            (y != (RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE - 3)))
                         {
-                            filtered_result[y] = 1;
-                        }
-                        else
-                        {
+                            if (((result[y + 1] != 0) && (result[y + 2] != 0)) ||
+                                (result[y - 1] != 0))
+                            {
+                                filtered_result[y] = 1;
+                            }
+                            else
+                            {
 #ifdef PRINT_DEBUG
-                            Serial.print("Filtered:" + String(x) + ":" + String(y) + ",");
+                                Serial.print("Filtered:" + String(x) + ":" + String(y) +
+                                             ",");
 #endif
+                            }
                         }
+                    } // not filtering if samples == 1
+                    else if (result[y] > 0 && samples == 1)
+                    {
+                        filtered_result[y] = 1;
                     }
-                } // not filtering if samples == 1
-                else if (result[y] > 0 && samples == 1)
-                {
-                    filtered_result[y] = 1;
-                }
-#endif
-                // check if we should alarm about a drone presence
-                if ((filtered_result[y] == 1) // we have some data and
-                    && (y <= drone_detection_level) &&
-                    detected_y[display_x] == false) // detection threshold match
-                {
-                    // Set LED to ON (filtered in UI component)
-                    UI_setLedFlag(true);
 
+#endif
+                    // check if we should alarm about a drone presence
+                    if ((filtered_result[y] == 1) // we have some data and
+                        && (y <= drone_detection_level) &&
+                        detected_y[display_x] == false) // detection threshold match
+                    {
+                        // Set LED to ON (filtered in UI component)
+                        UI_setLedFlag(true);
 #if (WATERFALL_ENABLED == true)
-                    if (single_page_scan)
-                    {
-                        // Drone detection true for waterfall
-                        if (!waterfall[display_x])
+                        if (single_page_scan)
                         {
-                            waterfall[display_x] = true;
-                            display.setColor(WHITE);
-                            display.setPixel(display_x, w);
+                            // Drone detection true for waterfall
+                            if (!waterfall[display_x])
+                            {
+                                waterfall[display_x] = true;
+                                display.setColor(WHITE);
+                                display.setPixel(display_x, w);
+                            }
                         }
-                    }
 #endif
-                    if (drone_detected_frequency_start == 0)
-                    {
-                        // mark freq start
-                        drone_detected_frequency_start = freq;
-                    }
+                        if (drone_detected_frequency_start == 0)
+                        {
+                            // mark freq start
+                            drone_detected_frequency_start = freq;
+                        }
 
-                    // mark freq end ... will shift right to last detected range
-                    drone_detected_frequency_end = freq;
+                        // mark freq end ... will shift right to last detected range
+                        drone_detected_frequency_end = freq;
+                        if (SOUND_ON == true)
+                        {
+                            drone_sound_alarm(drone_detection_level, detection_count);
+                        }
 
-                    // If level is set to sensitive,
-                    // start beeping every 10th frequency and shorter
-                    // it improves performance less short beep delays...
-                    if (drone_detection_level <= 25)
-                    {
-                        if (detection_count == 1 && SOUND_ON)
+                        if (DRAW_DETECTION_TICKS == true)
                         {
-                            tone(BUZZER_PIN, 205,
-                                 10); // same action ??? but first time
-                        }
-                        if (detection_count % 5 == 0 && SOUND_ON)
-                        {
-                            tone(BUZZER_PIN, 205,
-                                 10); // same action ??? but everey 5th time
+                            // draw vertical line on top of display for "drone detected"
+                            // frequencies
+                            if (!detected_y[display_x])
+                            {
+                                display.drawLine(display_x, 1, display_x, 4);
+                                detected_y[display_x] = true;
+                            }
                         }
                     }
-                    else
-                    {
-                        if (detection_count % 20 == 0 && SOUND_ON)
-                        {
-                            tone(BUZZER_PIN, 205,
-                                 10); // same action ??? but everey 20th detection
-                        }
-                    }
-
-                    if (DRAW_DETECTION_TICKS == true)
-                    {
-                        // draw vertical line on top of display for "drone detected"
-                        // frequencies
-                        if (!detected_y[display_x])
-                        {
-                            display.drawLine(display_x, 1, display_x, 4);
-                            detected_y[display_x] = true;
-                        }
-                    }
-                }
 #if (WATERFALL_ENABLED == true)
-                if ((filtered_result[y] == 1) && (y <= drone_detection_level) &&
-                    (single_page_scan) && (waterfall[display_x] != true) && new_pixel)
-                {
-                    // If drone not found set dark pixel on the waterfall
-                    // TODO: make something like scrolling up if possible
-                    waterfall[display_x] = false;
-                    display.setColor(BLACK);
-                    display.setPixel(display_x, w);
-                    display.setColor(WHITE);
-                }
+                    if ((filtered_result[y] == 1) && (y <= drone_detection_level) &&
+                        (single_page_scan) && (waterfall[display_x] != true) && new_pixel)
+                    {
+                        // If drone not found set dark pixel on the waterfall
+                        // TODO: make something like scrolling up if possible
+                        waterfall[display_x] = false;
+                        display.setColor(BLACK);
+                        display.setPixel(display_x, w);
+                        display.setColor(WHITE);
+                    }
 #endif
-
-#if 0
-
-#endif // If 0
-
-                // next 2 If's ... adds !!!! 10ms of runtime ......tfk ???
-                if (filtered_result[y] == 1)
-                {
-#ifdef PRINT_DEBUG
-                    Serial.print("Pixel:" + String(display_x) + "(" + String(x) + ")" +
-                                 ":" + String(y) + ",");
-#endif
-                    if (max_rssi_x > y)
-                    {
-                        max_rssi_x = y;
-                    }
-                    // Set signal level pixel
-                    if (y < MAX_POWER_LEVELS - START_LOW)
-                    {
-                        display.setPixel(display_x, y + START_LOW);
-                    }
-                    if (!detected)
-                    {
-                        detected = true;
-                    }
-                }
-
-                // -------------------------------------------------------------
-                // Draw "Detection Level line" every 2 pixel
-                // -------------------------------------------------------------
-                if ((y == drone_detection_level) && (display_x % 2 == 0))
-                {
-                    display.setColor(WHITE);
+                    // next 2 If's ... adds !!!! 10ms of runtime ......tfk ???
                     if (filtered_result[y] == 1)
                     {
-                        display.setColor(INVERSE);
+#ifdef PRINT_DEBUG
+                        Serial.print("Pixel:" + String(display_x) + "(" + String(x) +
+                                     ")" + ":" + String(y) + ",");
+#endif
+                        if (max_rssi_x > y)
+                        {
+                            max_rssi_x = y;
+                        }
+                        // Set signal level pixel
+                        if (y < MAX_POWER_LEVELS - START_LOW)
+                        {
+                            display.setPixel(display_x, y + START_LOW);
+                        }
+                        if (!detected)
+                        {
+                            detected = true;
+                        }
                     }
-                    display.setPixel(display_x, y + START_LOW);
-                    // display.setPixel(display_x, y + START_LOW - 1); // 2 px wide
 
-                    display.setColor(WHITE);
+                    // -------------------------------------------------------------
+                    // Draw "Detection Level line" every 2 pixel
+                    // -------------------------------------------------------------
+                    if ((y == drone_detection_level) && (display_x % 2 == 0))
+                    {
+                        display.setColor(WHITE);
+                        if (filtered_result[y] == 1)
+                        {
+                            display.setColor(INVERSE);
+                        }
+                        display.setPixel(display_x, y + START_LOW);
+                        // display.setPixel(display_x, y + START_LOW - 1); // 2 px wide
+
+                        display.setColor(WHITE);
+                    }
                 }
-            }
-#ifdef JOYSTICK_ENABLED
-            if (display_x == cursor_x_position)
-            {
 
-                display.drawString(display_x - 1, 0, String((int)freq));
-                display.drawLine(display_x, 1, display_x, 12);
-                // if method scan RSSI we can get exact RSSI value
-                display.drawString(display_x + 17, 0, "-" + String((int)max_rssi_x * 4));
-            }
+#ifdef JOYSTICK_ENABLED
+                if (display_x == cursor_x_position)
+                {
+
+                    display.drawString(display_x - 1, 0, String((int)freq));
+                    display.drawLine(display_x, 1, display_x, 12);
+                    // if method scan RSSI we can get exact RSSI value
+                    display.drawString(display_x + 17, 0,
+                                       "-" + String((int)max_rssi_x * 4));
+                }
 #endif
 
 #ifdef PRINT_PROFILE_TIME
-            scan_time += (millis() - scan_start_time);
+                scan_time += (millis() - scan_start_time);
 #endif
-            // count detected
-            if (detected)
-            {
-                detection_count++;
-            }
+                // count detected
+                if (detected)
+                {
+                    detection_count++;
+                }
 
 #ifdef PRINT_DEBUG
-            Serial.println("....\n");
+                Serial.println("....\n");
 #endif
-            if (first_run || ANIMATED_RELOAD)
-            {
-                display.display();
-            }
+                if (first_run || ANIMATED_RELOAD)
+                {
+                    display.display();
+                }
 
-            // Detection level button short press
-            if (button.pressedFor(100)
+#ifndef LILYGO
+                // Detection level button short press
+                if (button.pressedFor(100)
 #ifdef JOYSTICK_ENABLED
-                || joy_btn_click()
-#endif
-            )
-            {
-                button.update();
-                button_pressed_counter = 0;
-                // if long press stop
-                while (button.pressedNow()
-#ifdef JOYSTICK_ENABLED
-                       || joy_btn_click()
+                    || joy_btn_click()
 #endif
                 )
                 {
-                    delay(10);
-                    // Print Curent frequency
-                    display.setTextAlignment(TEXT_ALIGN_CENTER);
-                    display.drawString(128 / 2, 0, String(freq));
-                    display.display();
-                    button_pressed_counter++;
+                    button.update();
+                    button_pressed_counter = 0;
+                    // if long press stop
+                    while (button.pressedNow()
+#ifdef JOYSTICK_ENABLED
+                           || joy_btn_click()
+#endif
+                    )
+                    {
+                        delay(10);
+                        // Print Curent frequency
+                        display.setTextAlignment(TEXT_ALIGN_CENTER);
+                        display.drawString(128 / 2, 0, String(freq));
+                        display.display();
+                        button_pressed_counter++;
+                        if (button_pressed_counter > 150)
+                        {
+                            digitalWrite(LED, HIGH);
+                            delay(150);
+                            digitalWrite(LED, LOW);
+                        }
+                    }
                     if (button_pressed_counter > 150)
                     {
-                        digitalWrite(LED, HIGH);
-                        delay(150);
-                        digitalWrite(LED, LOW);
+                        // Remove Curent Frequency Text
+                        display.setTextAlignment(TEXT_ALIGN_CENTER);
+                        display.setColor(BLACK);
+                        display.drawString(128 / 2, 0, String(freq));
+                        display.setColor(WHITE);
+                        display.display();
+                        break;
                     }
-                }
-                if (button_pressed_counter > 150)
-                {
-                    // Remove Curent Frequency Text
-                    display.setTextAlignment(TEXT_ALIGN_CENTER);
-                    display.setColor(BLACK);
-                    display.drawString(128 / 2, 0, String(freq));
-                    display.setColor(WHITE);
-                    display.display();
-                    break;
-                }
-                if (button_pressed_counter > 50 && button_pressed_counter < 150)
-                {
-
-                    if (!joy_btn_clicked)
+                    if (button_pressed_counter > 50 && button_pressed_counter < 150)
                     {
-                        // Visually confirm it's off so user releases button
-                        display.displayOff();
-                        // Deep sleep (has wait for release so we don't wake up
-                        // immediately)
-                        heltec_deep_sleep();
+                        if (!joy_btn_clicked)
+                        {
+                            // Visually confirm it's off so user releases button
+                            display.displayOff();
+                            // Deep sleep (has wait for release so we don't wake up
+                            // immediately)
+                            heltec_deep_sleep();
+                        }
+                        break;
                     }
-                    break;
-                }
-                button.update();
-                display.setTextAlignment(TEXT_ALIGN_RIGHT);
-                // erase old drone detection level value
-                display.setColor(BLACK);
-                display.fillRect(128 - 13, 0, 13, 13);
-                display.setColor(WHITE);
-                drone_detection_level++;
-                // print new value
-                display.drawString(128, 0, String(drone_detection_level));
-                tone(BUZZER_PIN, 104, 150);
-                if (drone_detection_level > 30)
-                {
-                    drone_detection_level = 1;
-                }
-            }
-            // wait a little bit before the next scan,
-            // otherwise the SX1262 hangs
-            // Add more logic before insead of long delay...
-            int delay_cnt = 1;
-            while (radio.spectralScanGetStatus() != RADIOLIB_ERR_NONE)
-            {
-                if (delay_cnt == 1)
-                {
-                    // trying to use display as delay..
-                    display.display();
-                }
-                else
-                {
-                    heltec_delay(ONE_MILLISEC * 2);
+                    button.update();
+                    display.setTextAlignment(TEXT_ALIGN_RIGHT);
+                    // erase old drone detection level value
+                    display.setColor(BLACK);
+                    display.fillRect(128 - 13, 0, 13, 13);
+                    display.setColor(WHITE);
+                    drone_detection_level++;
+                    // print new value
+                    display.drawString(128, 0, String(drone_detection_level));
+                    tone(BUZZER_PIN, 104, 150);
+                    if (drone_detection_level > 30)
+                    {
+                        drone_detection_level = 1;
+                    }
                 }
 
-                Serial.println("spectralScanGetStatus ERROR(" +
-                               String(radio.spectralScanGetStatus()) +
-                               ") hard delay(2) - " + String(delay_cnt));
-                // if error than speed is slow animating chart
-                ANIMATED_RELOAD = true;
+#endif // END LILYGO
 
-                delay_cnt++;
-            }
-            // TODO: move osd logic here as a dalay ;)
-            // Loop is needed if heltec_delay(1) not used
-            heltec_loop();
+                // wait a little bit before the next scan,
+                // otherwise the SX1262 hangs
+                // Add more logic before instead of long delay...
+                int delay_cnt = 1;
+#ifdef METHOD_SPECTRAL
+                if (false && state != RADIOLIB_ERR_NONE)
+                {
+                    if (delay_cnt == 1)
+                    {
+                        Serial.println("E:getResult");
+                        display.drawString(0, 64 - 10, "E:getResult");
+                        // trying to use display as delay..
+                        display.display();
+                    }
+                    else
+                    {
+                        heltec_delay(ONE_MILLISEC * 2);
+                        Serial.println("E:getStatus");
+                        display.drawString(0, 64 - 10, "E:getResult");
+                        // trying to use display as delay..
+                        display.display();
+                    }
+
+                    Serial.println("spectralScanGetStatus ERROR(" +
+                                   String(radio.spectralScanGetStatus()) +
+                                   ") hard delay(2) - " + String(delay_cnt));
+                    // if error than speed is slow animating chart
+                    ANIMATED_RELOAD = true;
+                    delay(50);
+                    delay_cnt++;
+                }
+#endif
+                // TODO: move osd logic here as a daley ;)
+                // Loop is needed if heltec_delay(1) not used
+                heltec_loop();
 // Move joystick
 #ifdef JOYSTICK_ENABLED
-            int joy_x_pressed = get_joy_x(true);
-            if (joy_x_pressed > 0)
-            {
-                cursor_x_position--;
-                display.drawString(cursor_x_position, 0, String((int)freq));
-                display.drawLine(cursor_x_position, 1, cursor_x_position, 10);
-                display.display();
-                delay(10);
-            }
-            else if (joy_x_pressed < 0)
-            {
-                cursor_x_position++;
-                display.drawString(cursor_x_position, 0, String((int)freq));
-                display.drawLine(cursor_x_position, 1, cursor_x_position, 10);
-                display.display();
-                delay(10);
-            }
-            if (cursor_x_position > DISPLAY_WIDTH || cursor_x_position < 0)
-            {
-                cursor_x_position = 0;
-                display.drawString(cursor_x_position, 0, String((int)freq));
-                display.drawLine(cursor_x_position, 1, cursor_x_position, 10);
-                display.display();
-                delay(10);
-            }
+                int joy_x_pressed = get_joy_x(true);
+                if (joy_x_pressed > 0)
+                {
+                    cursor_x_position--;
+                    display.drawString(cursor_x_position, 0, String((int)freq));
+                    display.drawLine(cursor_x_position, 1, cursor_x_position, 10);
+                    display.display();
+                    delay(10);
+                }
+                else if (joy_x_pressed < 0)
+                {
+                    cursor_x_position++;
+                    display.drawString(cursor_x_position, 0, String((int)freq));
+                    display.drawLine(cursor_x_position, 1, cursor_x_position, 10);
+                    display.display();
+                    delay(10);
+                }
+                if (cursor_x_position > DISPLAY_WIDTH || cursor_x_position < 0)
+                {
+                    cursor_x_position = 0;
+                    display.drawString(cursor_x_position, 0, String((int)freq));
+                    display.drawLine(cursor_x_position, 1, cursor_x_position, 10);
+                    display.display();
+                    delay(10);
+                }
 #endif
-        }
-        w++;
-        if (w > ROW_STATUS_TEXT + 1)
-        {
-            w = WATERFALL_START;
-        }
+            }
+            w++;
+            if (w > ROW_STATUS_TEXT + 1)
+            {
+                w = WATERFALL_START;
+            }
 #if (WATERFALL_ENABLED == true)
-        // Draw waterfall position cursor
-        if (single_page_scan)
-        {
-            display.setColor(BLACK);
-            display.drawHorizontalLine(0, w, STEPS);
-            display.setColor(WHITE);
-        }
+            // Draw waterfall position cursor
+            if (single_page_scan)
+            {
+                display.setColor(BLACK);
+                display.drawHorizontalLine(0, w, STEPS);
+                display.setColor(WHITE);
+            }
 #endif
-        // Render display data here
-        display.display();
+            // Render display data here
+            display.display();
 #ifdef OSD_ENABLED
-        // Sometimes OSD prints entire screan with the digits.
-        // We need clean the screan to fix it.
-        // We can do it every time but to optimise doing every N times
-        if (global_counter != 0 && global_counter % 10 == 0)
-        {
+            // Sometimes OSD prints entire screen with the digits.
+            // We need clean the screen to fix it.
+            // We can do it every time but to optimise doing every N times
+            if (global_counter != 0 && global_counter % 10 == 0)
+            {
 #if !defined(BT_SCANNING_ENABLED) && !defined(WIFI_SCANNING_ENABLED)
-            osd.clear();
-            osd.displayChar(14, 1, 0x10f);
-            global_counter = 0;
+                osd.clear();
+                osd.displayChar(14, 1, 0x10f);
+                global_counter = 0;
+#endif
+            }
+            ANIMATED_RELOAD = false;
+            global_counter++;
 #endif
         }
-        ANIMATED_RELOAD = false;
-        global_counter++;
-#endif
     }
-
 #ifdef PRINT_DEBUG
     // Serial.println("----");
 #endif
