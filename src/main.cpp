@@ -591,7 +591,7 @@ int binToRSSI(int bin)
     return 11 + (bin * 4);
 }
 
-// returns tru if continue the code is false breake the loop
+// return true if continue the code is false break the loop
 bool buttonPressHandler(float freq)
 {
     // Detection level button short press
