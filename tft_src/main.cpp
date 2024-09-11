@@ -473,22 +473,20 @@ void loop()
         drone_detection_level++;
         if (drone_detection_level > 107)
             drone_detection_level = DEFAULT_DRONE_DETECTION_LEVEL - 20;
-    }
-    if (button.pressedFor(500))
-    {
         while (button.pressedNow())
         {
+            delay(100);
             button_pressed_counter++;
             // button.update();
-            delay(50);
+
             if (button_pressed_counter > 18)
             {
                 drawText(320 - 5, 5, "*", ST7789_WHITE);
             }
         }
-        drone_detection_level--;
     }
-    if (button_pressed_counter < 18 && button_pressed_counter > 10)
+
+    if (button_pressed_counter < 9 && button_pressed_counter > 5)
     {
         heltec_deep_sleep();
     }
