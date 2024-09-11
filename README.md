@@ -268,7 +268,7 @@ GND -> GND <br />
 ## Buzzer/Beeper Wiring
 TMB12A03 - in my case. Low voltage is better.  <br />
 **Buzzer -> Heltec V3**  <br />
-+ -> 41 <br />
+(+) -> 41 <br />
 GND (another) -> GND  <br />
 
 
