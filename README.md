@@ -223,7 +223,7 @@ or buy :
 We are using pin 41 as a Buzzer trigger. Connect buzzer + leg with pin 41 and - leg with the ground (GND). You can change the buzzer pin in the code.
 
 ## DFRobot OSD Wiring 
-**Heltec V3 -> DFRobot OSD**
+**Heltec V3 -> DFRobot OSD** <br />
 GND -> GND <br />
 3V3 -> 3V3 <br />
 26 -> SCK <br />
@@ -237,13 +237,13 @@ https://github.com/Genaker/LoraSA/issues/11
 ![image](https://github.com/user-attachments/assets/3ba8230d-21de-449d-881b-bdc5f5b4907d)
 
 # Camera to DF robot Wiring
-Camera -> DFRobotOSD <br />
+**Camera -> DFRobotOSD** <br />
 Video out -> In <br />
 GND -> GND <br />
 3v3 -> 3V3 Heltec or some 3v on FPV <br />
 
-# DFRobot to Drone or VTX(video transmitter)
-**DF Robot -> VTX or ** <br />
+# DFRobot to Drone or VTX(video transmitter)  
+**DF Robot -> VTX or** <br />
 Video Out - Video IN <br />
 
 ```
@@ -258,7 +258,7 @@ Video Out - Video IN <br />
 https://www.aliexpress.us/item/2251832815289133.html 
 https://www.amazon.com/dp/B00P7QBGD2
 
-**Loystic -> Heltec V3**
+**Loystic -> Heltec V3**  <br />
 SW -> 46 <br />
 VRX -> 19 <br />
 VRY -> X has not been implemented yet  <br />
@@ -267,7 +267,7 @@ GND -> GND <br />
 
 ## Buzzer/Beeper Wiring
 TMB12A03 - in my case. Low voltage is better.  <br />
-**Buzzer -> Heltec V3**
+**Buzzer -> Heltec V3**  <br />
 + -> 41 <br />
 GND (another) -> GND  <br />
 
