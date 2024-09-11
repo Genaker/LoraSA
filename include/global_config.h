@@ -22,4 +22,7 @@
 #define WATERFALL_ENABLED true
 #define WATERFALL_START 37
 
+#ifdef LILYGO
+#define LED 46
+#endif // end not LILYGO
 #endif
