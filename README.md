@@ -147,8 +147,11 @@ If less, ESP32 will turn off. Fast pressing(less than 0.5 second) P button chang
 1. Install VSCode
 2. install Platform.IO extension
    ![image](https://github.com/user-attachments/assets/00547068-6153-4c78-9f12-54981b013b06)
-3. Connect ESP32 to USB. Install USB drivers for Windows
-4. Clone this Git Repo or download zip of the sources
+3. Connect ESP32 to USB. Install USB CP2101 drivers for Windows or other OS
+   https://docs.heltec.org/general/establish_serial_connection.html#for-windows
+   https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers?tab=downloads
+   
+5. Clone this Git Repo or download zip of the sources
    ![image](https://github.com/user-attachments/assets/971b6592-3b71-414c-971c-2ecd20f0f0b7)
 
     ```bash
@@ -157,19 +160,19 @@ If less, ESP32 will turn off. Fast pressing(less than 0.5 second) P button chang
 
    NOTE: in you case name will be Just LoraSA. I have LoraSA2 because I already have LoraSA folder
 
-5. Open the Project with the VS code Platform.IO
+6. Open the Project with the VS code Platform.IO
    ![image](https://github.com/user-attachments/assets/5066836b-32ac-4a24-ac03-b5f739a6a658)
    ![image](https://github.com/user-attachments/assets/da14488d-7a4a-410e-b754-59598578016d)
 
-6. Select Proper Environment
+7. Select Proper Environment
    ![image](https://github.com/user-attachments/assets/a9c6557b-a387-4457-b59b-b3d7242d2826)
-7. Select ESP32 USB Device to program
+8. Select ESP32 USB Device to program
    ![image](https://github.com/user-attachments/assets/af76c4b1-7122-45e1-b26b-08b59e03ca3b)
 Note: It is theoretically possible to program via WiFi and BTH.
-8. Program your ESP32
+9. Program your ESP32
     ![image](https://github.com/user-attachments/assets/9e67afd8-0522-4a96-82dc-8e1cdb32add5)
 
-9. Wait until you are done with the compilation and upload.
+10. Wait until you are done with the compilation and upload.
     Usually takes 1 minute. The first run is slower. It needs to compile all libraries.
     ![image](https://github.com/user-attachments/assets/6796eb5d-6e3f-45bc-b88c-251499f1ad47)
 You will have the UCOG SA logo and spectrum analyzing scanning screen when done.
@@ -181,6 +184,16 @@ Heltec ESP32 Lora V3:
 <https://www.amazon.com/Heltec-Development-863-870MHz-ESP32-S3FN8-902-928MHz/dp/B0D1H1FN9Y/>
 <https://heltec.org/project/wifi-lora-32-v3/>
 <https://www.aliexpress.us/item/3256807037422978.html>
+
+Or Heltec Wireless Stick. The same hardware but without or with a smaller display 
+https://heltec.org/project/wireless-stick-v3/
+https://heltec.org/project/wireless-stick-lite-v2/
+
+Heltec Vision Master E290 - With large e-ink display 293x128:
+
+https://heltec.org/project/vision-master-e290/
+https://www.aliexpress.us/item/3256807048047234.html
+**NOTE: to upload a new code, you need to press BOOT + RESET button**
 
 Battery with Wire JT connector :
 <https://www.amazon.com/EEMB-2000mAh-Battery-Rechargeable-Connector/dp/B08214DJLJ>

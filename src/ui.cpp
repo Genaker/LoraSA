@@ -18,9 +18,12 @@ static bool ui_initialized = false;
 static bool led_flag = false;
 static unsigned short int scan_progress_count = 0;
 
+#ifdef Vision_Master_E290
+static DEPG0290BxS800FxX_BW *display_instance;
+#else
 //(0x3c, SDA_OLED, SCL_OLED, DISPLAY_GEOMETRY);
 static SSD1306Wire *display_instance;
-
+#endif
 // temporary dirty import ... to be solved durring upcoming refactoring
 extern unsigned int drone_detection_level;
 extern unsigned int RANGE_PER_PAGE;
@@ -37,6 +40,7 @@ extern unsigned int range_item;
 
 extern uint64_t loop_time;
 
+#ifndef Vision_Master_E290
 void UI_Init(SSD1306Wire *display_ptr)
 {
     // init pointer to display instance.
@@ -47,6 +51,20 @@ void UI_Init(SSD1306Wire *display_ptr)
     display_instance->drawXbm(0, 2, 128, 64, epd_bitmap_ucog);
     display_instance->display();
 }
+#endif
+
+#ifdef Vision_Master_E290
+void UI_Init(DEPG0290BxS800FxX_BW *display_ptr)
+{
+    // init pointer to display instance.
+    display_instance = display_ptr;
+    // check for null ???
+    display_instance->clear();
+    // draw the UCOG welcome logo
+    display_instance->drawXbm(0, 2, 128, 64, epd_bitmap_ucog);
+    display_instance->display();
+}
+#endif
 
 void UI_setLedFlag(bool new_status) { led_flag = new_status; }
 
