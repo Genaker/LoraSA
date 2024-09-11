@@ -39,6 +39,9 @@ char buffer[256];
 #define DISPLAY_HEIGHT 170
 // Without this line Lora Radio doesn't work with heltec lib
 #define ARDUINO_heltec_wifi_32_lora_V3
+// T190 button pin
+#define BUTTON GPIO_NUM_21
+#define HELTEC_POWER_BUTTON
 #include "heltec_unofficial.h"
 
 // We are not using spectral scan here only RSSI method
@@ -68,6 +71,7 @@ constexpr bool DRAW_DETECTION_TICKS = true;
 #define SAMPLES_RSSI 5 // 21 //
 
 #define FREQ_BEGIN 650
+#define DEFAULT_DRONE_DETECTION_LEVEL 90
 
 #define RANGE (int)(FREQ_END - FREQ_BEGIN)
 
@@ -110,7 +114,7 @@ bool waterfall[STEPS], detected_y[STEPS]; // 20 - ??? steps of the waterfall
 bool first_run, new_pixel, detected_x = false;
 // drone detection flag
 bool detected = false;
-uint64_t drone_detection_level = 90;
+uint64_t drone_detection_level = DEFAULT_DRONE_DETECTION_LEVEL;
 uint64_t drone_detected_frequency_start = 0;
 uint64_t drone_detected_frequency_end = 0;
 uint64_t detection_count = 0;
@@ -137,6 +141,10 @@ uint64_t ranges_count = 0;
 float freq = 0;
 int rssi = 0;
 int state = 0;
+
+#define MAX_MHZ_INTERVAL 2000
+// 2KB ToDo: make dynamic array or sam structure
+uint16_t detailed_scan_candidate[MAX_MHZ_INTERVAL];
 
 #ifdef METHOD_SPECTRAL
 constexpr int samples = SAMPLES;
@@ -192,21 +200,6 @@ void drawText(uint16_t x, uint16_t y, String text, uint16_t color = ST7789_WHITE
     st7789->print(text.c_str());
 }
 
-void drawSetupText()
-{
-    // create more fonts at http://oleddisplay.squix.ch/
-    /** *display.setTextAlignment(TEXT_ALIGN_LEFT);
-      display.setFont(ArialMT_Plain_10);
-      display.drawString(0, 0, "Spectrum Analyzer Lora SA");
-      display.setFont(ArialMT_Plain_16);
-      display.drawString(0, 10, "SX 1262");
-      display.setFont(ArialMT_Plain_24);
-      display.drawString(0, 26, "TFT display");
-      display.drawString(0, 56, "RF Spectrum TFT-ray");
-      display.setFont(ArialMT_Plain_24);
-      **/
-}
-
 #define battery_w 13
 #define battery_h 13
 #define BATTERY_PIN 7
@@ -219,7 +212,6 @@ void battery()
 #ifdef PRINT_DEBUG
     Serial.printf("ADC analog value = %.2f\n", battery_levl);
 #endif
-    // display.drawString(257, 0, String(heltec_battery_percent(battery_levl)) + "%");
     // TODO: battery voltage doesn't work
     if (battery_levl < battery_one)
     {
@@ -255,17 +247,6 @@ void battery()
     }
 }
 
-void VextON(void)
-{
-    pinMode(18, OUTPUT);
-    digitalWrite(18, HIGH);
-}
-void VextOFF(void) // Vext default OFF
-{
-    pinMode(18, OUTPUT);
-    digitalWrite(18, LOW);
-}
-
 constexpr int lower_level = 108;
 constexpr int up_level = 40;
 int rssiToPix(int rssi)
@@ -286,18 +267,18 @@ int rssiToPix(int rssi)
 int rssiToColor(int rssi, bool waterfall = false)
 {
     if (rssi < 80)
-        return 63488;
+        return ST7789_RED; // Red
     if (rssi < 85)
-        return 0xfa08;
+        return ST7789_GREEN; // Green
     if (rssi < 90)
-        return 0xcfe0;
+        return ST7789_YELLOW; // Yellow
     if (rssi < 95)
-        return 0x01ff;
+        return ST7789_BLUE; // Blue
     if (rssi < 100)
-        return 0x8d5f;
+        return ST7789_MAGENTA; // Magenta
     if (waterfall)
-        return ST7789_BLACK;
-    return ST7789_WHITE;
+        return ST7789_BLACK; // Black on waterfall
+    return ST7789_WHITE;     // White on chart
 }
 
 long timeSinceLastModeSwitch = 0;
@@ -314,7 +295,7 @@ int x1 = 0, y2 = 0;
 unsigned int screen_update_loop_counter = 0;
 unsigned int x_screen_update = 0;
 int rssi_printed = 0;
-constexpr int rssi_window_size = 30;
+constexpr int rssi_window_size = 45;
 int max_i_rssi = -999;
 int window_max_rssi = -999;
 int window_max_fr = -999;
@@ -323,6 +304,8 @@ int max_history_rssi[STEPS + 2];
 long display_scan_start = 0;
 long display_scan_end = 0;
 long display_scan_i_end = 0;
+long rssi_single_start = 0;
+long rssi_single_end = 0;
 int scan_iterations = 0;
 // will be changed to false after first run
 bool clear_rssi_history = true;
@@ -334,10 +317,10 @@ void loop()
 {
     if (screen_update_loop_counter == 0)
     {
+        fr_x[x1] = 0;
         // Zero arrays
         for (int i = 0; i < STEPS; i++)
         {
-            fr_x[x1] = 0;
             max_scan_rssi[i] = -999;
             if (clear_rssi_history == true)
                 max_history_rssi[i] = -999;
@@ -346,13 +329,27 @@ void loop()
         display_scan_start = millis();
     }
     fr_x[x1] = fr;
+
+    int u = 0;
+    int additional_samples = 10;
+
+    // Clear old data with the cursor ...
+    st7789->drawFastVLine(x1, lower_level, -lower_level + 11, ST7789_BLACK);
     // Draw max history line
     st7789->drawLine(x1, rssiToPix(max_history_rssi[x1]), x1, lower_level,
                      12710 /*gray*/);
-    int u = 0;
     // Fetch samples
     for (int i = 0; i < SAMPLES_RSSI; i++)
     {
+        // Checking more times curtain freq
+        if (additional_samples > 0 &&
+            (detailed_scan_candidate[(int)fr] + detailed_scan_candidate[(int)fr + 1] +
+                 detailed_scan_candidate[(int)fr + 2] >
+             0))
+        {
+            i--;
+            additional_samples--;
+        }
 
         radio.setFrequency((float)fr + (float)(rssi_mhz_step * u),
                            false); // false = no calibration need here
@@ -361,35 +358,97 @@ void loop()
         {
             u = 0;
         }
-
+        if (rssi_single_start == 0)
+        {
+            rssi_single_start = millis();
+        }
         rssi2 = radio.getRSSI(false);
         scan_iterations++;
-        if (rssi2 > lower_level)
+        if (rssi_single_end == 0)
+        {
+            rssi_single_end = millis();
+        }
+        if (abs(rssi2) > lower_level)
+        {
+#ifdef PRINT_DEBUG
+            Serial.print("SKIP -> " + String(fr) + ":" + String(rssi2));
+#endif
+            // if lower than detection level set any
+            if (max_scan_rssi[x1] == -999)
+            {
+                max_scan_rssi[x1] = rssi2;
+            }
             continue;
+        }
 #ifdef PRINT_DEBUG
         Serial.println(String(fr) + ":" + String(rssi2));
 #endif
-        // display.drawString(x1, (int)y2, String(fr) + ":" + String(rssi2));
-        // display.setPixel(x1, rssiToPix(rssi2));
         st7789->drawPixel(x1, rssiToPix(rssi2), rssiToColor(abs(rssi2)));
         st7789->drawPixel(x1, rssiToPix(rssi2) - 1, rssiToColor(abs(rssi2)));
         st7789->drawPixel(x1, rssiToPix(rssi2) - 2, rssiToColor(abs(rssi2)));
         // Draw Update Cursor
-        st7789->drawFastVLine(x1 + 1, lower_level, -lower_level + 25, ST7789_BLACK);
-        st7789->drawFastVLine(x1 + 2, lower_level, -lower_level + 25, ST7789_BLACK);
-        st7789->drawFastVLine(x1 + 3, lower_level, -lower_level + 25, ST7789_BLACK);
+        st7789->drawFastVLine(x1 + 1, lower_level, -lower_level + 11, ST7789_BLACK);
+        st7789->drawFastVLine(x1 + 2, lower_level, -lower_level + 11, ST7789_BLACK);
+        st7789->drawFastVLine(x1 + 3, lower_level, -lower_level + 11, ST7789_BLACK);
 
+        if (max_scan_rssi[x1] == -999)
+        {
+            max_scan_rssi[x1] = rssi2;
+        }
+        /// -999 < -100
         if (max_scan_rssi[x1] < rssi2)
         {
+#ifdef PRINT_DEBUG
+            Serial.println("MAx Scan x-" + String(x1) + ": " + String(max_scan_rssi[x1]) +
+                           "< " + String(rssi2));
+#endif
             max_scan_rssi[x1] = rssi2;
             if (max_history_rssi[x1] < max_scan_rssi[x1])
             {
                 max_history_rssi[x1] = rssi2;
             }
         }
+        // Max dB in window
+        if (window_max_rssi < max_scan_rssi[x1])
+        {
+            // Max Mhz in window
+            window_max_fr = fr_x[x1];
+            window_max_rssi = max_scan_rssi[x1];
+        }
     }
-    // Waterfall Pixel
-    st7789->drawPixel(x1, w, rssiToColor(abs(max_scan_rssi[x1]), true));
+    // Writing pixel only if it is bigger than drone detection level
+    if (abs(max_scan_rssi[x1]) < drone_detection_level)
+    {
+        // Waterfall Pixel
+        st7789->drawPixel(x1, w, rssiToColor(abs(max_scan_rssi[x1]), true));
+
+        detailed_scan_candidate[(int)fr] = (int)fr;
+    }
+    else
+    {
+        detailed_scan_candidate[(int)fr] = (int)0;
+    }
+    // Draw legend for windows
+    if (x1 % rssi_window_size == 0 || x1 == DISPLAY_WIDTH)
+    {
+        if (abs(window_max_rssi) < drone_detection_level && window_max_rssi != 0 &&
+            window_max_rssi != -999)
+        {
+            y2 = 15;
+
+            drawText(x1 - rssi_window_size + 3, y2, String(window_max_rssi) + "dB",
+                     rssiToColor(abs(window_max_rssi)));
+            drawText(x1 - rssi_window_size + 3, y2 + 10,
+                     String((int)window_max_fr) + "MHz",
+                     rssiToColor(abs(window_max_rssi)));
+            // Vertical lines between windows
+            for (int l = y2; l < 100; l += 4)
+            {
+                st7789->drawPixel(x1, l, ST7789_YELLOW);
+            }
+        }
+        window_max_rssi = -999;
+    }
 
     // Waterfall cursor
     st7789->drawFastHLine(0, w + 1, DISPLAY_WIDTH, ST7789_BLACK);
@@ -398,69 +457,63 @@ void loop()
     // drone detection level line
     if (x1 % 2 == 0)
     {
-        // display.setPixel(x1, rssiToPix(drone_detection_level));
-        st7789->drawPixel(x1, rssiToPix(drone_detection_level) + 3, ST7789_GREEN);
+        st7789->drawPixel(x1, rssiToPix(drone_detection_level), ST7789_GREEN);
     }
     fr += mhz_step;
-    x1++;
+
     if (display_scan_i_end == 0)
     {
         display_scan_i_end = millis();
     }
+    // Button Logic
+    heltec_loop();
+    button_pressed_counter = 0;
+    if (button.pressed())
+    {
+        drone_detection_level++;
+        if (drone_detection_level > 107)
+            drone_detection_level = DEFAULT_DRONE_DETECTION_LEVEL - 20;
+    }
+    if (button.pressedFor(500))
+    {
+        while (button.pressedNow())
+        {
+            button_pressed_counter++;
+            // button.update();
+            delay(50);
+            if (button_pressed_counter > 18)
+            {
+                drawText(320 - 5, 5, "*", ST7789_WHITE);
+            }
+        }
+        drone_detection_level--;
+    }
+    if (button_pressed_counter < 18 && button_pressed_counter > 10)
+    {
+        heltec_deep_sleep();
+    }
+
     // Main N x-axis full loop end logic
     if (x1 >= STEPS)
     {
         w++;
         if (w > WATERFALL_END)
+        {
             w = WATERFALL_START;
+        }
+#ifdef PRINT_DEBUG
+        Serial.println("Screen End for Output: " + String(screen_update_loop_counter));
+#endif
+        // Doing output only after full scan
         if (screen_update_loop_counter + 1 == SCANS_PER_DISPLAY)
         {
-            // max Mhz and dB in window
-            for (int i = 0; i < STEPS; i++)
-            {
-                // Max dB in window
-                if (window_max_rssi < max_scan_rssi[i])
-                {
-                    // Max Mhz in window
-                    window_max_fr = fr_x[i];
-                    window_max_rssi = max_scan_rssi[i];
-                }
-                if (i % rssi_window_size == 0 || (i % (DISPLAY_WIDTH - 1)) == 0)
-                {
-
-                    if (abs(window_max_rssi) < drone_detection_level)
-                    {
-                        y2 = 10;
-
-                        /** display.setFont(ArialMT_Plain_10);
-                         display.drawStringMaxWidth(i - rssi_window_size, y2,
-                                                    rssi_window_size,
-                                                    String(window_max_rssi) + "dB");
-                         display.drawString(i - rssi_window_size + 5, y2 + 10,
-                                            String(window_max_fr));
-                                            */
-                        drawText(i - rssi_window_size, y2, String(window_max_rssi) + "dB",
-                                 rssiToColor(window_max_rssi));
-                        drawText(i - rssi_window_size + 5, y2,
-                                 String(String(window_max_fr)) + "dB",
-                                 rssiToColor(window_max_rssi));
-                        // Vertical lines between windows
-                        for (int l = y2; l < 100; l += 4)
-                        {
-                            st7789->drawPixel(i, l, ST7789_YELLOW);
-                            // display.setPixel(i, l);
-                        }
-                    }
-                    window_max_rssi = -999;
-                }
-            }
-
+            // Scan results to max Mhz and dB in window
             display_scan_end = millis();
 
-            // display.setFont(ArialMT_Plain_10);
+            st7789->fillRect(0, 0, DISPLAY_WIDTH, 11, ST7789_BLACK);
             drawText(0, 0,
                      "T:" + String(display_scan_end - display_scan_start) + "/" +
-                         String(display_scan_i_end - display_scan_start) + " L:-" +
+                         String(rssi_single_end - rssi_single_start) + " L:-" +
                          String(drone_detection_level) + "dB",
                      ST7789_BLUE);
 
@@ -509,16 +562,13 @@ void loop()
             // End Mhz
             drawText(DISPLAY_WIDTH - 24, DISPLAY_HEIGHT - 10, String((int)fr));
 
-            // display.display();
-            //  display will be cleared next scan iteration. it is just buffer clear
-            //  memset(buffer, 0, displayBufferSize);
-            // display.clear();
-            // st7789->fillRect(0, 0, DISPLAY_WIDTH, lower_level, ST7789_BLACK);
             screen_update_loop_counter = 0;
             scan_iterations = 0;
             display_scan_i_end = 0;
         }
         fr = FREQ_BEGIN;
+        rssi_single_start = 0;
+        rssi_single_end = 0;
         x1 = 0;
         rssi_printed = 0;
         // Prevent screen_update_loop_counter++ when it is just nulled
@@ -527,13 +577,23 @@ void loop()
             screen_update_loop_counter++;
         }
     }
+    // not increase at the end of scan when nulled
+    else
+    {
+        x1++;
+    }
+
 #ifdef PRINT_DEBUG
-    Serial.println("Full Scan:" + String(screen_update_loop_counter));
+    Serial.println("Full Scan Counter:" + String(screen_update_loop_counter));
 #endif
 }
 
 void setup()
 {
+    for (int i = 0; i < MAX_MHZ_INTERVAL; i++)
+    {
+        detailed_scan_candidate[i] = 0;
+    }
     Serial.begin(115200);
     pinMode(7, OUTPUT);
     digitalWrite(7, LOW);
@@ -545,6 +605,8 @@ void setup()
     // set up slave select pins as outputs as the Arduino API
     pinMode(gspi_lcd->pinSS(), OUTPUT);
     st7789->init(170, 320);
+    st7789->setSPISpeed(40000000);
+    /// st7789->setSPISpeed(3000000); /// default ~ 1000000
 
     Serial.printf("Ready!\r\n");
     st7789->setRotation(1);
@@ -557,7 +619,7 @@ void setup()
     // digitalWrite(5, HIGH);
 
     st7789->fillScreen(ST7789_BLACK);
-    // st7789->drawFastHLine(0, 15, 320, ST7789_WHITE);
+
     st7789->drawXBitmap(100, 50, epd_bitmap_ucog, 128, 64, ST7789_WHITE);
     init_radio();
     state = radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_NONE);

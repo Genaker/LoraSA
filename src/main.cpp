@@ -1164,7 +1164,7 @@ void loop(void)
 // LiLyGo doesn't have button ;(
 // ToDO: Check if we use BOOT button
 #ifndef LILYGO
-            if (buttonPressHandler() == false)
+            if (buttonPressHandler(freq) == false)
                 break;
 #endif // END LILYGO
 
