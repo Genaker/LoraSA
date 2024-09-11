@@ -271,4 +271,19 @@ TMB12A03 - in my case. Low voltage is better.  <br />
 (+) -> 41 <br />
 GND (another) -> GND  <br />
 
+## Select Board to build
+Select Visual Code environment:
+![image](https://github.com/user-attachments/assets/3765615b-3a80-4270-bc74-8f6eae2b8458)
+
+Edit **paltformio.io** uncommenting/selecting your sources
+```
+[platformio]
+; for env:vision-master-e190
+; src_dir = tft_src
+; for env:vision-master-e290
+; src_dir = eink_src
+; for env:heltec_wifi_lora_32_V3
+; src_dir = src ;;Default
+```
+for LilyGo use env:heltec_wifi_lora_32_V3
 
