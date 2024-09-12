@@ -222,6 +222,24 @@ or buy :
 ![image](https://github.com/user-attachments/assets/a1e00b51-5566-4ff5-98fe-67eaeb5bc81f)
 We are using pin 41 as a Buzzer trigger. Connect buzzer + leg with pin 41 and - leg with the ground (GND). You can change the buzzer pin in the code.
 
+
+## Analog FPV OSD (ON SCREEN DISPLAY)
+To Enable OSD, Uncomment these lines </br>
+```
+//  #define OSD_ENABLED true
+```
+**OSD sidebar enabled/disable**
+comment or uncomment  this line
+```
+#define OSD_SIDE_BAR true
+```
+
+Or you can set this and other variables as a build parameter: 
+```   
+build_flags = 
+	-DOSD_ENABLED
+```
+
 ## DFRobot OSD Wiring 
 **Heltec V3 -> DFRobot OSD** <br />
 GND -> GND <br />
@@ -287,3 +305,11 @@ Edit **paltformio.io** uncommenting/selecting your sources
 ```
 for LilyGo use env:heltec_wifi_lora_32_V3
 
+# WiFi and Bluetooth BT Scanning
+Works only with OSD enabled <br/>
+Uncomment this lines 
+```
+//  #define OSD_ENABLED true
+//  #define WIFI_SCANNING_ENABLED true
+//  #define BT_SCANNING_ENABLED true
+```
