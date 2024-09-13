@@ -23,6 +23,7 @@
 #define DISPLAY_WIDTH 296
 #define DISPLAY_HEIGHT 128
 // Without this line Lora Radio doesn't work with heltec lib
+#define BUTTON 21
 #define ARDUINO_heltec_wifi_32_lora_V3
 #include "heltec_unofficial.h"
 
@@ -250,18 +251,21 @@ void VextOFF(void) // Vext default OFF
 
 constexpr int lower_level = 108;
 constexpr int up_level = 40;
+constexpr int start_pixel = 80;
+
 int rssiToPix(int rssi)
 {
     // Bigger is lower signal
     if (abs(rssi) >= lower_level)
     {
-        return lower_level - 1;
+        return start_pixel - 1;
     }
     if (abs(rssi) <= up_level)
     {
-        return up_level;
+        return start_pixel - up_level;
     }
-    return abs(rssi);
+
+    return start_pixel - (lower_level - abs(rssi));
 }
 
 long timeSinceLastModeSwitch = 0;
@@ -287,9 +291,41 @@ long display_scan_start = 0;
 long display_scan_end = 0;
 long display_scan_i_end = 0;
 int scan_iterations = 0;
+bool waterfall_values[DISPLAY_HEIGHT][DISPLAY_WIDTH] = {false};
 
 constexpr unsigned int SCANS_PER_DISPLAY = 5;
 constexpr unsigned int STATUS_BAR_HEIGHT = 5;
+
+void button_logic(void)
+{
+    heltec_loop();
+    button_pressed_counter = 0;
+    if (button.pressed())
+    {
+        drone_detection_level++;
+        if (drone_detection_level > 107)
+            drone_detection_level = DEFAULT_DRONE_DETECTION_LEVEL - 20;
+        while (button.pressedNow())
+        {
+            delay(100);
+            display.display();
+            button_pressed_counter++;
+            // button.update();
+
+            if (button_pressed_counter > 18)
+            {
+                // Some sign there
+            }
+        }
+    }
+
+    if (button_pressed_counter < 9 && button_pressed_counter > 5)
+    {
+        display.clear();
+        display.display();
+        heltec_deep_sleep();
+    }
+}
 
 void loop()
 {
@@ -307,7 +343,6 @@ void loop()
     int u = 0;
     for (int i = 0; i < SAMPLES_RSSI; i++)
     {
-
         radio.setFrequency((float)fr + (float)(rssi_mhz_step * u),
                            false); // false = no calibration need here
         u++;
@@ -319,10 +354,14 @@ void loop()
         rssi2 = radio.getRSSI(false);
         scan_iterations++;
         if (rssi2 > lower_level)
+        {
+            max_scan_rssi[x1] = rssi2;
             continue;
+        }
 #ifdef PRINT_DEBUG
         Serial.println(String(fr) + ":" + String(rssi2));
 #endif
+        button_logic();
         // display.drawString(x1, (int)y2, String(fr) + ":" + String(rssi2));
         display.setPixel(x1, rssiToPix(rssi2));
 
@@ -330,6 +369,16 @@ void loop()
         {
             max_scan_rssi[x1] = rssi2;
         }
+    }
+
+    // Waterfall per scan not per screen
+    if (abs(max_scan_rssi[x1]) <= drone_detection_level)
+    {
+        waterfall_values[w][x1] = true;
+    }
+    else
+    {
+        waterfall_values[w][x1] = false;
     }
 
     // drone detection level line
@@ -343,9 +392,15 @@ void loop()
     {
         display_scan_i_end = millis();
     }
+    button_logic();
     // Main N x-axis full loop end logic
     if (x1 >= STEPS)
     {
+        w++;
+        if (w >= DISPLAY_HEIGHT - start_pixel - 13)
+        {
+            w = 0;
+        }
         if (screen_update_loop_counter == SCANS_PER_DISPLAY)
         {
             // max Mhz and dB in window
@@ -372,14 +427,23 @@ void loop()
                         display.drawString(i - rssi_window_size + 5, y2 + 10,
                                            String(window_max_fr));
                         // Vertical lines between windows
-                        for (int l = y2; l < 100; l += 4)
+                        for (int l = y2; l < start_pixel; l += 4)
                         {
                             display.setPixel(i, l);
                         }
                     }
                     window_max_rssi = -999;
                 }
+
+                // Draw Waterfall
+                for (int y = 0; y < DISPLAY_HEIGHT; y++)
+                    if (waterfall_values[y][i] == true)
+                    {
+                        display.setPixel(i, start_pixel + 5 + y);
+                    }
             }
+            // Draw Waterfall cursor
+            display.drawHorizontalLine(0, start_pixel + 5 + w, DISPLAY_WIDTH);
 
             display_scan_end = millis();
 
@@ -396,6 +460,7 @@ void loop()
                 esp_restart();
             }
 
+            // ToDo: it doesn't work
             battery();
             // iteration full scan / samples pixel step / numbers of scan per display
             display.drawString(DISPLAY_WIDTH - ((DISPLAY_WIDTH / 6) * 2) - 5, 0,
@@ -409,21 +474,21 @@ void loop()
                                "s:" + String(mhz_step));
 
             // Draw a line horizontally
-            display.drawHorizontalLine(0, lower_level + 1, DISPLAY_WIDTH);
+            display.drawHorizontalLine(0, 1 + start_pixel, DISPLAY_WIDTH);
             // Generate Ticks
             for (int x = 0; x < DISPLAY_WIDTH; x++)
             {
                 if (x % (DISPLAY_WIDTH / 2) == 0 && x > 5)
                 {
-                    display.drawVerticalLine(x, lower_level + 1, 11);
+                    display.drawVerticalLine(x, 1 + start_pixel, 11);
                     // central tick width
                     // display.drawVerticalLine(x - 1, lower_level + 1, 8);
                     // display.drawVerticalLine(x + 1, lower_level + 1, 8);
                 }
                 if (x % 10 == 0 || x == 0)
-                    display.drawVerticalLine(x, lower_level + 1, 6);
+                    display.drawVerticalLine(x, 1 + start_pixel, 6);
                 if (x % 5 == 0)
-                    display.drawVerticalLine(x, lower_level + 1, 3);
+                    display.drawVerticalLine(x, 1 + start_pixel, 3);
             }
             display.setFont(ArialMT_Plain_10);
 
@@ -441,13 +506,14 @@ void loop()
                                String(FREQ_BEGIN + (((int)fr - FREQ_BEGIN) -
                                                     ((int)fr - FREQ_BEGIN) / 4)));
             // End Mhz
-            display.drawString(DISPLAY_WIDTH - 24, DISPLAY_HEIGHT - 10, String((int)fr));
+            display.drawString(DISPLAY_WIDTH - 20, DISPLAY_HEIGHT - 10, String((int)fr));
 
             display.display();
             // display will be cleared next scan iteration. it is just buffer clear
             // memset(buffer, 0, displayBufferSize);
             display.clear();
             screen_update_loop_counter = 0;
+
             scan_iterations = 0;
             display_scan_i_end = 0;
         }
@@ -480,7 +546,7 @@ void setup()
     delay(1000);
     display.clear();
     Serial.begin(115200);
-    w = WATERFALL_START;
+    w = 0; // WATERFALL_START;
     init_radio();
     state = radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_NONE);
     if (state != RADIOLIB_ERR_NONE)
