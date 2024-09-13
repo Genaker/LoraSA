@@ -97,6 +97,7 @@ bool first_run, new_pixel, detected_x = false;
 // drone detection flag
 bool detected = false;
 uint64_t drone_detection_level = 90;
+bool detection_level_changed = false;
 uint64_t drone_detected_frequency_start = 0;
 uint64_t drone_detected_frequency_end = 0;
 uint64_t detection_count = 0;
@@ -296,6 +297,17 @@ bool waterfall_values[DISPLAY_HEIGHT][DISPLAY_WIDTH] = {false};
 constexpr unsigned int SCANS_PER_DISPLAY = 5;
 constexpr unsigned int STATUS_BAR_HEIGHT = 5;
 
+void clear_rectangle(int x, int y, int width, int height)
+{
+    for (int x = 0; x < width; x++)
+    {
+        for (int y = 0; y < height; y++)
+        {
+            display.clearPixel(x, y);
+        }
+    }
+}
+
 void button_logic(void)
 {
     heltec_loop();
@@ -303,11 +315,19 @@ void button_logic(void)
     if (button.pressed())
     {
         drone_detection_level++;
+        detection_level_changed = true;
         if (drone_detection_level > 107)
             drone_detection_level = DEFAULT_DRONE_DETECTION_LEVEL - 20;
+        clear_rectangle(0, 0, 10, 10);
+        display.setFont(ArialMT_Plain_10);
+
+        display.drawString(0, 0,
+                           "T:" + String(display_scan_end - display_scan_start) + "/" +
+                               String(display_scan_i_end - display_scan_start) + " L:-" +
+                               String(drone_detection_level) + "dB");
         while (button.pressedNow())
         {
-            delay(100);
+
             display.display();
             button_pressed_counter++;
             // button.update();
@@ -343,8 +363,13 @@ void loop()
     int u = 0;
     for (int i = 0; i < SAMPLES_RSSI; i++)
     {
-        radio.setFrequency((float)fr + (float)(rssi_mhz_step * u),
-                           false); // false = no calibration need here
+        state = radio.setFrequency((float)fr + (float)(rssi_mhz_step * u),
+                                   false); // false = no calibration need here
+        int radio_error_count = 0;
+        if (state != RADIOLIB_ERR_NONE)
+        {
+            Serial.println("E:setFrequency:" + String(freq));
+        }
         u++;
         if (rssi_mhz_step * u >= mhz_step)
         {
@@ -446,7 +471,10 @@ void loop()
             display.drawHorizontalLine(0, start_pixel + 5 + w, DISPLAY_WIDTH);
 
             display_scan_end = millis();
-
+            if (detection_level_changed == true)
+            {
+                clear_rectangle(0, 0, 100, 10);
+            }
             display.setFont(ArialMT_Plain_10);
             display.drawString(0, 0,
                                "T:" + String(display_scan_end - display_scan_start) +
