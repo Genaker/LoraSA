@@ -948,6 +948,11 @@ void loop(void)
                         // I like this formula better
                         result_index = uint8_t(abs(rssi) / 2) - 22;
                     }
+                    if (result_index >= RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE)
+                    {
+                        // Maximum index possible
+                        result_index = RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE - 1;
+                    }
 
 #ifdef PRINT_DEBUG
                     Serial.printf("RSSI: %d IDX: %d\n", rssi, result_index);
