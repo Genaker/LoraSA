@@ -157,8 +157,8 @@ typedef enum
 } TSCAN_METOD_ENUM;
 
 #define SCAN_METHOD
-// #define METHOD_SPECTRAL // Spectral scan method
-#define METHOD_RSSI // Uncomment this and comment METHOD_SPECTRAL fot RSSI
+#define METHOD_SPECTRAL // Spectral scan method
+// #define METHOD_RSSI // Uncomment this and comment METHOD_SPECTRAL fot RSSI
 
 // Output Pixel Formula
 // 1 = rssi / 4, 2 = (rssi / 2) - 22 or 20
@@ -241,15 +241,16 @@ uint64_t detection_count = 0;
 bool single_page_scan = false;
 bool SOUND_ON = false;
 
-// #define PRINT_DEBUG
+#define PRINT_DEBUG
 #define PRINT_PROFILE_TIME
+// #define PRINT_OUTPUT
 
-#ifdef PRINT_PROFILE_TIME
+// #ifdef PRINT_PROFILE_TIME
 uint64_t loop_start = 0;
 uint64_t loop_time = 0;
 uint64_t scan_time = 0;
 uint64_t scan_start_time = 0;
-#endif
+// #endif
 
 uint64_t x, y, range_item, w = WATERFALL_START, i = 0;
 int osd_x = 1, osd_y = 2, col = 0, max_bin = 32;
@@ -889,6 +890,10 @@ void loop(void)
 #ifdef PRINT_DEBUG
             Serial.printf("Step:%d Freq: %f\n", x, freq);
 #endif
+
+#ifdef PRINT_OUTPUT
+            Serial.printf("FREQ %f\n", freq);
+#endif
             // SpectralScan Method
 #ifdef METHOD_SPECTRAL
             {
@@ -913,6 +918,7 @@ void loop(void)
                 // read the results Array to which the results will be saved
                 state = radio.spectralScanGetResult(result);
                 display.drawString(0, 64 - 10, "scanGetResult:" + String(state));
+                Serial.printf("curious %d\n", result[0]);
             }
 
 #endif
@@ -921,6 +927,9 @@ void loop(void)
             {
 #ifdef PRINT_DEBUG
                 Serial.println("METHOD RSSI");
+#endif
+#ifdef PRINT_OUTPUT
+                Serial.print("SCAN ");
 #endif
                 // memset
                 // memset(result, 0, RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE);
@@ -952,6 +961,10 @@ void loop(void)
 #ifdef PRINT_DEBUG
                     Serial.printf("RSSI: %d IDX: %d\n", rssi, result_index);
 #endif
+#ifdef PRINT_OUTPUT
+                    Serial.printf("%d,", rssi);
+#endif
+
                     // avoid buffer overflow
                     if (result_index < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE)
                     {
@@ -963,7 +976,9 @@ void loop(void)
                     }
                     else
                     {
-                        Serial.print("Out-of-Range: result_index %d\n");
+#ifndef PRINT_OUTPUT
+                        Serial.printf("Out-of-Range:result_index %d\n", result_index);
+#endif
                     }
                 }
             }
@@ -1155,6 +1170,10 @@ void loop(void)
 
 #ifdef PRINT_DEBUG
             Serial.println("....\n");
+#endif
+
+#ifdef PRINT_OUTPUT
+            Serial.print(" END\n");
 #endif
             if (first_run || ANIMATED_RELOAD)
             {
