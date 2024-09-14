@@ -12,8 +12,8 @@ from datetime import datetime
 from argparse import RawTextHelpFormatter
 
 # number of samples in each scanline
-SCAN_WIDTH = 20
-SCAN_MIN_FREQ = "FREQ 850"
+SCAN_WIDTH = 4
+SCAN_MIN_FREQ = "850"
 
 # scanline Serial start/end markers
 SCAN_MARK_START = "SCAN "
@@ -26,7 +26,7 @@ OUT_PATH = "out"
 # default settings
 DEFAULT_BAUDRATE = 115200
 DEFAULT_COLOR_MAP = "viridis"
-DEFAULT_SCAN_LEN = 200
+DEFAULT_SCAN_LEN = 20
 DEFAULT_RSSI_OFFSET = -11
 
 
@@ -122,8 +122,8 @@ def main():
 
     # list of frequencies in frequency mode
     freq_list = []
-    
-    start=False
+
+    start = True
 
     # open the COM port
     with serial.Serial(args.port, args.speed, timeout=None) as com:
@@ -131,20 +131,23 @@ def main():
             # read a single line
             try:
                 line = com.readline().decode("utf-8")
-                #print(line)
+                print(line)
             except:
                 continue
-            
+
+            if "LOOP:" in line:
+                continue
+
             if start:
                 if SCAN_MIN_FREQ not in line:
+                    print("NOT IN LINE")
                     continue
                 else:
-                    start=False
+                    print("IN LINE")
+                    start = False
             # update the progress bar
             if not freq_mode:
                 printProgressBar(row, scan_len)
-
-
 
             if SCAN_MARK_FREQ in line:
                 new_freq = float(line.split(" ")[1])
@@ -171,10 +174,10 @@ def main():
 
     # scale to the number of scans (sum of any given scanline)
     num_samples = arr.sum(axis=0)[0]
-    print("NUM SAMPLES:",num_samples)
-    print("ARR.MAX:",arr.max())
-    print("ARR.SHAPE:",arr.shape)
-    print("LEN_FREQS:",len(freq_list))
+    print("NUM SAMPLES:", num_samples)
+    print("ARR.MAX:", arr.max())
+    print("ARR.SHAPE:", arr.shape)
+    print("LEN_FREQS:", len(freq_list))
     arr *= num_samples / arr.max()
 
     if freq_mode:
@@ -182,8 +185,8 @@ def main():
 
     # create the figure
     fig, ax = plt.subplots()
-    
-    #print(arr)
+
+    # print(arr)
     print(freq_list)
 
     # display the result as heatmap
