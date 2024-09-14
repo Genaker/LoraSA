@@ -10,10 +10,14 @@ import matplotlib.pyplot as plt
 
 from datetime import datetime
 from argparse import RawTextHelpFormatter
+from datetime import datetime
+
+
 
 # number of samples in each scanline
 SCAN_WIDTH = 4
 SCAN_MIN_FREQ = "850"
+SCAN_TIME_POINTS = 40
 
 # scanline Serial start/end markers
 SCAN_MARK_START = "SCAN "
@@ -115,15 +119,17 @@ def main():
         scan_len = 1000
 
     # create the color map and the result array
-    arr = np.zeros((SCAN_WIDTH, scan_len))
+    arr = np.zeros((SCAN_WIDTH, scan_len, SCAN_TIME_POINTS))
 
     # scanline counter
     row = 0
 
     # list of frequencies in frequency mode
     freq_list = []
-
-    start = True
+    time_list = []
+    
+    start=True
+    current_time_point=0
 
     # open the COM port
     with serial.Serial(args.port, args.speed, timeout=None) as com:
@@ -131,28 +137,29 @@ def main():
             # read a single line
             try:
                 line = com.readline().decode("utf-8")
-                print(line)
+                #print(line)
             except:
                 continue
-
+            
             if "LOOP:" in line:
                 continue
-
+            
             if start:
                 if SCAN_MIN_FREQ not in line:
-                    print("NOT IN LINE")
                     continue
                 else:
-                    print("IN LINE")
-                    start = False
+                    start=False
+                    start_time = datetime.now()
             # update the progress bar
             if not freq_mode:
-                printProgressBar(row, scan_len)
+                printProgressBar(current_time_point*scan_len+row, scan_len*SCAN_TIME_POINTS)
+
+
 
             if SCAN_MARK_FREQ in line:
                 new_freq = float(line.split(" ")[1])
                 if (len(freq_list) > 1) and (new_freq < freq_list[-1]):
-                    break
+                    continue
 
                 freq_list.append(new_freq)
                 print("{:.3f}".format(new_freq), end="\r")
@@ -163,48 +170,61 @@ def main():
                 # get the values
                 scanline = line[len(SCAN_MARK_START) : -len(SCAN_MARK_END)].split(",")
                 for col in range(SCAN_WIDTH):
-                    arr[col][row] = int(scanline[col])
+                    arr[col][row][current_time_point] = int(scanline[col])
 
                 # increment the row counter
                 row = row + 1
 
                 # check if we're done
                 if (not freq_mode) and (row >= scan_len):
+                    current_time_point+=1
+                    row=0
+                    current_time=datetime.now()
+                    time_list.append(round((current_time-start_time).total_seconds(),1))
+                    
+                if current_time_point==SCAN_TIME_POINTS:
                     break
 
     # scale to the number of scans (sum of any given scanline)
-    num_samples = arr.sum(axis=0)[0]
-    print("NUM SAMPLES:", num_samples)
-    print("ARR.MAX:", arr.max())
-    print("ARR.SHAPE:", arr.shape)
-    print("LEN_FREQS:", len(freq_list))
-    arr *= num_samples / arr.max()
+    #num_samples = arr.sum(axis=0)[0]
+    #arr *= num_samples / arr.max()
+    #print("NUM SAMPLES:",num_samples)
+    #print("ARR.MAX:",arr.max())
+    print("ARR.SHAPE:",arr.shape)
+    print("LEN_FREQS:",len(freq_list))
+    arr=arr.mean(axis=0)
+    print("ARR.SHAPE:",arr.shape)
+    #arr=arr.reshape(-1,arr.shape[2])
+    
+    
 
     if freq_mode:
         scan_len = len(freq_list)
 
     # create the figure
     fig, ax = plt.subplots()
-
-    # print(arr)
+    
+    #print(arr)
     print(freq_list)
+    print(time_list)
 
     # display the result as heatmap
     extent = [0, scan_len, -4 * (SCAN_WIDTH + 1), args.offset]
-    if freq_mode:
-        extent[0] = freq_list[0]
-        extent[1] = freq_list[-1]
-    im = ax.imshow(arr[:, :scan_len], cmap=args.map, extent=extent)
+    
+    #extent[1] = time_list[-1]
+    extent[3] = freq_list[0]
+    extent[2] = freq_list[-1]
+    im = ax.imshow(arr, cmap=args.map, extent=extent)
     fig.colorbar(im)
 
     # set some properites and show
     timestamp = datetime.now().strftime("%y-%m-%d %H-%M-%S")
-    title = f"RadioLib SX126x Spectral Scan {timestamp}"
-    if freq_mode:
-        plt.xlabel("Frequency [Hz]")
-    else:
-        plt.xlabel("Time [sample]")
-    plt.ylabel("RSSI [dBm]")
+    title = f"Spectrogram with values as mean dBm of 4 samples for 40 loops {timestamp}"
+   
+    plt.xlabel("Time (N of loop at the moment)")
+    plt.ylabel("Frequency [MHz]")
+    #plt.xticks(time_list[::5],time_list[::5])
+    plt.yticks(freq_list.reverse(),freq_list.reverse())           
     ax.set_aspect("auto")
     fig.suptitle(title)
     fig.canvas.manager.set_window_title(title)

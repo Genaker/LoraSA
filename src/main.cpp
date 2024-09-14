@@ -157,8 +157,8 @@ typedef enum
 } TSCAN_METOD_ENUM;
 
 #define SCAN_METHOD
-#define METHOD_SPECTRAL // Spectral scan method
-// #define METHOD_RSSI // Uncomment this and comment METHOD_SPECTRAL fot RSSI
+// #define METHOD_SPECTRAL // Spectral scan method
+#define METHOD_RSSI // Uncomment this and comment METHOD_SPECTRAL fot RSSI
 
 // Output Pixel Formula
 // 1 = rssi / 4, 2 = (rssi / 2) - 22 or 20
@@ -199,7 +199,7 @@ constexpr bool DRAW_DETECTION_TICKS = true;
 // if more than 100 it can freeze
 #define SAMPLES 35 //(scan time = 1294)
 // number of samples for RSSI method
-#define SAMPLES_RSSI 20 // 21 //
+#define SAMPLES_RSSI 4 // 21 //
 
 #define RANGE (int)(FREQ_END - FREQ_BEGIN)
 
@@ -241,9 +241,9 @@ uint64_t detection_count = 0;
 bool single_page_scan = false;
 bool SOUND_ON = false;
 
-#define PRINT_DEBUG
+// #define PRINT_DEBUG
 #define PRINT_PROFILE_TIME
-// #define PRINT_OUTPUT
+#define PRINT_OUTPUT
 
 // #ifdef PRINT_PROFILE_TIME
 uint64_t loop_start = 0;
@@ -977,7 +977,7 @@ void loop(void)
                     else
                     {
 #ifndef PRINT_OUTPUT
-                        Serial.printf("Out-of-Range:result_index %d\n", result_index);
+                        // Serial.printf("Out-of-Range:result_index %d\n", result_index);
 #endif
                     }
                 }
@@ -1268,7 +1268,7 @@ void loop(void)
     joy_btn_clicked = false;
 
 #ifdef PRINT_PROFILE_TIME
-    Serial.printf("LOOP: %lld ms; SCAN: %lld ms;\n  ", loop_time, scan_time);
+    Serial.printf("LOOP: %lld ms; SCAN: %lld ms;\n", loop_time, scan_time);
 #endif
 // No WiFi and BT Scan Without OSD
 #ifdef OSD_ENABLED

@@ -27,7 +27,7 @@
 
 // The number of the spectrum screen lines = width of screen
 // Resolution of the scan is limited by 128-pixel screen
-#define STEPS 128
+#define STEPS 10
 
 #define SCREEN_HEIGHT 64 // ???? not used
 
