@@ -960,8 +960,8 @@ void loop(void)
                     // avoid buffer overflow
                     if (result_index < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE)
                     {
-                        // Saving max value only rss is negative so smaller is bigger
-                        if (result[result_index] > rssi)
+                        // Saving max value of the rssi.
+                        if (result[result_index] < rssi)
                         {
                             result[result_index] = rssi;
                         }
@@ -1023,7 +1023,7 @@ void loop(void)
                 {
                     // do not process 'first' and 'last' row to avoid out of index
                     // access.
-                    if ((y > 0) && (y != (RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE - 3)))
+                    if ((y > 0) && (y < (RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE - 3)))
                     {
                         if (((result[y + 1] != 0) && (result[y + 2] != 0)) ||
                             (result[y - 1] != 0))
