@@ -960,7 +960,8 @@ void loop(void)
                     // avoid buffer overflow
                     if (result_index < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE)
                     {
-                        // Saving max value only rss is negative so smaller is bigger
+                        // Saving max ABS value of rssi. dB is negative so smaller is
+                        // bigger
                         if (result[result_index] == 0 || result[result_index] > abs(rssi))
                         {
                             result[result_index] = abs(rssi);
