@@ -40,4 +40,5 @@ extern void UI_Init(SSD1306Wire *);
 extern void UI_displayDecorate(int, int, bool);
 extern void UI_setLedFlag(bool);
 extern void UI_clearPlotter(void);
+extern void UI_clearTopStatus(void);
 extern void UI_drawCursor(int16_t);
