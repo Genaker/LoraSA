@@ -750,7 +750,7 @@ void check_ranges()
         single_page_scan = false;
     }
 }
-// MAX Frequency RSSI value of the samples
+// MAX Frequency RSSI BIN value of the samples
 int max_rssi_x = 999;
 
 void loop(void)
@@ -960,10 +960,11 @@ void loop(void)
                     // avoid buffer overflow
                     if (result_index < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE)
                     {
-                        // Saving max value only rss is negative so smaller is bigger
-                        if (result[result_index] > rssi)
+                        // Saving max ABS value of rssi. dB is negative so smaller is
+                        // bigger
+                        if (result[result_index] == 0 || result[result_index] > abs(rssi))
                         {
-                            result[result_index] = rssi;
+                            result[result_index] = abs(rssi);
                         }
                     }
                     else
@@ -1023,12 +1024,14 @@ void loop(void)
                 {
                     // do not process 'first' and 'last' row to avoid out of index
                     // access.
-                    if ((y > 0) && (y != (RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE - 3)))
+                    if ((y > 0) && (y < (RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE - 1)))
                     {
                         if (((result[y + 1] != 0) && (result[y + 2] != 0)) ||
                             (result[y - 1] != 0))
                         {
                             filtered_result[y] = 1;
+                            // Fill empty pixel
+                            result[y + 1] = 1;
                         }
                         else
                         {
@@ -1108,6 +1111,7 @@ void loop(void)
 #endif
                     if (max_rssi_x > y)
                     {
+                        // MAx bin Value not RSSI
                         max_rssi_x = y;
                     }
                     // Set signal level pixel
