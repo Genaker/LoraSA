@@ -194,12 +194,15 @@ bool ANIMATED_RELOAD = false;
 #define FILTER_SPECTRUM_RESULTS true
 #define FILTER_SAMPLES_MIN
 constexpr bool DRAW_DETECTION_TICKS = true;
-
+int16_t max_x_rssi[STEPS] = {999};
+int16_t max_x_window[STEPS / 14] = {999};
+int x_window = 0;
+constexpr int WINDOW_SIZE = 15;
 // Number of samples for each frequency scan. Fewer samples = better temporal resolution.
 // if more than 100 it can freeze
 #define SAMPLES 35 //(scan time = 1294)
 // number of samples for RSSI method
-#define SAMPLES_RSSI 20 // 21 //
+#define SAMPLES_RSSI 12 // 21 //
 
 #define RANGE (int)(FREQ_END - FREQ_BEGIN)
 
@@ -217,10 +220,9 @@ uint64_t median_frequency = FREQ_BEGIN + FREQ_END - FREQ_BEGIN / 2;
 // #define DISABLE_PLOT_CHART false   // unused
 
 // Array to store the scan results
-uint16_t result[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
-uint16_t result_display_set[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
-uint16_t result_detections[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
-uint16_t filtered_result[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
+int16_t result[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
+
+bool filtered_result[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
 
 int max_bins_array_value[MAX_POWER_LEVELS];
 int max_step_range = 32;
@@ -235,6 +237,7 @@ bool first_run, new_pixel, detected_x = false;
 // drone detection flag
 bool detected = false;
 uint64_t drone_detection_level = DEFAULT_DRONE_DETECTION_LEVEL;
+uint64_t show_db_after = 80;
 uint64_t drone_detected_frequency_start = 0;
 uint64_t drone_detected_frequency_end = 0;
 uint64_t detection_count = 0;
@@ -610,11 +613,14 @@ bool buttonPressHandler(float freq)
 #endif
         )
         {
+            // Print Curent frequency once
+            if (button_pressed_counter == 0)
+            {
+                display.setTextAlignment(TEXT_ALIGN_CENTER);
+                display.drawString(128 / 2, 0, String(freq));
+                display.display();
+            }
             delay(10);
-            // Print Curent frequency
-            display.setTextAlignment(TEXT_ALIGN_CENTER);
-            display.drawString(128 / 2, 0, String(freq));
-            display.display();
             button_pressed_counter++;
             if (button_pressed_counter > 150)
             {
@@ -663,21 +669,28 @@ bool buttonPressHandler(float freq)
     return true;
 }
 
-void drone_sound_alarm(int drone_detection_level, int detection_count)
+void drone_sound_alarm(int drone_detection_level, int detection_count,
+                       int tone_freq_db = 205)
 {
     // If level is set to sensitive,
     // start beeping every 10th frequency and shorter
     // it improves performance less short beep delays...
     if (drone_detection_level <= 25)
     {
+
+        if (tone_freq_db != 205)
+        {
+            tone_freq_db = 285 - tone_freq_db;
+        }
+
         if (detection_count == 1 && SOUND_ON)
         {
-            tone(BUZZER_PIN, 205,
+            tone(BUZZER_PIN, tone_freq_db,
                  10); // same action ??? but first time
         }
         if (detection_count % 5 == 0 && SOUND_ON)
         {
-            tone(BUZZER_PIN, 205,
+            tone(BUZZER_PIN, tone_freq_db,
                  10); // same action ??? but every 5th time
         }
     }
@@ -775,6 +788,7 @@ void loop(void)
     {
         // clear the scan plot rectangle
         UI_clearPlotter();
+        UI_clearTopStatus();
     }
 
     // do the scan
@@ -934,6 +948,7 @@ void loop(void)
                 for (int r = 0; r < SAMPLES_RSSI; r++)
                 {
                     rssi = radio.getRSSI(false);
+                    int abs_rssi = abs(rssi);
                     // ToDO: check if 4 is correct value for 33 power bins
                     // Now we have more space because we are ignoring low dB values
                     // we can  / 3 default 4
@@ -941,12 +956,12 @@ void loop(void)
                     {
                         result_index =
                             /// still not clear formula but it works
-                            uint8_t(abs(rssi) / 4);
+                            uint8_t(abs_rssi / 4);
                     }
                     else if (RSSI_OUTPUT_FORMULA == 2)
                     {
                         // I like this formula better
-                        result_index = uint8_t(abs(rssi) / 2) - 22;
+                        result_index = uint8_t(abs_rssi / 2) - 22;
                     }
                     if (result_index >= RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE)
                     {
@@ -960,11 +975,15 @@ void loop(void)
                     // avoid buffer overflow
                     if (result_index < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE)
                     {
-                        // Saving max ABS value of rssi. dB is negative so smaller is
-                        // bigger
-                        if (result[result_index] == 0 || result[result_index] > abs(rssi))
+                        // Saving max ABS value of RSSI. dB is negative, so smaller
+                        // absolute value represents stronger signal.
+                        if (result[result_index] == 0 || result[result_index] > abs_rssi)
                         {
-                            result[result_index] = abs(rssi);
+                            result[result_index] = abs_rssi;
+                        }
+                        if (max_x_rssi[display_x] > abs_rssi)
+                        {
+                            max_x_rssi[display_x] = abs_rssi;
                         }
                     }
                     else
@@ -1024,7 +1043,7 @@ void loop(void)
                 {
                     // do not process 'first' and 'last' row to avoid out of index
                     // access.
-                    if ((y > 0) && (y < (RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE - 1)))
+                    if ((y > 0) && (y < (RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE - 2)))
                     {
                         if (((result[y + 1] != 0) && (result[y + 2] != 0)) ||
                             (result[y - 1] != 0))
@@ -1040,12 +1059,23 @@ void loop(void)
 #endif
                         }
                     }
-                } // not filtering if samples == 1
+                } // not filtering if samples == 1 because it will be filtered
                 else if (result[y] > 0 && samples == 1)
                 {
                     filtered_result[y] = 1;
                 }
-
+                // calculating max window x RSSI after filters
+                x_window = (int)(display_x / WINDOW_SIZE);
+                int abs_result = abs(result[y]);
+                if (filtered_result[y] == 1 && result[y] != 0 && result[y] != 1 &&
+                    max_x_window[x_window] > abs_result)
+                {
+                    max_x_window[x_window] = abs_result;
+#ifdef PRINT_DEBUG
+                    Serial.println("MAX x window: " + String(x_window) + " " +
+                                   String(abs_result));
+#endif
+                }
 #endif
                 // check if we should alarm about a drone presence
                 if ((filtered_result[y] == 1) // we have some data and
@@ -1076,18 +1106,21 @@ void loop(void)
                     drone_detected_frequency_end = freq;
                     if (SOUND_ON == true)
                     {
-                        drone_sound_alarm(drone_detection_level, detection_count);
+                        drone_sound_alarm(drone_detection_level, detection_count,
+                                          max_rssi_x * 2);
                     }
 
                     if (DRAW_DETECTION_TICKS == true)
                     {
-                        // draw vertical line on top of display for "drone detected"
-                        // frequencies
+// draw vertical line on top of display for "drone detected"
+// frequencies
+#ifdef METHOD_SPECTRAL
                         if (!detected_y[display_x])
                         {
                             display.drawLine(display_x, 1, display_x, 4);
                             detected_y[display_x] = true;
                         }
+#endif
                     }
                 }
 #if (WATERFALL_ENABLED == true)
@@ -1114,7 +1147,7 @@ void loop(void)
                         // MAx bin Value not RSSI
                         max_rssi_x = y;
                     }
-                    // Set signal level pixel
+                    // Set MAIN signal level pixel
                     if (y < MAX_POWER_LEVELS - START_LOW)
                     {
                         display.setPixel(display_x, y + START_LOW);
@@ -1232,6 +1265,19 @@ void loop(void)
             display.setColor(WHITE);
         }
 #endif
+
+#ifdef METHOD_RSSI
+        // Printing Max Window DB.
+        for (int x2 = 0; x2 < STEPS / WINDOW_SIZE; x2++)
+        {
+            if (max_x_window[x2] < show_db_after && max_x_window[x2] != 0)
+            {
+                display.drawString(x2 * WINDOW_SIZE + WINDOW_SIZE, 0,
+                                   "-" + String(max_x_window[x2]));
+            }
+            max_x_window[x2] = 999;
+        }
+#endif
         // Render display data here
         display.display();
 #ifdef OSD_ENABLED
@@ -1251,7 +1297,7 @@ void loop(void)
 #endif
     }
 #ifdef PRINT_DEBUG
-    // Serial.println("----");
+// Serial.println("----");
 #endif
 
     loop_time = millis() - loop_start;

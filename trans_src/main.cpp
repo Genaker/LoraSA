@@ -8,6 +8,7 @@
  * This works on the stick, but the output on the screen gets cut off.
  */
 
+#include <Arduino.h>
 // Turns the 'PRG' button into the power button, long press is off
 #define HELTEC_POWER_BUTTON // must be before "#include <heltec_unofficial.h>"
 #include <heltec_unofficial.h>
@@ -15,11 +16,11 @@
 // Pause between transmited packets in mseconds.
 // Set to zero to only transmit a packet when pressing the user button
 // Will not exceed 1% duty cycle, even if you set a lower value.
-#define PAUSE 20
+#define PAUSE 10
 
 // Frequency in MHz. Keep the decimal point to designate float.
 // Check your own rules and regulations to see what is legal where you are.
-#define FREQUENCY 866.3 // for Europe
+#define FREQUENCY 915 // for Europe
 // #define FREQUENCY           905.2       // for US
 
 // LoRa bandwidth. Keep the decimal point to designate float.
@@ -29,13 +30,13 @@
 
 // Number from 5 to 12. Higher means slower but higher "processor gain",
 // meaning (in nutshell) longer range and more robust against interference.
-#define SPREADING_FACTOR 9
+#define SPREADING_FACTOR 7
 
 // Transmit power in dBm. 0 dBm = 1 mW, enough for tabletop-testing. This value can be
 // set anywhere between -9 dBm (0.125 mW) to 22 dBm (158 mW). Note that the maximum ERP
 // (which is what your antenna maximally radiates) on the EU ISM band is 25 mW, and that
 // transmissting without an antenna can damage your hardware.
-#define TRANSMIT_POWER -9
+#define TRANSMIT_POWER 22
 
 String rxdata;
 volatile bool rxFlag = false;
@@ -67,35 +68,41 @@ void setup()
     RADIOLIB_OR_HALT(radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF));
 }
 
+int FHSS = 0.25;
+float FHSS_counter = -10;
 void loop()
 {
     heltec_loop();
 
-    bool tx_legal = millis() > last_tx + minimum_pause;
+    bool tx_legal = true; // millis() > last_tx + minimum_pause;
+    // Emulate  frequency hopping spread spectrum (FHSS) is a method of transmitting radio
+    // signals by rapidly switching the carrier between different frequency channels.
+    float fr = (float)(FREQUENCY + (float)(FHSS_counter));
+    RADIOLIB_OR_HALT(radio.setFrequency(fr, false));
     // Transmit a packet every PAUSE seconds or when the button is pressed
     if ((PAUSE && tx_legal && millis() - last_tx > (PAUSE)) || button.isSingleClick())
     {
-        // In case of button click, tell user to wait
-        if (!tx_legal)
+        if (button.isSingleClick())
         {
-            both.printf("Legal limit, wait %i sec.\n",
-                        (int)((minimum_pause - (millis() - last_tx)) / 1000) + 1);
-            return;
+            fr = 1000;
+            RADIOLIB_OR_HALT(radio.setFrequency(fr, false));
         }
-        both.printf("TX [%s] ", String(counter).c_str());
+        // In case of button click, tell user to wait
+        display.printf("TX[%s]", String(counter).c_str());
         radio.clearDio1Action();
         heltec_led(50); // 50% brightness is plenty for this LED
         tx_time = millis();
-        RADIOLIB(radio.transmit(String(counter++).c_str()));
+        RADIOLIB(radio.transmit(String("Putin Huylo!!! LA-LA-LA-LA").c_str()));
         tx_time = millis() - tx_time;
         heltec_led(0);
         if (_radiolib_status == RADIOLIB_ERR_NONE)
         {
-            both.printf("OK (%i ms)\n", (int)tx_time);
+            display.printf("OK(%ims)/%.2fMhz\n", (int)tx_time, fr);
         }
         else
         {
-            both.printf("fail (%i)\n", _radiolib_status);
+            display.printf("fail (%i)\n", _radiolib_status);
+            heltec_delay(100);
         }
         // Maximum 1% duty cycle
         minimum_pause = tx_time * 100;
@@ -111,10 +118,16 @@ void loop()
         radio.readData(rxdata);
         if (_radiolib_status == RADIOLIB_ERR_NONE)
         {
-            both.printf("RX [%s]\n", rxdata.c_str());
-            both.printf("  RSSI: %.2f dBm\n", radio.getRSSI());
-            both.printf("  SNR: %.2f dB\n", radio.getSNR());
+            display.printf("RX [%s]\n", rxdata.c_str());
+            display.printf("  RSSI: %.2f dBm\n", radio.getRSSI());
+            display.printf("  SNR: %.2f dB\n", radio.getSNR());
         }
         RADIOLIB_OR_HALT(radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF));
+    }
+    FHSS_counter += 0.250;
+    counter++;
+    if (FHSS_counter > 20)
+    {
+        FHSS_counter = -10;
     }
 }

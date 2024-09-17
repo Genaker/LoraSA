@@ -80,7 +80,15 @@ void UI_clearPlotter(void)
 {
     // clear the scan plot rectangle (top part)
     display_instance->setColor(BLACK);
-    display_instance->fillRect(0, 0, STEPS, HEIGHT);
+    display_instance->fillRect(0, 10, STEPS, HEIGHT - 10);
+    display_instance->setColor(WHITE);
+}
+
+void UI_clearTopStatus(void)
+{
+    // clear the scan plot rectangle (top part)
+    display_instance->setColor(BLACK);
+    display_instance->fillRect(0, 0, STEPS, 10);
     display_instance->setColor(WHITE);
 }
 
