@@ -25,9 +25,12 @@
 
 #include <Arduino.h>
 
-//  #define OSD_ENABLED true
+#define OSD_ENABLED true
 //  #define WIFI_SCANNING_ENABLED true
 //  #define BT_SCANNING_ENABLED true
+
+// RSSI Scan Logic
+#include <scan.h>
 
 #ifndef LILYGO
 #include <heltec_unofficial.h>
@@ -62,58 +65,6 @@ uint64_t bt_start = 0;
 #include "DFRobot_OSD.h"
 #define OSD_SIDE_BAR true
 
-static constexpr uint16_t levels[10] = {
-    0x105, // 0
-    0x10E, // 1
-    0x10D, // 2
-    0x10C, // 3
-    0x10B, // 4
-    0x10A, // 5
-    0x109, // 6
-    0x108, // 7
-    0x107, // 8
-    0x106, // 9
-};
-
-static constexpr uint16_t power_level[MAX_POWER_LEVELS + 1] = {
-    0x10E, // 0
-    0x10E, // 1
-    0x10D, // 2
-    0x10C, // 3
-    0x10B, // 4
-    0x10A, // 5
-    0x109, // 6
-    0x108, // 7
-    0x107, // 8
-    0x106, // 9 not using 106 to accent rise
-    // new line
-    0x10E, // 10
-    0x10D, // 11
-    0x10C, // 12
-    0x10B, // 13
-    0x10A, // 14
-    0x109, // 15
-    0x108, // 16
-    0x107, // 17
-    0x106, // 18 not using 106
-    // new line
-    0x10E, // 19
-    0x10D, // 20
-    0x10C, // 21
-    0x10B, // 22
-    0x10A, // 23
-    0x109, // 24
-    0x108, // 25
-    0x107, // 26
-    0x106, // 27
-    0x105, // 28 ---
-    0x105, // 29
-    0x105, // 30
-    0x105, // 31
-    0x105, // 32
-    0x105  // 33
-};
-
 // SPI pins
 #define OSD_CS 47
 #define OSD_MISO 33
@@ -138,11 +89,6 @@ int global_counter = 0;
 DFRobot_OSD osd(OSD_CS);
 #endif
 
-/*Define Custom characters Example*/
-static const int buf0[36] = {0x02, 0x80, 0x02, 0x40, 0x7F, 0xE0, 0x42, 0x00,
-                             0x42, 0x00, 0x7A, 0x40, 0x4A, 0x40, 0x4A, 0x80,
-                             0x49, 0x20, 0x5A, 0xA0, 0x44, 0x60, 0x88, 0x20};
-
 #include "global_config.h"
 #include "ui.h"
 
@@ -159,10 +105,6 @@ typedef enum
 #define SCAN_METHOD
 // #define METHOD_SPECTRAL // Spectral scan method
 #define METHOD_RSSI // Uncomment this and comment METHOD_SPECTRAL fot RSSI
-
-// Output Pixel Formula
-// 1 = rssi / 4, 2 = (rssi / 2) - 22 or 20
-constexpr int RSSI_OUTPUT_FORMULA = 2;
 
 // Feature to scan diapasones. Other frequency settings will be ignored.
 // int SCAN_RANGES[] = {850890, 920950};
@@ -201,8 +143,6 @@ constexpr int WINDOW_SIZE = 15;
 // Number of samples for each frequency scan. Fewer samples = better temporal resolution.
 // if more than 100 it can freeze
 #define SAMPLES 35 //(scan time = 1294)
-// number of samples for RSSI method
-#define SAMPLES_RSSI 12 // 21 //
 
 #define RANGE (int)(FREQ_END - FREQ_BEGIN)
 
@@ -220,7 +160,7 @@ uint64_t median_frequency = FREQ_BEGIN + FREQ_END - FREQ_BEGIN / 2;
 // #define DISABLE_PLOT_CHART false   // unused
 
 // Array to store the scan results
-int16_t result[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
+uint16_t result[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
 
 bool filtered_result[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
 
@@ -763,8 +703,20 @@ void check_ranges()
         single_page_scan = false;
     }
 }
+
+struct RadioScan : Scan
+{
+    RadioScan() : Scan(RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE) {}
+
+    float getRSSI() override;
+};
+
+float RadioScan::getRSSI() { return radio.getRSSI(false); }
+
 // MAX Frequency RSSI BIN value of the samples
 int max_rssi_x = 999;
+
+RadioScan r;
 
 void loop(void)
 {
@@ -854,6 +806,7 @@ void loop(void)
 
         // horizontal (x axis) Frequency loop
         osd_x = 1, osd_y = 2, col = 0, max_bin = 0;
+        int radio_error_count = 0;
         // x loop
         for (x = 0; x < STEPS * SCAN_RBW_FACTOR; x++)
         {
@@ -882,12 +835,7 @@ void loop(void)
             Serial.println("setFrequency:" + String(freq));
 #endif
 
-#ifdef LILYGO
             state = radio.setFrequency(freq, false); // false = no calibration need here
-#else
-            state = radio.setFrequency(freq, false); // false = no calibration need here
-#endif
-            int radio_error_count = 0;
             if (state != RADIOLIB_ERR_NONE)
             {
                 display.drawString(0, 64 - 10, "E:setFrequency:" + String(freq));
@@ -933,63 +881,11 @@ void loop(void)
 #ifdef METHOD_RSSI
             // Spectrum analyzer using getRSSI
             {
-#ifdef PRINT_DEBUG
-                Serial.println("METHOD RSSI");
-#endif
-                // memset
-                // memset(result, 0, RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE);
-                // Some issues with memset function
-                for (i = 0; i < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE; i++)
+                LOG("METHOD RSSI");
+                uint16_t max_rssi = r.rssiMethod(result);
+                if (max_x_rssi[display_x] > max_rssi)
                 {
-                    result[i] = 0;
-                }
-                result_index = 0;
-                // N of samples
-                for (int r = 0; r < SAMPLES_RSSI; r++)
-                {
-                    rssi = radio.getRSSI(false);
-                    int abs_rssi = abs(rssi);
-                    // ToDO: check if 4 is correct value for 33 power bins
-                    // Now we have more space because we are ignoring low dB values
-                    // we can  / 3 default 4
-                    if (RSSI_OUTPUT_FORMULA == 1)
-                    {
-                        result_index =
-                            /// still not clear formula but it works
-                            uint8_t(abs_rssi / 4);
-                    }
-                    else if (RSSI_OUTPUT_FORMULA == 2)
-                    {
-                        // I like this formula better
-                        result_index = uint8_t(abs_rssi / 2) - 22;
-                    }
-                    if (result_index >= RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE)
-                    {
-                        // Maximum index possible
-                        result_index = RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE - 1;
-                    }
-
-#ifdef PRINT_DEBUG
-                    Serial.printf("RSSI: %d IDX: %d\n", rssi, result_index);
-#endif
-                    // avoid buffer overflow
-                    if (result_index < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE)
-                    {
-                        // Saving max ABS value of RSSI. dB is negative, so smaller
-                        // absolute value represents stronger signal.
-                        if (result[result_index] == 0 || result[result_index] > abs_rssi)
-                        {
-                            result[result_index] = abs_rssi;
-                        }
-                        if (max_x_rssi[display_x] > abs_rssi)
-                        {
-                            max_x_rssi[display_x] = abs_rssi;
-                        }
-                    }
-                    else
-                    {
-                        Serial.print("Out-of-Range: result_index %d\n");
-                    }
+                    max_x_rssi[display_x] = max_rssi;
                 }
             }
 #endif // SCAN_METHOD == METHOD_RSSI
