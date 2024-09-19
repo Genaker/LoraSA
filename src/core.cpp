@@ -18,6 +18,9 @@ uint16_t Scan::rssiMethod(uint16_t *result)
     for (int r = 0; r < SAMPLES_RSSI; r++)
     {
         float rssi = getRSSI();
+        if (rssi < -65535)
+            rssi = -65535;
+
         uint16_t abs_rssi = abs(rssi);
         if (abs_rssi < max_signal)
         {
@@ -34,8 +37,16 @@ uint16_t Scan::rssiMethod(uint16_t *result)
         }
         else if (RSSI_OUTPUT_FORMULA == 2)
         {
-            // I like this formula better
-            result_index = uint8_t(abs(rssi) / 2) - 22;
+            if (rssi > HI_RSSI_THRESHOLD)
+            {
+                rssi = HI_RSSI_THRESHOLD;
+            }
+            else if (rssi < LO_RSSI_THRESHOLD)
+            {
+                rssi = LO_RSSI_THRESHOLD;
+            }
+
+            result_index = uint8_t((HI_RSSI_THRESHOLD - rssi) * scale);
         }
 
         if (result_index >= res_size)

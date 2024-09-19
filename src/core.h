@@ -31,7 +31,7 @@ constexpr float LO_RSSI_THRESHOLD = HI_RSSI_THRESHOLD - 66;
 struct Scan
 {
     Scan(int sz)
-        : res_size(sz)
+        : res_size(sz), scale((float)sz / (HI_RSSI_THRESHOLD - LO_RSSI_THRESHOLD + 0.1))
     {
     }
 
@@ -40,6 +40,7 @@ struct Scan
     uint16_t rssiMethod(uint16_t *result);
 
     int res_size;
+    float scale;
 };
 
 #endif
