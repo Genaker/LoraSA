@@ -1,7 +1,7 @@
 #ifndef LORASA_CORE_CPP
 #define LORASA_CORE_CPP
 
-#include "core.h"
+#include "scan.h"
 #include <cstdint>
 #include <cstring>
 #include <stdlib.h>
@@ -13,6 +13,7 @@ uint16_t Scan::rssiMethod(uint16_t *result)
     memset(result, 0, res_size * sizeof(uint16_t));
     int result_index = 0;
 
+    //
     uint16_t max_signal = 65535;
     // N of samples
     for (int r = 0; r < SAMPLES_RSSI; r++)

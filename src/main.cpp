@@ -25,11 +25,12 @@
 
 #include <Arduino.h>
 
-//  #define OSD_ENABLED true
+#define OSD_ENABLED true
 //  #define WIFI_SCANNING_ENABLED true
 //  #define BT_SCANNING_ENABLED true
 
-#include "core.h"
+// RSSI Scan Logic
+#include <scan.h>
 
 #ifndef LILYGO
 #include <heltec_unofficial.h>
@@ -64,58 +65,6 @@ uint64_t bt_start = 0;
 #include "DFRobot_OSD.h"
 #define OSD_SIDE_BAR true
 
-static constexpr uint16_t levels[10] = {
-    0x105, // 0
-    0x10E, // 1
-    0x10D, // 2
-    0x10C, // 3
-    0x10B, // 4
-    0x10A, // 5
-    0x109, // 6
-    0x108, // 7
-    0x107, // 8
-    0x106, // 9
-};
-
-static constexpr uint16_t power_level[MAX_POWER_LEVELS + 1] = {
-    0x10E, // 0
-    0x10E, // 1
-    0x10D, // 2
-    0x10C, // 3
-    0x10B, // 4
-    0x10A, // 5
-    0x109, // 6
-    0x108, // 7
-    0x107, // 8
-    0x106, // 9 not using 106 to accent rise
-    // new line
-    0x10E, // 10
-    0x10D, // 11
-    0x10C, // 12
-    0x10B, // 13
-    0x10A, // 14
-    0x109, // 15
-    0x108, // 16
-    0x107, // 17
-    0x106, // 18 not using 106
-    // new line
-    0x10E, // 19
-    0x10D, // 20
-    0x10C, // 21
-    0x10B, // 22
-    0x10A, // 23
-    0x109, // 24
-    0x108, // 25
-    0x107, // 26
-    0x106, // 27
-    0x105, // 28 ---
-    0x105, // 29
-    0x105, // 30
-    0x105, // 31
-    0x105, // 32
-    0x105  // 33
-};
-
 // SPI pins
 #define OSD_CS 47
 #define OSD_MISO 33
@@ -139,11 +88,6 @@ int global_counter = 0;
 #ifdef OSD_ENABLED
 DFRobot_OSD osd(OSD_CS);
 #endif
-
-/*Define Custom characters Example*/
-static const int buf0[36] = {0x02, 0x80, 0x02, 0x40, 0x7F, 0xE0, 0x42, 0x00,
-                             0x42, 0x00, 0x7A, 0x40, 0x4A, 0x40, 0x4A, 0x80,
-                             0x49, 0x20, 0x5A, 0xA0, 0x44, 0x60, 0x88, 0x20};
 
 #include "global_config.h"
 #include "ui.h"
