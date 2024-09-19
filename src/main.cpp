@@ -29,11 +29,18 @@
 //  #define WIFI_SCANNING_ENABLED true
 //  #define BT_SCANNING_ENABLED true
 
+// Direct access to the low-level SPI communication between RadioLib and the radio module.
+#define RADIOLIB_LOW_LEVEL (1)
+//  In this mode, all methods and member variables of all RadioLib classes will be made
+//  public and so will be exposed to the user. This allows direct manipulation of the
+//  library internals.
+#define RADIOLIB_GODMODE (1)
 #ifndef LILYGO
 #include <heltec_unofficial.h>
 // This file contains a binary patch for the SX1262
 #include "modules/SX126x/patches/SX126x_patch_scan.h"
-#elif defined(LILYGO)
+#endif // end LILYGO
+#if defined(LILYGO)
 // LiLyGO device does not support the auto download mode, you need to get into the
 // download mode manually. To do so, press and hold the BOOT button and then press the
 // RESET button once. After that release the BOOT button. Or OFF->ON together with BOOT
@@ -42,7 +49,6 @@
 #include "utilities.h"
 // Our Code
 #include "LiLyGo.h"
-
 #endif // end LILYGO
 
 #define BT_SCAN_DELAY 60 * 1 * 1000
@@ -172,14 +178,14 @@ int SCAN_RANGES[] = {};
 // to put everything into one page set RANGE_PER_PAGE = FREQ_END - 800
 uint64_t RANGE_PER_PAGE = FREQ_END - FREQ_BEGIN; // FREQ_END - FREQ_BEGIN
 
+// To Enable Multi Screen scan
+//  uint64_t RANGE_PER_PAGE = 50;
+//  Default Range on Menu Button Switch
+
 // multiplies STEPS * N to increase scan resolution.
 #define SCAN_RBW_FACTOR 2
 
 constexpr int OSD_PIXELS_PER_CHAR = (STEPS * SCAN_RBW_FACTOR) / OSD_CHART_WIDTH;
-
-// To Enable Multi Screen scan
-//  uint64_t RANGE_PER_PAGE = 50;
-//  Default Range on Menu Button Switch
 
 #define DEFAULT_RANGE_PER_PAGE 50
 
@@ -403,14 +409,19 @@ void init_radio()
 {
     // initialize SX1262 FSK modem at the initial frequency
     both.println("Init radio");
+#ifdef USING_SX1280PA
+    radio.begin();
+    state == radio.beginGFSK(FREQ_BEGIN);
+#else
     state == radio.beginFSK(FREQ_BEGIN);
-
+#endif
     if (state == RADIOLIB_ERR_NONE)
     {
         Serial.println(F("success!"));
     }
     else
     {
+        display.println("Error:" + String(state));
         Serial.print(F("failed, code "));
         Serial.println(state);
         while (true)
@@ -432,15 +443,25 @@ void init_radio()
 #endif
 
     both.println("Setting up radio");
+#ifdef USING_SX1280PA
+    // RADIOLIB_OR_HALT(radio.setBandwidth(RADIOLIB_SX128X_LORA_BW_406_25));
+#else
     RADIOLIB_OR_HALT(radio.setRxBandwidth(BANDWIDTH));
+#endif
 
     // and disable the data shaping
     RADIOLIB_OR_HALT(radio.setDataShaping(RADIOLIB_SHAPING_NONE));
     both.println("Starting scanning...");
 
-    // calibrate only once ,,, at startup
-    // TODO: check documentation (9.2.1) if we must calibrate in certain ranges
+// calibrate only once ,,, at startup
+// TODO: check documentation (9.2.1) if we must calibrate in certain ranges
+#ifdef USING_SX1280PA
+    radio.setFrequency(FREQ_BEGIN);
+    state = radio.startReceive();
+#else
     radio.setFrequency(FREQ_BEGIN, true);
+#endif
+
     delay(50);
 }
 
@@ -507,7 +528,7 @@ void setup(void)
     delay(400);
     display.clear();
 
-    resolution = RANGE / (STEPS * SCAN_RBW_FACTOR);
+    resolution = (float)RANGE / (STEPS * SCAN_RBW_FACTOR);
 
     single_page_scan = (RANGE_PER_PAGE == range);
 
@@ -570,7 +591,12 @@ void setup(void)
 
 #ifdef METHOD_RSSI
     // TODO: try RADIOLIB_SX126X_RX_TIMEOUT_INF
+#ifdef USING_SX1280PA
+    state = radio.startReceive(RADIOLIB_SX128X_RX_TIMEOUT_NONE);
+#else
     state = radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_NONE);
+#endif
+
     if (state != RADIOLIB_ERR_NONE)
     {
         Serial.print(F("Failed to start receive mode, error code: "));
@@ -882,8 +908,9 @@ void loop(void)
             Serial.println("setFrequency:" + String(freq));
 #endif
 
-#ifdef LILYGO
-            state = radio.setFrequency(freq, false); // false = no calibration need here
+#ifdef USING_SX1280PA
+            state = radio.setFrequency(freq); // 1280 doesn't have calibration
+            radio.startReceive(RADIOLIB_SX128X_RX_TIMEOUT_INF);
 #else
             state = radio.setFrequency(freq, false); // false = no calibration need here
 #endif
@@ -947,7 +974,16 @@ void loop(void)
                 // N of samples
                 for (int r = 0; r < SAMPLES_RSSI; r++)
                 {
+#ifdef USING_SX1280PA
+                    // radio.startReceive();
+                    // get instantaneous RSSI value
+                    // When PR will be merged we can use radi.getRSSI(false);
+                    uint8_t data[3] = {0, 0, 0}; // RssiInst, Status, RFU
+                    radio.mod->SPIreadStream(RADIOLIB_SX128X_CMD_GET_RSSI_INST, data, 3);
+                    rssi = ((float)data[0] / (-2.0));
+#else
                     rssi = radio.getRSSI(false);
+#endif
                     int abs_rssi = abs(rssi);
                     // ToDO: check if 4 is correct value for 33 power bins
                     // Now we have more space because we are ignoring low dB values

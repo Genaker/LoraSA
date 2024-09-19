@@ -2,6 +2,8 @@
 #define UNUSED_PIN (0)
 // LilyGo defined
 
+// Check this LiLyGo file LoraSA2\include\utilities.h
+
 #define I2C_SDA 18
 #define I2C_SCL 17
 #define OLED_RST UNUSED_PIN
@@ -26,6 +28,14 @@
 
 #define RADIO_DIO1_PIN 33
 #define RADIO_BUSY_PIN 34
+
+#ifdef USING_SX1280PA
+#define RADIO_DIO1_PIN 9  // SX1280 DIO1 = IO9
+#define RADIO_BUSY_PIN 36 // SX1280 BUSY = IO36
+#define RADIO_RX_PIN 21
+#define RADIO_TX_PIN 10
+#define BUTTON_PIN 0
+#endif
 
 // Define for our code
 #define RST_OLED UNUSED_PIN
@@ -52,11 +62,16 @@
 #include <SPI.h>
 SPIClass *hspi = new SPIClass(2);
 SX1262 radio = new Module(SS, DIO1, RST_LoRa, BUSY_LoRa, *hspi);
-#else
+#else // ARDUINO_heltec_wifi_32_lora_V3
+#ifdef USING_SX1280PA
+SX1280 radio = new Module(RADIO_CS_PIN, RADIO_DIO1_PIN, RADIO_RST_PIN, RADIO_BUSY_PIN);
+#endif // end USING_SX1280PA
+#ifdef USING_SX1262
 // Default SPI on pins from pins_arduino.h
 SX1262 radio = new Module(RADIO_CS_PIN, RADIO_DIO1_PIN, RADIO_RST_PIN, RADIO_BUSY_PIN);
-#endif
-#endif
+#endif // end USING_SX1262
+#endif // end ARDUINO_heltec_wifi_32_lora_V3
+#endif // end HELTEC_NO_RADIO_INSTANCE
 
 void heltec_loop() {}
 
@@ -107,7 +122,7 @@ PrintSplitter both(Serial, display);
 Print &both = Serial;
 #endif
 // some fake pin
-#define BUTTON 38
+#define BUTTON BUTTON_PIN
 #include "HotButton.h"
 HotButton button(BUTTON);
 
