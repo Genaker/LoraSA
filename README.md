@@ -6,7 +6,9 @@
 - Heltec Wireless Stick Lite V3 No Display (Not Tested)
 - Heltec Vision Master E290 - e-Ink 296 x 128 (No OSD)
 - Heltec Vision MAster T190 - color TFT 320X170 (No OSD)
-- LilyGo Radio Lora T3S3 V.2 SX1262 
+- LilyGo Radio Lora T3S3 V.2 SX1262
+- LilyGo Radio Lora T3S3 V.2 SX1280
+- LilyGo Radio Lora T3_V1.6.1 SX1276 (Not Tested)
 
 ## RF Spectrum Analyzer using Lora Radio
 
