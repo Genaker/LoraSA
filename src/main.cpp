@@ -706,8 +706,6 @@ void check_ranges()
 
 struct RadioScan : Scan
 {
-    RadioScan() : Scan(RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE) {}
-
     float getRSSI() override;
 };
 
@@ -882,7 +880,8 @@ void loop(void)
             // Spectrum analyzer using getRSSI
             {
                 LOG("METHOD RSSI");
-                uint16_t max_rssi = r.rssiMethod(result);
+                uint16_t max_rssi = r.rssiMethod(SAMPLES_RSSI, result,
+                                                 RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE);
                 if (max_x_rssi[display_x] > max_rssi)
                 {
                     max_x_rssi[display_x] = max_rssi;

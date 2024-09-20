@@ -6,17 +6,17 @@
 #include <cstring>
 #include <stdlib.h>
 
-float Scan::getRSSI() { return 0.1; }
-
-uint16_t Scan::rssiMethod(uint16_t *result)
+uint16_t Scan::rssiMethod(size_t samples, uint16_t *result, size_t res_size)
 {
+    float scale((float)res_size / (HI_RSSI_THRESHOLD - LO_RSSI_THRESHOLD + 0.1));
+
     memset(result, 0, res_size * sizeof(uint16_t));
     int result_index = 0;
 
     //
     uint16_t max_signal = 65535;
     // N of samples
-    for (int r = 0; r < SAMPLES_RSSI; r++)
+    for (int r = 0; r < samples; r++)
     {
         float rssi = getRSSI();
         if (rssi < -65535)
