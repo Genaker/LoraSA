@@ -838,9 +838,9 @@ void loop(void)
             int radio_error_count = 0;
             if (state != RADIOLIB_ERR_NONE)
             {
-                display.drawString(0, 64 - 10, "E:setFrequency:" + String(freq));
-                // display.drawString(0, 64 - 10, "E:setFrequency:" + String(freq));
-                Serial.println("E:setFrequency:" + String(freq));
+                display.drawString(
+                    0, 64 - 10, "E(" + String(state) + "):setFrequency:" + String(freq));
+                Serial.println("E(" + String(state) + "):setFrequency:" + String(freq));
                 display.display();
                 delay(2);
                 radio_error_count++;
