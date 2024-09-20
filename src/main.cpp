@@ -806,7 +806,6 @@ void loop(void)
 
         // horizontal (x axis) Frequency loop
         osd_x = 1, osd_y = 2, col = 0, max_bin = 0;
-        int radio_error_count = 0;
         // x loop
         for (x = 0; x < STEPS * SCAN_RBW_FACTOR; x++)
         {
@@ -836,6 +835,7 @@ void loop(void)
 #endif
 
             state = radio.setFrequency(freq, false); // false = no calibration need here
+            int radio_error_count = 0;
             if (state != RADIOLIB_ERR_NONE)
             {
                 display.drawString(0, 64 - 10, "E:setFrequency:" + String(freq));
