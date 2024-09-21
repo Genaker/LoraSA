@@ -35,6 +35,16 @@ struct Scan
     // rssiMethod gets the data similar to the scan method,
     // but uses getRSSI directly.
     uint16_t rssiMethod(size_t samples, uint16_t *result, size_t res_size);
+
+    // detect method analyses result, and produces filtered_result, marking
+    // those values that represent a detection event.
+    // It returns index that represents strongest signal at which a detection event
+    // occurred.
+    static size_t detect(uint16_t *result, bool *filtered_result, size_t result_size,
+                         int samples);
 };
+
+// Remove reading without neighbors
+#define FILTER_SPECTRUM_RESULTS true
 
 #endif

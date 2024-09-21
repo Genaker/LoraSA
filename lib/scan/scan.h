@@ -30,17 +30,21 @@ constexpr float LO_RSSI_THRESHOLD = HI_RSSI_THRESHOLD - 66;
 
 struct Scan
 {
-    Scan(int sz)
-        : res_size(sz), scale((float)sz / (HI_RSSI_THRESHOLD - LO_RSSI_THRESHOLD + 0.1))
-    {
-    }
+    virtual float getRSSI() = 0;
 
-    virtual float getRSSI();
+    // rssiMethod gets the data similar to the scan method,
+    // but uses getRSSI directly.
+    uint16_t rssiMethod(size_t samples, uint16_t *result, size_t res_size);
 
-    uint16_t rssiMethod(uint16_t *result);
-
-    int res_size;
-    float scale;
+    // detect method analyses result, and produces filtered_result, marking
+    // those values that represent a detection event.
+    // It returns index that represents strongest signal at which a detection event
+    // occurred.
+    static size_t detect(uint16_t *result, bool *filtered_result, size_t result_size,
+                         int samples);
 };
+
+// Remove reading without neighbors
+#define FILTER_SPECTRUM_RESULTS true
 
 #endif
