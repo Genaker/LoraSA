@@ -1,5 +1,15 @@
 # Lora SA(Spectrum Analyzer)
 
+# Supportted boards: 
+- Heltec Lora V3 128 x 64 OLED
+- Heltec Wireless Stick V3 64 x 32 (Not tested)
+- Heltec Wireless Stick Lite V3 No Display (Not Tested)
+- Heltec Vision Master E290 - e-Ink 296 x 128 (No OSD)
+- Heltec Vision MAster T190 - color TFT 320X170 (No OSD)
+- LilyGo Radio Lora T3S3 V.2 SX1262
+- LilyGo Radio Lora T3S3 V.2 SX1280
+- LilyGo Radio Lora T3_V1.6.1 SX1276 (Not Tested)
+
 ## RF Spectrum Analyzer using Lora Radio
 
 <img src="https://github.com/user-attachments/assets/4caeb467-1964-4184-ab20-ba68b97144aa" alt="LORA hardware" width="200"/>
@@ -213,3 +223,95 @@ or buy :
 
 ![image](https://github.com/user-attachments/assets/a1e00b51-5566-4ff5-98fe-67eaeb5bc81f)
 We are using pin 41 as a Buzzer trigger. Connect buzzer + leg with pin 41 and - leg with the ground (GND). You can change the buzzer pin in the code.
+
+
+## Analog FPV OSD (ON SCREEN DISPLAY)
+To Enable OSD, Uncomment these lines </br>
+```
+//  #define OSD_ENABLED true
+```
+**OSD sidebar enabled/disable**
+comment or uncomment  this line
+```
+#define OSD_SIDE_BAR true
+```
+
+Or you can set this and other variables as a build parameter: 
+```   
+build_flags = 
+	-DOSD_ENABLED
+```
+
+## DFRobot OSD Wiring 
+**Heltec V3 -> DFRobot OSD** <br />
+GND -> GND <br />
+3V3 -> 3V3 <br />
+26 -> SCK <br />
+34 ->MOSI <br />
+33 ->MISO <br />
+47 -> D3 <br />
+
+More photos you can see there:  <br />
+https://github.com/Genaker/LoraSA/issues/11
+
+![image](https://github.com/user-attachments/assets/3ba8230d-21de-449d-881b-bdc5f5b4907d)
+
+# Camera to DF robot Wiring
+**Camera -> DFRobotOSD** <br />
+Video out -> In <br />
+GND -> GND <br />
+3v3 -> 3V3 Heltec or some 3v on FPV <br />
+
+# DFRobot to Drone or VTX(video transmitter)  
+**DF Robot -> VTX or** <br />
+Video Out - Video IN <br />
+
+```
+// SPI pins
+#define OSD_CS 47
+#define OSD_MISO 33
+#define OSD_MOSI 34
+#define OSD_SCK 26
+```
+
+## Joystick Wiring 
+https://www.aliexpress.us/item/2251832815289133.html 
+https://www.amazon.com/dp/B00P7QBGD2
+
+**Loystic -> Heltec V3**  <br />
+SW -> 46 <br />
+VRX -> 19 <br />
+VRY -> X has not been implemented yet  <br />
++5v -> 5V <br />
+GND -> GND <br />
+
+## Buzzer/Beeper Wiring
+TMB12A03 - in my case. Low voltage is better.  <br />
+**Buzzer -> Heltec V3**  <br />
+(+) -> 41 <br />
+GND (another) -> GND  <br />
+
+## Select Board to build
+Select Visual Code environment:
+![image](https://github.com/user-attachments/assets/3765615b-3a80-4270-bc74-8f6eae2b8458)
+
+Edit **paltformio.io** uncommenting/selecting your sources
+```
+[platformio]
+; for env:vision-master-e190
+; src_dir = tft_src
+; for env:vision-master-e290
+; src_dir = eink_src
+; for env:heltec_wifi_lora_32_V3
+; src_dir = src ;;Default
+```
+for LilyGo use env:heltec_wifi_lora_32_V3
+
+# WiFi and Bluetooth BT Scanning
+Works only with OSD enabled <br/>
+Uncomment this lines 
+```
+//  #define OSD_ENABLED true
+//  #define WIFI_SCANNING_ENABLED true
+//  #define BT_SCANNING_ENABLED true
+```
