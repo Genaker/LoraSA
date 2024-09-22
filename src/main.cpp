@@ -411,9 +411,9 @@ void init_radio()
     both.println("Init radio");
 #ifdef USING_SX1280PA
     radio.begin();
-    state == radio.beginGFSK(FREQ_BEGIN);
+    state = radio.beginGFSK(FREQ_BEGIN);
 #else
-    state == radio.beginFSK(FREQ_BEGIN);
+    state = radio.beginFSK(FREQ_BEGIN);
 #endif
     if (state == RADIOLIB_ERR_NONE)
     {
@@ -450,14 +450,26 @@ void init_radio()
 #endif
 
     // and disable the data shaping
-    RADIOLIB_OR_HALT(radio.setDataShaping(RADIOLIB_SHAPING_NONE));
+    state = radio.setDataShaping(RADIOLIB_SHAPING_NONE);
+    if (state != RADIOLIB_ERR_NONE)
+    {
+        Serial.println("Error:setDataShaping:" + String(state));
+    }
     both.println("Starting scanning...");
 
 // calibrate only once ,,, at startup
 // TODO: check documentation (9.2.1) if we must calibrate in certain ranges
 #ifdef USING_SX1280PA
-    radio.setFrequency(FREQ_BEGIN);
+    state = radio.setFrequency(FREQ_BEGIN);
+    if (state != RADIOLIB_ERR_NONE)
+    {
+        Serial.println("Error:setFrequency:" + String(state));
+    }
     state = radio.startReceive();
+    if (state != RADIOLIB_ERR_NONE)
+    {
+        Serial.println("Error:startReceive:" + String(state));
+    }
 #else
     radio.setFrequency(FREQ_BEGIN, true);
 #endif
