@@ -35,6 +35,9 @@
 //  public and so will be exposed to the user. This allows direct manipulation of the
 //  library internals.
 #define RADIOLIB_GODMODE (1)
+
+#include "radioScan/radioScan.h"
+
 #ifndef LILYGO
 #include <heltec_unofficial.h>
 // This file contains a binary patch for the SX1262
@@ -162,13 +165,15 @@ typedef enum
     METHOD_SPECTRAL
 } TSCAN_METOD_ENUM;
 
+// #define SCAN_METHOD METHOD_SPECTRAL
+
 #define SCAN_METHOD
 // #define METHOD_SPECTRAL // Spectral scan method
 #define METHOD_RSSI // Uncomment this and comment METHOD_SPECTRAL fot RSSI
 
 // Output Pixel Formula
 // 1 = rssi / 4, 2 = (rssi / 2) - 22 or 20
-constexpr int RSSI_OUTPUT_FORMULA = 2;
+// constexpr int RSSI_OUTPUT_FORMULA = 2;
 
 // Feature to scan diapasones. Other frequency settings will be ignored.
 // int SCAN_RANGES[] = {850890, 920950};
@@ -226,7 +231,7 @@ uint64_t median_frequency = FREQ_BEGIN + FREQ_END - FREQ_BEGIN / 2;
 // #define DISABLE_PLOT_CHART false   // unused
 
 // Array to store the scan results
-int16_t result[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
+uint16_t result[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
 
 bool filtered_result[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
 
@@ -410,7 +415,7 @@ void init_radio()
     // initialize SX1262 FSK modem at the initial frequency
     both.println("Init radio");
 #ifdef USING_SX1280PA
-    radio.begin();
+    // radio.begin();
     state = radio.beginGFSK(FREQ_BEGIN);
 #else
     state = radio.beginFSK(FREQ_BEGIN);
@@ -801,8 +806,30 @@ void check_ranges()
         single_page_scan = false;
     }
 }
+
+struct RadioScan : Scan
+{
+    float getRSSI() override;
+};
+
+float RadioScan::getRSSI()
+{
+#ifdef USING_SX1280PA
+    // radio.startReceive();
+    // get instantaneous RSSI value
+    // When PR will be merged we can use radi.getRSSI(false);
+    uint8_t data[3] = {0, 0, 0}; // RssiInst, Status, RFU
+    radio.mod->SPIreadStream(RADIOLIB_SX128X_CMD_GET_RSSI_INST, data, 3);
+    return ((float)data[0] / (-2.0));
+#else
+    return radio.getRSSI(false);
+#endif
+}
+
 // MAX Frequency RSSI BIN value of the samples
 int max_rssi_x = 999;
+
+RadioScan r;
 
 void loop(void)
 {
@@ -972,72 +999,12 @@ void loop(void)
 #ifdef METHOD_RSSI
             // Spectrum analyzer using getRSSI
             {
-#ifdef PRINT_DEBUG
-                Serial.println("METHOD RSSI");
-#endif
-                // memset
-                // memset(result, 0, RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE);
-                // Some issues with memset function
-                for (i = 0; i < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE; i++)
+                LOG("METHOD RSSI");
+                uint16_t max_rssi = r.rssiMethod(SAMPLES_RSSI, result,
+                                                 RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE);
+                if (max_x_rssi[display_x] > max_rssi)
                 {
-                    result[i] = 0;
-                }
-                result_index = 0;
-                // N of samples
-                for (int r = 0; r < SAMPLES_RSSI; r++)
-                {
-#ifdef USING_SX1280PA
-                    // radio.startReceive();
-                    // get instantaneous RSSI value
-                    // When PR will be merged we can use radi.getRSSI(false);
-                    uint8_t data[3] = {0, 0, 0}; // RssiInst, Status, RFU
-                    radio.mod->SPIreadStream(RADIOLIB_SX128X_CMD_GET_RSSI_INST, data, 3);
-                    rssi = ((float)data[0] / (-2.0));
-#else
-                    rssi = radio.getRSSI(false);
-#endif
-                    int abs_rssi = abs(rssi);
-                    // ToDO: check if 4 is correct value for 33 power bins
-                    // Now we have more space because we are ignoring low dB values
-                    // we can  / 3 default 4
-                    if (RSSI_OUTPUT_FORMULA == 1)
-                    {
-                        result_index =
-                            /// still not clear formula but it works
-                            uint8_t(abs_rssi / 4);
-                    }
-                    else if (RSSI_OUTPUT_FORMULA == 2)
-                    {
-                        // I like this formula better
-                        result_index = uint8_t(abs_rssi / 2) - 22;
-                    }
-                    if (result_index >= RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE)
-                    {
-                        // Maximum index possible
-                        result_index = RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE - 1;
-                    }
-
-#ifdef PRINT_DEBUG
-                    Serial.printf("RSSI: %d IDX: %d\n", rssi, result_index);
-#endif
-                    // avoid buffer overflow
-                    if (result_index < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE)
-                    {
-                        // Saving max ABS value of RSSI. dB is negative, so smaller
-                        // absolute value represents stronger signal.
-                        if (result[result_index] == 0 || result[result_index] > abs_rssi)
-                        {
-                            result[result_index] = abs_rssi;
-                        }
-                        if (max_x_rssi[display_x] > abs_rssi)
-                        {
-                            max_x_rssi[display_x] = abs_rssi;
-                        }
-                    }
-                    else
-                    {
-                        Serial.print("Out-of-Range: result_index %d\n");
-                    }
+                    max_x_rssi[display_x] = max_rssi;
                 }
             }
 #endif // SCAN_METHOD == METHOD_RSSI

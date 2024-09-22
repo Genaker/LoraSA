@@ -1,42 +1,4 @@
 
-#define UNUSED_PIN (0)
-// LilyGo defined
-
-// Check this LiLyGo file LoraSA2\include\utilities.h
-
-#define I2C_SDA 18
-#define I2C_SCL 17
-#define OLED_RST UNUSED_PIN
-
-#define RADIO_SCLK_PIN 5
-#define RADIO_MISO_PIN 3
-#define RADIO_MOSI_PIN 6
-#define RADIO_CS_PIN 7
-
-#define SDCARD_MOSI 11
-#define SDCARD_MISO 2
-#define SDCARD_SCLK 14
-#define SDCARD_CS 13
-
-#define BOARD_LED 37
-#define LED_ON HIGH
-
-#define BUTTON_PIN 0
-#define ADC_PIN 1
-
-#define RADIO_RST_PIN 8
-
-#define RADIO_DIO1_PIN 33
-#define RADIO_BUSY_PIN 34
-
-#ifdef USING_SX1280PA
-#define RADIO_DIO1_PIN 9  // SX1280 DIO1 = IO9
-#define RADIO_BUSY_PIN 36 // SX1280 BUSY = IO36
-#define RADIO_RX_PIN 21
-#define RADIO_TX_PIN 10
-#define BUTTON_PIN 0
-#endif
-
 // Define for our code
 #define RST_OLED UNUSED_PIN
 #define LED BOARD_LED
