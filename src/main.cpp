@@ -29,14 +29,21 @@
 //  #define WIFI_SCANNING_ENABLED true
 //  #define BT_SCANNING_ENABLED true
 
-// RSSI Scan Logic
-#include <scan.h>
+// Direct access to the low-level SPI communication between RadioLib and the radio module.
+#define RADIOLIB_LOW_LEVEL (1)
+//  In this mode, all methods and member variables of all RadioLib classes will be made
+//  public and so will be exposed to the user. This allows direct manipulation of the
+//  library internals.
+#define RADIOLIB_GODMODE (1)
+
+#include "radioScan/radioScan.h"
 
 #ifndef LILYGO
 #include <heltec_unofficial.h>
 // This file contains a binary patch for the SX1262
 #include "modules/SX126x/patches/SX126x_patch_scan.h"
-#elif defined(LILYGO)
+#endif // end LILYGO
+#if defined(LILYGO)
 // LiLyGO device does not support the auto download mode, you need to get into the
 // download mode manually. To do so, press and hold the BOOT button and then press the
 // RESET button once. After that release the BOOT button. Or OFF->ON together with BOOT
@@ -45,7 +52,6 @@
 #include "utilities.h"
 // Our Code
 #include "LiLyGo.h"
-
 #endif // end LILYGO
 
 #define BT_SCAN_DELAY 60 * 1 * 1000
@@ -102,9 +108,15 @@ typedef enum
     METHOD_SPECTRAL
 } TSCAN_METOD_ENUM;
 
+// #define SCAN_METHOD METHOD_SPECTRAL
+
 #define SCAN_METHOD
 // #define METHOD_SPECTRAL // Spectral scan method
 #define METHOD_RSSI // Uncomment this and comment METHOD_SPECTRAL fot RSSI
+
+// Output Pixel Formula
+// 1 = rssi / 4, 2 = (rssi / 2) - 22 or 20
+// constexpr int RSSI_OUTPUT_FORMULA = 2;
 
 // Feature to scan diapasones. Other frequency settings will be ignored.
 // int SCAN_RANGES[] = {850890, 920950};
@@ -114,14 +126,14 @@ int SCAN_RANGES[] = {};
 // to put everything into one page set RANGE_PER_PAGE = FREQ_END - 800
 uint64_t RANGE_PER_PAGE = FREQ_END - FREQ_BEGIN; // FREQ_END - FREQ_BEGIN
 
+// To Enable Multi Screen scan
+//  uint64_t RANGE_PER_PAGE = 50;
+//  Default Range on Menu Button Switch
+
 // multiplies STEPS * N to increase scan resolution.
 #define SCAN_RBW_FACTOR 2
 
 constexpr int OSD_PIXELS_PER_CHAR = (STEPS * SCAN_RBW_FACTOR) / OSD_CHART_WIDTH;
-
-// To Enable Multi Screen scan
-//  uint64_t RANGE_PER_PAGE = 50;
-//  Default Range on Menu Button Switch
 
 #define DEFAULT_RANGE_PER_PAGE 50
 
@@ -160,6 +172,7 @@ uint64_t median_frequency = FREQ_BEGIN + FREQ_END - FREQ_BEGIN / 2;
 // #define DISABLE_PLOT_CHART false   // unused
 
 // Array to store the scan results
+uint16_t result[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
 uint16_t result[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
 
 bool filtered_result[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
@@ -343,14 +356,19 @@ void init_radio()
 {
     // initialize SX1262 FSK modem at the initial frequency
     both.println("Init radio");
-    state == radio.beginFSK(FREQ_BEGIN);
-
+#ifdef USING_SX1280PA
+    // radio.begin();
+    state = radio.beginGFSK(FREQ_BEGIN);
+#else
+    state = radio.beginFSK(FREQ_BEGIN);
+#endif
     if (state == RADIOLIB_ERR_NONE)
     {
         Serial.println(F("success!"));
     }
     else
     {
+        display.println("Error:" + String(state));
         Serial.print(F("failed, code "));
         Serial.println(state);
         while (true)
@@ -372,15 +390,37 @@ void init_radio()
 #endif
 
     both.println("Setting up radio");
+#ifdef USING_SX1280PA
+    // RADIOLIB_OR_HALT(radio.setBandwidth(RADIOLIB_SX128X_LORA_BW_406_25));
+#else
     RADIOLIB_OR_HALT(radio.setRxBandwidth(BANDWIDTH));
+#endif
 
     // and disable the data shaping
-    RADIOLIB_OR_HALT(radio.setDataShaping(RADIOLIB_SHAPING_NONE));
+    state = radio.setDataShaping(RADIOLIB_SHAPING_NONE);
+    if (state != RADIOLIB_ERR_NONE)
+    {
+        Serial.println("Error:setDataShaping:" + String(state));
+    }
     both.println("Starting scanning...");
 
-    // calibrate only once ,,, at startup
-    // TODO: check documentation (9.2.1) if we must calibrate in certain ranges
+// calibrate only once ,,, at startup
+// TODO: check documentation (9.2.1) if we must calibrate in certain ranges
+#ifdef USING_SX1280PA
+    state = radio.setFrequency(FREQ_BEGIN);
+    if (state != RADIOLIB_ERR_NONE)
+    {
+        Serial.println("Error:setFrequency:" + String(state));
+    }
+    state = radio.startReceive();
+    if (state != RADIOLIB_ERR_NONE)
+    {
+        Serial.println("Error:startReceive:" + String(state));
+    }
+#else
     radio.setFrequency(FREQ_BEGIN, true);
+#endif
+
     delay(50);
 }
 
@@ -447,7 +487,7 @@ void setup(void)
     delay(400);
     display.clear();
 
-    resolution = RANGE / (STEPS * SCAN_RBW_FACTOR);
+    resolution = (float)RANGE / (STEPS * SCAN_RBW_FACTOR);
 
     single_page_scan = (RANGE_PER_PAGE == range);
 
@@ -510,7 +550,12 @@ void setup(void)
 
 #ifdef METHOD_RSSI
     // TODO: try RADIOLIB_SX126X_RX_TIMEOUT_INF
+#ifdef USING_SX1280PA
+    state = radio.startReceive(RADIOLIB_SX128X_RX_TIMEOUT_NONE);
+#else
     state = radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_NONE);
+#endif
+
     if (state != RADIOLIB_ERR_NONE)
     {
         Serial.print(F("Failed to start receive mode, error code: "));
@@ -706,15 +751,27 @@ void check_ranges()
 
 struct RadioScan : Scan
 {
-    RadioScan() : Scan(RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE) {}
-
     float getRSSI() override;
 };
 
-float RadioScan::getRSSI() { return radio.getRSSI(false); }
+float RadioScan::getRSSI()
+{
+#ifdef USING_SX1280PA
+    // radio.startReceive();
+    // get instantaneous RSSI value
+    // When PR will be merged we can use radi.getRSSI(false);
+    uint8_t data[3] = {0, 0, 0}; // RssiInst, Status, RFU
+    radio.mod->SPIreadStream(RADIOLIB_SX128X_CMD_GET_RSSI_INST, data, 3);
+    return ((float)data[0] / (-2.0));
+#else
+    return radio.getRSSI(false);
+#endif
+}
 
 // MAX Frequency RSSI BIN value of the samples
 int max_rssi_x = 999;
+
+RadioScan r;
 
 RadioScan r;
 
@@ -835,7 +892,13 @@ void loop(void)
             Serial.println("setFrequency:" + String(freq));
 #endif
 
+#ifdef USING_SX1280PA
+            state = radio.setFrequency(freq); // 1280 doesn't have calibration
+            radio.startReceive(RADIOLIB_SX128X_RX_TIMEOUT_INF);
+#else
             state = radio.setFrequency(freq, false); // false = no calibration need here
+#endif
+            int radio_error_count = 0;
             if (state != RADIOLIB_ERR_NONE)
             {
                 display.drawString(0, 64 - 10, "E:setFrequency:" + String(freq));
@@ -882,7 +945,8 @@ void loop(void)
             // Spectrum analyzer using getRSSI
             {
                 LOG("METHOD RSSI");
-                uint16_t max_rssi = r.rssiMethod(result);
+                uint16_t max_rssi = r.rssiMethod(SAMPLES_RSSI, result,
+                                                 RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE);
                 if (max_x_rssi[display_x] > max_rssi)
                 {
                     max_x_rssi[display_x] = max_rssi;

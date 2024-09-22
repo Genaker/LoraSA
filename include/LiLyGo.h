@@ -1,32 +1,4 @@
 
-#define UNUSED_PIN (0)
-// LilyGo defined
-
-#define I2C_SDA 18
-#define I2C_SCL 17
-#define OLED_RST UNUSED_PIN
-
-#define RADIO_SCLK_PIN 5
-#define RADIO_MISO_PIN 3
-#define RADIO_MOSI_PIN 6
-#define RADIO_CS_PIN 7
-
-#define SDCARD_MOSI 11
-#define SDCARD_MISO 2
-#define SDCARD_SCLK 14
-#define SDCARD_CS 13
-
-#define BOARD_LED 37
-#define LED_ON HIGH
-
-#define BUTTON_PIN 0
-#define ADC_PIN 1
-
-#define RADIO_RST_PIN 8
-
-#define RADIO_DIO1_PIN 33
-#define RADIO_BUSY_PIN 34
-
 // Define for our code
 #define RST_OLED UNUSED_PIN
 #define LED BOARD_LED
@@ -52,11 +24,16 @@
 #include <SPI.h>
 SPIClass *hspi = new SPIClass(2);
 SX1262 radio = new Module(SS, DIO1, RST_LoRa, BUSY_LoRa, *hspi);
-#else
+#else // ARDUINO_heltec_wifi_32_lora_V3
+#ifdef USING_SX1280PA
+SX1280 radio = new Module(RADIO_CS_PIN, RADIO_DIO1_PIN, RADIO_RST_PIN, RADIO_BUSY_PIN);
+#endif // end USING_SX1280PA
+#ifdef USING_SX1262
 // Default SPI on pins from pins_arduino.h
 SX1262 radio = new Module(RADIO_CS_PIN, RADIO_DIO1_PIN, RADIO_RST_PIN, RADIO_BUSY_PIN);
-#endif
-#endif
+#endif // end USING_SX1262
+#endif // end ARDUINO_heltec_wifi_32_lora_V3
+#endif // end HELTEC_NO_RADIO_INSTANCE
 
 void heltec_loop() {}
 
@@ -107,7 +84,7 @@ PrintSplitter both(Serial, display);
 Print &both = Serial;
 #endif
 // some fake pin
-#define BUTTON 38
+#define BUTTON BUTTON_PIN
 #include "HotButton.h"
 HotButton button(BUTTON);
 
