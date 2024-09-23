@@ -1,7 +1,7 @@
 #ifndef LORASA_CORE_CPP
 #define LORASA_CORE_CPP
 
-#include "scan.h"
+#include "radioScan.h"
 #include <cstdint>
 #include <cstring>
 #include <stdlib.h>
