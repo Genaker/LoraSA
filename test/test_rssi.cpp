@@ -1,6 +1,6 @@
 #include <stdio.h>
 #define LOG(args...) printf(args)
-#include "../src/radioScan/radioScan.cpp"
+#include "../lib/scan/scan.cpp"
 #include <unity.h>
 
 void setUp(void) {}

@@ -21,7 +21,7 @@
   https://jgromes.github.io/RadioLib/
 */
 
-// #define HELTEC_NO_DISPLAY
+//  #define HELTEC_NO_DISPLAY
 
 #include <Arduino.h>
 
@@ -36,7 +36,8 @@
 //  library internals.
 #define RADIOLIB_GODMODE (1)
 
-#include "radioScan/radioScan.h"
+#include <LoRaBoards.h>
+#include <scan.h>
 
 #ifndef LILYGO
 #include <heltec_unofficial.h>
@@ -354,7 +355,6 @@ void init_radio()
     // initialize SX1262 FSK modem at the initial frequency
     both.println("Init radio");
 #ifdef USING_SX1280PA
-    // radio.begin();
     state = radio.beginGFSK(FREQ_BEGIN);
 #else
     state = radio.beginFSK(FREQ_BEGIN);
@@ -423,6 +423,10 @@ void init_radio()
 
 void setup(void)
 {
+    setupBoards();
+    delay(5000);
+    Serial.println("setup is done");
+
     // LED brightness
     heltec_led(25);
 #ifdef OSD_ENABLED
