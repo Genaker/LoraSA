@@ -1127,12 +1127,8 @@ void loop(void)
                 display.display();
             }
 
-// LiLyGo doesn't have button ;(
-// ToDO: Check if we use BOOT button
-#ifndef LILYGO
             if (buttonPressHandler(freq) == false)
                 break;
-#endif // END LILYGO
 
             // wait a little bit before the next scan,
             // otherwise the SX1262 hangs
