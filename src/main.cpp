@@ -25,9 +25,9 @@
 
 #include <Arduino.h>
 
-#define OSD_ENABLED true
-//  #define WIFI_SCANNING_ENABLED true
-//  #define BT_SCANNING_ENABLED true
+// #define OSD_ENABLED true
+// #define WIFI_SCANNING_ENABLED true
+// #define BT_SCANNING_ENABLED true
 
 // Direct access to the low-level SPI communication between RadioLib and the radio module.
 #define RADIOLIB_LOW_LEVEL (1)
