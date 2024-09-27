@@ -22,6 +22,10 @@
 
 #define BUZZER_PIN 41
 
+#ifdef LILYGO
+#define BUZZER_PIN 45
+#endif
+
 // REB trigger PIN
 #define REB_PIN 42
 
