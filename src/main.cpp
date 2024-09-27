@@ -21,7 +21,7 @@
   https://jgromes.github.io/RadioLib/
 */
 
-// #define HELTEC_NO_DISPLAY
+//  #define HELTEC_NO_DISPLAY
 
 #include <Arduino.h>
 
@@ -36,21 +36,24 @@
 //  library internals.
 #define RADIOLIB_GODMODE (1)
 
-#include "radioScan/radioScan.h"
+#include <scan.h>
 
 #ifndef LILYGO
 #include <heltec_unofficial.h>
 // This file contains a binary patch for the SX1262
 #include "modules/SX126x/patches/SX126x_patch_scan.h"
-#endif // end LILYGO
+#endif // end ifndef LILYGO
+
 #if defined(LILYGO)
 // LiLyGO device does not support the auto download mode, you need to get into the
 // download mode manually. To do so, press and hold the BOOT button and then press the
 // RESET button once. After that release the BOOT button. Or OFF->ON together with BOOT
 
 // Default LilyGO code
-#include "utilities.h"
-// Our Code
+#include <LoRaBoards.h>
+
+// #include "utilities.h"
+//  Our Code
 #include "LiLyGo.h"
 #endif // end LILYGO
 
@@ -133,6 +136,10 @@ uint64_t RANGE_PER_PAGE = FREQ_END - FREQ_BEGIN; // FREQ_END - FREQ_BEGIN
 // multiplies STEPS * N to increase scan resolution.
 #define SCAN_RBW_FACTOR 2
 
+#ifdef USING_SX1280PA
+#define SCAN_RBW_FACTOR 2
+#endif
+
 constexpr int OSD_PIXELS_PER_CHAR = (STEPS * SCAN_RBW_FACTOR) / OSD_CHART_WIDTH;
 
 #define DEFAULT_RANGE_PER_PAGE 50
@@ -144,8 +151,6 @@ bool ANIMATED_RELOAD = false;
 #define UP_FILTER 5
 // Trim low signals - nose level
 #define START_LOW 6
-// Remove reading without neighbors
-#define FILTER_SPECTRUM_RESULTS true
 #define FILTER_SAMPLES_MIN
 constexpr bool DRAW_DETECTION_TICKS = true;
 int16_t max_x_rssi[STEPS] = {999};
@@ -172,7 +177,6 @@ uint64_t median_frequency = FREQ_BEGIN + FREQ_END - FREQ_BEGIN / 2;
 // #define DISABLE_PLOT_CHART false   // unused
 
 // Array to store the scan results
-uint16_t result[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
 uint16_t result[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
 
 bool filtered_result[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
@@ -357,7 +361,6 @@ void init_radio()
     // initialize SX1262 FSK modem at the initial frequency
     both.println("Init radio");
 #ifdef USING_SX1280PA
-    // radio.begin();
     state = radio.beginGFSK(FREQ_BEGIN);
 #else
     state = radio.beginFSK(FREQ_BEGIN);
@@ -426,6 +429,12 @@ void init_radio()
 
 void setup(void)
 {
+#ifdef LILYGO
+    setupBoards();
+    delay(3000);
+    Serial.println("setup LiLyGO board is done");
+#endif
+
     // LED brightness
     heltec_led(25);
 #ifdef OSD_ENABLED
@@ -773,8 +782,6 @@ int max_rssi_x = 999;
 
 RadioScan r;
 
-RadioScan r;
-
 void loop(void)
 {
     UI_displayDecorate(0, 0, false); // some default values
@@ -863,7 +870,6 @@ void loop(void)
 
         // horizontal (x axis) Frequency loop
         osd_x = 1, osd_y = 2, col = 0, max_bin = 0;
-        int radio_error_count = 0;
         // x loop
         for (x = 0; x < STEPS * SCAN_RBW_FACTOR; x++)
         {
@@ -888,9 +894,7 @@ void loop(void)
             float step = (range * ((float)x / (STEPS * SCAN_RBW_FACTOR)));
 
             freq = fr_begin + step;
-#ifdef PRINT_DEBUG
-            Serial.println("setFrequency:" + String(freq));
-#endif
+            LOG("setFrequency:%f\n", freq);
 
 #ifdef USING_SX1280PA
             state = radio.setFrequency(freq); // 1280 doesn't have calibration
@@ -901,9 +905,9 @@ void loop(void)
             int radio_error_count = 0;
             if (state != RADIOLIB_ERR_NONE)
             {
-                display.drawString(0, 64 - 10, "E:setFrequency:" + String(freq));
-                // display.drawString(0, 64 - 10, "E:setFrequency:" + String(freq));
-                Serial.println("E:setFrequency:" + String(freq));
+                display.drawString(
+                    0, 64 - 10, "E(" + String(state) + "):setFrequency:" + String(freq));
+                Serial.println("E(" + String(state) + "):setFrequency:" + String(freq));
                 display.display();
                 delay(2);
                 radio_error_count++;
@@ -911,9 +915,7 @@ void loop(void)
                     continue;
             }
 
-#ifdef PRINT_DEBUG
-            Serial.printf("Step:%d Freq: %f\n", x, freq);
-#endif
+            LOG("Step:%d Freq: %f\n", x, freq);
             // SpectralScan Method
 #ifdef METHOD_SPECTRAL
             {
@@ -971,59 +973,21 @@ void loop(void)
                 display.setColor(WHITE);
             }
 #endif
-            detected = false;
-            detected_y[display_x] = false;
-            max_rssi_x = 999;
+            size_t detected_at = r.detect(
+                result, filtered_result, RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE, samples);
 
-            for (y = 0; y < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE; y++)
+            if (max_rssi_x > detected_at)
             {
+                // MAx bin Value not RSSI
+                max_rssi_x = detected_at;
+            }
 
-#ifdef PRINT_DEBUG
-                Serial.print(String(y) + ":");
-                Serial.print(String(result[y]) + ",");
-#endif
-#if !defined(FILTER_SPECTRUM_RESULTS) || FILTER_SPECTRUM_RESULTS == false
-                if (result[y] && result[y] != 0)
-                {
-                    filtered_result[y] = 1;
-                }
-                else
-                {
-                    filtered_result[y] = 0;
-                }
-#endif
+            detected = detected_at < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE;
+            detected_y[display_x] = false;
 
-// if samples low ~1 filter removes all values
 #if FILTER_SPECTRUM_RESULTS
-
-                filtered_result[y] = 0;
-                // Filter Elements without neighbors
-                // if RSSI method actual value is -xxx dB
-                if (result[y] > 0 && samples > 1)
-                {
-                    // do not process 'first' and 'last' row to avoid out of index
-                    // access.
-                    if ((y > 0) && (y < (RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE - 2)))
-                    {
-                        if (((result[y + 1] != 0) && (result[y + 2] != 0)) ||
-                            (result[y - 1] != 0))
-                        {
-                            filtered_result[y] = 1;
-                            // Fill empty pixel
-                            result[y + 1] = 1;
-                        }
-                        else
-                        {
-#ifdef PRINT_DEBUG
-                            Serial.print("Filtered:" + String(x) + ":" + String(y) + ",");
-#endif
-                        }
-                    }
-                } // not filtering if samples == 1 because it will be filtered
-                else if (result[y] > 0 && samples == 1)
-                {
-                    filtered_result[y] = 1;
-                }
+            for (int y = 0; y < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE; y++)
+            {
                 // calculating max window x RSSI after filters
                 x_window = (int)(display_x / WINDOW_SIZE);
                 int abs_result = abs(result[y]);
@@ -1031,16 +995,15 @@ void loop(void)
                     max_x_window[x_window] > abs_result)
                 {
                     max_x_window[x_window] = abs_result;
-#ifdef PRINT_DEBUG
-                    Serial.println("MAX x window: " + String(x_window) + " " +
-                                   String(abs_result));
-#endif
+                    LOG("MAX x window: %i %i\n", x_window, abs_result);
                 }
+            }
 #endif
+
+            if (detected_at <= drone_detection_level)
+            {
                 // check if we should alarm about a drone presence
-                if ((filtered_result[y] == 1) // we have some data and
-                    && (y <= drone_detection_level) &&
-                    detected_y[display_x] == false) // detection threshold match
+                if (detected_y[display_x] == false) // detection threshold match
                 {
                     // Set LED to ON (filtered in UI component)
                     UI_setLedFlag(true);
@@ -1084,8 +1047,7 @@ void loop(void)
                     }
                 }
 #if (WATERFALL_ENABLED == true)
-                if ((filtered_result[y] == 1) && (y <= drone_detection_level) &&
-                    (single_page_scan) && (waterfall[display_x] != true) && new_pixel)
+                if ((single_page_scan) && (waterfall[display_x] != true) && new_pixel)
                 {
                     // If drone not found set dark pixel on the waterfall
                     // TODO: make something like scrolling up if possible
@@ -1095,44 +1057,46 @@ void loop(void)
                     display.setColor(WHITE);
                 }
 #endif
-                // next 2 If's ... adds !!!! 10ms of runtime ......tfk ???
+            }
+
+#ifdef PRINT_DEBUG
+            for (int y = 0; y < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE; y++)
+            {
                 if (filtered_result[y] == 1)
                 {
-#ifdef PRINT_DEBUG
-                    Serial.print("Pixel:" + String(display_x) + "(" + String(x) + ")" +
-                                 ":" + String(y) + ",");
-#endif
-                    if (max_rssi_x > y)
-                    {
-                        // MAx bin Value not RSSI
-                        max_rssi_x = y;
-                    }
-                    // Set MAIN signal level pixel
-                    if (y < MAX_POWER_LEVELS - START_LOW)
-                    {
-                        display.setPixel(display_x, y + START_LOW);
-                    }
-                    if (!detected)
-                    {
-                        detected = true;
-                    }
+                    LOG("Pixel:%i(%i):%i,", display_x, x, y);
                 }
+            }
+#endif
 
-                // -------------------------------------------------------------
-                // Draw "Detection Level line" every 2 pixel
-                // -------------------------------------------------------------
-                if ((y == drone_detection_level) && (display_x % 2 == 0))
+            for (int y = 0; y < min(RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE,
+                                    MAX_POWER_LEVELS - START_LOW);
+                 y++)
+            {
+                if (filtered_result[y] == 1)
+                {
+                    // Set MAIN signal level pixel
+                    display.setPixelColor(display_x, y + START_LOW, WHITE);
+                }
+            }
+
+            // -------------------------------------------------------------
+            // Draw "Detection Level line" every 2 pixel
+            // -------------------------------------------------------------
+            if (display_x % 2 == 0)
+            {
+                if (filtered_result[drone_detection_level] == 1)
+                {
+                    display.setColor(INVERSE);
+                }
+                else
                 {
                     display.setColor(WHITE);
-                    if (filtered_result[y] == 1)
-                    {
-                        display.setColor(INVERSE);
-                    }
-                    display.setPixel(display_x, y + START_LOW);
-                    // display.setPixel(display_x, y + START_LOW - 1); // 2 px wide
-
-                    display.setColor(WHITE);
                 }
+                display.setPixel(display_x, drone_detection_level + START_LOW);
+                // display.setPixel(display_x, y + START_LOW - 1); // 2 px wide
+
+                display.setColor(WHITE);
             }
 
 #ifdef JOYSTICK_ENABLED

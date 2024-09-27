@@ -160,6 +160,10 @@ If less, ESP32 will turn off. Fast pressing(less than 0.5 second) P button chang
 3. Connect ESP32 to USB. Install USB CP2101 drivers for Windows or other OS
    https://docs.heltec.org/general/establish_serial_connection.html#for-windows
    https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers?tab=downloads
+
+   ## NOTE: MACOS Heltec USB driver 
+   https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers?tab=downloads <br/>
+   I used legacy driver
    
 5. Clone this Git Repo or download zip of the sources
    ![image](https://github.com/user-attachments/assets/971b6592-3b71-414c-971c-2ecd20f0f0b7)
