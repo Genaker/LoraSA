@@ -27,6 +27,9 @@ constexpr float LO_RSSI_THRESHOLD = HI_RSSI_THRESHOLD - 66;
 
 // number of samples for RSSI method
 #define SAMPLES_RSSI 12 // 21 //
+#ifdef USING_SX1280PA
+#define SAMPLES_RSSI 20
+#endif
 
 struct Scan
 {

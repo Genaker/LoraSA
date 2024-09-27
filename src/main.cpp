@@ -36,22 +36,24 @@
 //  library internals.
 #define RADIOLIB_GODMODE (1)
 
-#include <LoRaBoards.h>
 #include <scan.h>
 
 #ifndef LILYGO
 #include <heltec_unofficial.h>
 // This file contains a binary patch for the SX1262
 #include "modules/SX126x/patches/SX126x_patch_scan.h"
-#endif // end LILYGO
+#endif // end ifndef LILYGO
+
 #if defined(LILYGO)
 // LiLyGO device does not support the auto download mode, you need to get into the
 // download mode manually. To do so, press and hold the BOOT button and then press the
 // RESET button once. After that release the BOOT button. Or OFF->ON together with BOOT
 
 // Default LilyGO code
-#include "utilities.h"
-// Our Code
+#include <LoRaBoards.h>
+
+// #include "utilities.h"
+//  Our Code
 #include "LiLyGo.h"
 #endif // end LILYGO
 
@@ -133,6 +135,10 @@ uint64_t RANGE_PER_PAGE = FREQ_END - FREQ_BEGIN; // FREQ_END - FREQ_BEGIN
 
 // multiplies STEPS * N to increase scan resolution.
 #define SCAN_RBW_FACTOR 2
+
+#ifdef USING_SX1280PA
+#define SCAN_RBW_FACTOR 2
+#endif
 
 constexpr int OSD_PIXELS_PER_CHAR = (STEPS * SCAN_RBW_FACTOR) / OSD_CHART_WIDTH;
 
@@ -423,9 +429,11 @@ void init_radio()
 
 void setup(void)
 {
+#ifdef LILYGO
     setupBoards();
-    delay(5000);
-    Serial.println("setup is done");
+    delay(3000);
+    Serial.println("setup LiLyGO board is done");
+#endif
 
     // LED brightness
     heltec_led(25);

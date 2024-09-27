@@ -223,7 +223,7 @@ void UI_displayDecorate(int begin = 0, int end = 0, bool redraw = false)
         display_instance->setTextAlignment(TEXT_ALIGN_CENTER);
         // clear status line
         clearStatus();
-        display_instance->drawString(start_scan_text, ROW_STATUS_TEXT,
+        display_instance->drawString(start_scan_text + 2, ROW_STATUS_TEXT,
                                      String(drone_detected_frequency_start) + ">RF<" +
                                          String(drone_detected_frequency_end));
     }

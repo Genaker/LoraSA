@@ -486,6 +486,8 @@
 
 #define USING_DIO2_AS_RF_SWITCH
 
+#elif defined(HELTEC)
+// just to prevent error
 #elif defined(T_BEAM_S3_BPF)
 
 #ifndef USING_SX1278

@@ -8,6 +8,8 @@
  *
  */
 
+#ifdef LILYGO
+
 #include "LoRaBoards.h"
 
 #if defined(HAS_SDCARD)
@@ -927,3 +929,4 @@ bool beginGPS()
     return result;
 }
 #endif
+#endif // #ifdef LILYGO
