@@ -35,8 +35,6 @@ SX1262 radio = new Module(RADIO_CS_PIN, RADIO_DIO1_PIN, RADIO_RST_PIN, RADIO_BUS
 #endif // end ARDUINO_heltec_wifi_32_lora_V3
 #endif // end HELTEC_NO_RADIO_INSTANCE
 
-void heltec_loop() {}
-
 void heltec_led(int led) {}
 
 void heltec_deep_sleep() {}
@@ -87,6 +85,8 @@ Print &both = Serial;
 #define BUTTON BUTTON_PIN
 #include "HotButton.h"
 HotButton button(BUTTON);
+
+void heltec_loop() { button.update(); }
 
 // This file contains a binary patch for the SX1262
 #include "modules/SX126x/patches/SX126x_patch_scan.h"
