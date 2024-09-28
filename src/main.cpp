@@ -430,9 +430,9 @@ void init_radio()
 void setup(void)
 {
 #ifdef LILYGO
-    setupBoards();
-    delay(3000);
-    Serial.println("setup LiLyGO board is done");
+    setupBoards(true); // true for disable U8g2 display library
+    delay(500);
+    Serial.println("Setup LiLyGO board is done");
 #endif
 
     // LED brightness
