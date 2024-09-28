@@ -1060,13 +1060,12 @@ void loop(void)
             detected_y[display_x] = false;
 
 #if FILTER_SPECTRUM_RESULTS
-            for (int y = 0; y < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE; y++)
+            if (detected)
             {
                 // calculating max window x RSSI after filters
                 x_window = (int)(display_x / WINDOW_SIZE);
-                int abs_result = abs(result[y]);
-                if (filtered_result[y] == 1 && result[y] != 0 && result[y] != 1 &&
-                    max_x_window[x_window] > abs_result)
+                int abs_result = abs(result[detected_at]);
+                if (max_x_window[x_window] > abs_result)
                 {
                     max_x_window[x_window] = abs_result;
                     LOG("MAX x window: %i %i\n", x_window, abs_result);
@@ -1147,23 +1146,18 @@ void loop(void)
             }
 #endif
 
-            for (int y = 0; y < min(RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE,
-                                    MAX_POWER_LEVELS - START_LOW);
-                 y++)
-            {
-                if (filtered_result[y] == 1)
-                {
-                    // Set MAIN signal level pixel
-                    display.setPixelColor(display_x, y + START_LOW, WHITE);
-                }
-            }
+            display.setColor(WHITE);
+            display.drawVerticalLine(display_x, START_LOW + detected_at,
+                                     min(RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE,
+                                         MAX_POWER_LEVELS - START_LOW) -
+                                         detected_at);
 
             // -------------------------------------------------------------
             // Draw "Detection Level line" every 2 pixel
             // -------------------------------------------------------------
             if (display_x % 2 == 0)
             {
-                if (filtered_result[drone_detection_level] == 1)
+                if (detected_at <= drone_detection_level)
                 {
                     display.setColor(INVERSE);
                 }

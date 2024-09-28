@@ -69,7 +69,7 @@ uint16_t Scan::rssiMethod(size_t samples, uint16_t *result, size_t res_size)
 size_t Scan::detect(uint16_t *result, bool *filtered_result, size_t result_size,
                     int samples)
 {
-    size_t max_rssi_x = 999;
+    size_t max_rssi_x = result_size;
 
     for (int y = 0; y < result_size; y++)
     {
