@@ -41,6 +41,7 @@
 //  library internals.
 #define RADIOLIB_GODMODE (1)
 
+#include <charts.h>
 #include <scan.h>
 
 #ifndef LILYGO
@@ -365,6 +366,8 @@ void osdProcess()
 }
 #endif
 
+BarChart *bar;
+
 void init_radio()
 {
     // initialize SX1262 FSK modem at the initial frequency
@@ -653,6 +656,14 @@ void setup(void)
 #ifdef LOG_DATA_JSON
     xTaskCreate(logToSerialTask, "LOG_DATA_JSON", 2048, NULL, 1, NULL);
 #endif
+
+    bar = new BarChart(display, 0, START_LOW, display.width(),
+                       display.height() / 2 - START_LOW, FREQ_BEGIN, FREQ_END,
+                       LO_RSSI_THRESHOLD, HI_RSSI_THRESHOLD,
+                       -(float)show_db_after); // LO_RSSI_THRESHOLD + (HI_RSSI_THRESHOLD -
+                                               // LO_RSSI_THRESHOLD) * 0.3);
+
+    bar->reset();
 }
 
 // Formula to translate 33 bin to approximate RSSI value
@@ -1060,6 +1071,7 @@ void loop(void)
             detected_y[display_x] = false;
 
 #if FILTER_SPECTRUM_RESULTS
+            float rr;
             if (detected)
             {
                 // calculating max window x RSSI after filters
@@ -1070,6 +1082,18 @@ void loop(void)
                     max_x_window[x_window] = abs_result;
                     LOG("MAX x window: %i %i\n", x_window, abs_result);
                 }
+                rr = -(float)result[detected_at];
+            }
+            else
+            {
+                rr = LO_RSSI_THRESHOLD;
+            }
+
+            int updated = bar->updatePoint(freq, rr);
+
+            if (first_run || ANIMATED_RELOAD)
+            {
+                bar->drawOne(updated);
             }
 #endif
 
@@ -1145,31 +1169,6 @@ void loop(void)
                 }
             }
 #endif
-
-            display.setColor(WHITE);
-            display.drawVerticalLine(display_x, START_LOW + detected_at,
-                                     min(RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE,
-                                         MAX_POWER_LEVELS - START_LOW) -
-                                         detected_at);
-
-            // -------------------------------------------------------------
-            // Draw "Detection Level line" every 2 pixel
-            // -------------------------------------------------------------
-            if (display_x % 2 == 0)
-            {
-                if (detected_at <= drone_detection_level)
-                {
-                    display.setColor(INVERSE);
-                }
-                else
-                {
-                    display.setColor(WHITE);
-                }
-                display.setPixel(display_x, drone_detection_level + START_LOW);
-                // display.setPixel(display_x, y + START_LOW - 1); // 2 px wide
-
-                display.setColor(WHITE);
-            }
 
 #ifdef JOYSTICK_ENABLED
             // Draw joystick cursor and Frequency RSSI value
@@ -1258,6 +1257,7 @@ void loop(void)
         }
 #endif
 
+        bar->draw();
 #ifdef METHOD_RSSI
         // Printing Max Window DB.
         for (int x2 = 0; x2 < STEPS / WINDOW_SIZE; x2++)
@@ -1270,7 +1270,7 @@ void loop(void)
             max_x_window[x2] = 999;
         }
 #endif
-        // Render display data here
+        //    Render display data here
         display.display();
 #ifdef OSD_ENABLED
         // Sometimes OSD prints entire screen with the digits.
