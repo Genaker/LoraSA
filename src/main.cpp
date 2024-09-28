@@ -25,9 +25,9 @@
 
 #include <Arduino.h>
 
-#define OSD_ENABLED true
-//  #define WIFI_SCANNING_ENABLED true
-//  #define BT_SCANNING_ENABLED true
+// #define OSD_ENABLED true
+// #define WIFI_SCANNING_ENABLED true
+// #define BT_SCANNING_ENABLED true
 
 // Direct access to the low-level SPI communication between RadioLib and the radio module.
 #define RADIOLIB_LOW_LEVEL (1)
@@ -430,9 +430,9 @@ void init_radio()
 void setup(void)
 {
 #ifdef LILYGO
-    setupBoards();
-    delay(3000);
-    Serial.println("setup LiLyGO board is done");
+    setupBoards(true); // true for disable U8g2 display library
+    delay(500);
+    Serial.println("Setup LiLyGO board is done");
 #endif
 
     // LED brightness
