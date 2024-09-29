@@ -395,6 +395,11 @@ void init_radio()
     both.println("Setting up radio");
 #ifdef USING_SX1280PA
     // RADIOLIB_OR_HALT(radio.setBandwidth(RADIOLIB_SX128X_LORA_BW_406_25));
+#elif USING_SX1276
+    // 	Receiver bandwidth in kHz. Allowed values
+    // are 2.6, 3.1, 3.9, 5.2, 6.3, 7.8, 10.4, 12.5, 15.6, 20.8, 25, 31.3, 41.7,
+    // 50, 62.5, 83.3, 100, 125, 166.7, 200 and 250 kHz.
+    RADIOLIB_OR_HALT(radio.setRxBandwidth(250));
 #else
     RADIOLIB_OR_HALT(radio.setRxBandwidth(BANDWIDTH));
 #endif
@@ -420,6 +425,9 @@ void init_radio()
     {
         Serial.println("Error:startReceive:" + String(state));
     }
+#elif USING_SX1276
+    // Sets carrier frequency. Allowed values range from 137.0 MHz to 1020.0 MHz.
+    radio.setFrequency(FREQ_BEGIN);
 #else
     radio.setFrequency(FREQ_BEGIN, true);
 #endif
@@ -430,7 +438,7 @@ void init_radio()
 void setup(void)
 {
 #ifdef LILYGO
-    setupBoards(true); // true for disable U8g2 display library
+    setupBoards(); // true for disable U8g2 display library
     delay(500);
     Serial.println("Setup LiLyGO board is done");
 #endif
@@ -899,6 +907,8 @@ void loop(void)
 #ifdef USING_SX1280PA
             state = radio.setFrequency(freq); // 1280 doesn't have calibration
             radio.startReceive(RADIOLIB_SX128X_RX_TIMEOUT_INF);
+#elif USING_SX1276
+            state = radio.setFrequency(freq);
 #else
             state = radio.setFrequency(freq, false); // false = no calibration need here
 #endif
