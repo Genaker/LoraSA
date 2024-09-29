@@ -184,9 +184,6 @@ void UI_displayDecorate(int begin = 0, int end = 0, bool redraw = false)
 {
     if (!ui_initialized)
     {
-        // Start and end ticks
-        display_instance->fillRect(0, HEIGHT + X_AXIS_WEIGHT, 2, MAJOR_TICK_LENGTH + 1);
-        display_instance->fillRect(126, HEIGHT + X_AXIS_WEIGHT, 2, MAJOR_TICK_LENGTH + 1);
         // Drone detection level
         display_instance->setTextAlignment(TEXT_ALIGN_RIGHT);
         display_instance->drawString(128, 0, String(drone_detection_level));
@@ -298,15 +295,6 @@ void UI_displayDecorate(int begin = 0, int end = 0, bool redraw = false)
                                              "-" +
                                              String(SCAN_RANGES[range_item + 1] % 1000));
         }
-    }
-    if (ui_initialized == false)
-    {
-        // X-axis
-        display_instance->fillRect(0, HEIGHT, STEPS, X_AXIS_WEIGHT);
-// ticks
-#ifdef MAJOR_TICKS
-        drawTicks(MAJOR_TICKS, MAJOR_TICK_LENGTH);
-#endif
     }
     ui_initialized = true;
 }

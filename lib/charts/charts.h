@@ -64,4 +64,25 @@ struct BarChart : Chart
     int x2pos(float x);
     int y2pos(float y);
 };
+
+#define LABEL_HEIGHT 6
+#define X_AXIS_WEIGHT 1
+#define MAJOR_TICK_LENGTH 2
+#define MAJOR_TICKS 10
+#define MINOR_TICK_LENGTH 1
+#define MINOR_TICKS 5
+#define AXIS_HEIGHT (X_AXIS_WEIGHT + MAJOR_TICK_LENGTH + 1)
+struct DecoratedBarChart : BarChart
+{
+    int text_y;
+
+    DecoratedBarChart(OLEDDisplay &d, uint16_t x, uint16_t y, uint16_t w, uint16_t h,
+                      float min_x, float max_x, float min_y, float max_y, float level_y)
+        : BarChart(d, x, y + LABEL_HEIGHT, w, h - LABEL_HEIGHT - AXIS_HEIGHT, min_x,
+                   max_x, min_y, max_y, level_y),
+          text_y(y) {};
+
+    void draw() override;
+};
+
 #endif

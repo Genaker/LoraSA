@@ -90,3 +90,62 @@ int BarChart::y2pos(float y)
 
     return height - height * (y - min_y) / (max_y - min_y);
 }
+
+void DecoratedBarChart::draw()
+{
+    bool draw_axis = redraw_all;
+
+    BarChart::draw();
+
+    display.setColor(BLACK);
+    display.fillRect(pos_x, text_y, width, pos_y - text_y);
+
+    display.setColor(WHITE);
+    display.setTextAlignment(TEXT_ALIGN_LEFT);
+
+    for (uint16_t x = 0; x < width; x++)
+    {
+        float y = ys[x];
+        if (y >= level_y)
+        {
+            String s = String(ys[x], 0);
+            uint16_t w = display.getStringWidth(s);
+            uint16_t x1 = x;
+            for (; x < x1 + w; x++)
+            {
+                if (ys[x] > y)
+                {
+                    y = ys[x];
+                    s = String(y, 0);
+                    w = max(w, display.getStringWidth(s));
+                }
+            }
+
+            display.drawString(x1, text_y, s);
+        }
+    }
+
+    if (draw_axis)
+    {
+        display.setColor(WHITE);
+
+        uint16_t y = pos_y + height + 1;
+        display.fillRect(pos_x, y, width, X_AXIS_WEIGHT);
+
+        // Start and end ticks
+        display.fillRect(pos_x, y + 1, 2, AXIS_HEIGHT);
+        display.fillRect(pos_x + width - 2, y + 1, 2, AXIS_HEIGHT);
+
+        for (float step = 0; min_x + step * MAJOR_TICKS < max_x; step += 1)
+        {
+            int tick_pos = x2pos(min_x + step * MAJOR_TICKS);
+            display.drawVerticalLine(pos_x + tick_pos, y + 1, MAJOR_TICK_LENGTH);
+        }
+
+        for (float step = 0; min_x + step * MINOR_TICKS < max_x; step += 1)
+        {
+            int tick_pos = x2pos(min_x + step * MINOR_TICKS);
+            display.drawVerticalLine(pos_x + tick_pos, y + 1, MINOR_TICK_LENGTH);
+        }
+    }
+}

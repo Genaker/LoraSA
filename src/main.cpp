@@ -657,11 +657,9 @@ void setup(void)
     xTaskCreate(logToSerialTask, "LOG_DATA_JSON", 2048, NULL, 1, NULL);
 #endif
 
-    bar = new BarChart(display, 0, START_LOW, display.width(),
-                       display.height() / 2 - START_LOW, FREQ_BEGIN, FREQ_END,
-                       LO_RSSI_THRESHOLD, HI_RSSI_THRESHOLD,
-                       -(float)show_db_after); // LO_RSSI_THRESHOLD + (HI_RSSI_THRESHOLD -
-                                               // LO_RSSI_THRESHOLD) * 0.3);
+    bar = new DecoratedBarChart(
+        display, 0, 0, display.width(), display.height() / 2 + AXIS_HEIGHT, FREQ_BEGIN,
+        FREQ_END, LO_RSSI_THRESHOLD, HI_RSSI_THRESHOLD, -(float)show_db_after);
 
     bar->reset();
 }
@@ -1070,18 +1068,9 @@ void loop(void)
             detected = detected_at < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE;
             detected_y[display_x] = false;
 
-#if FILTER_SPECTRUM_RESULTS
             float rr;
             if (detected)
             {
-                // calculating max window x RSSI after filters
-                x_window = (int)(display_x / WINDOW_SIZE);
-                int abs_result = abs(result[detected_at]);
-                if (max_x_window[x_window] > abs_result)
-                {
-                    max_x_window[x_window] = abs_result;
-                    LOG("MAX x window: %i %i\n", x_window, abs_result);
-                }
                 rr = -(float)result[detected_at];
             }
             else
@@ -1095,7 +1084,6 @@ void loop(void)
             {
                 bar->drawOne(updated);
             }
-#endif
 
             if (detected_at <= drone_detection_level)
             {
@@ -1258,19 +1246,7 @@ void loop(void)
 #endif
 
         bar->draw();
-#ifdef METHOD_RSSI
-        // Printing Max Window DB.
-        for (int x2 = 0; x2 < STEPS / WINDOW_SIZE; x2++)
-        {
-            if (max_x_window[x2] < show_db_after && max_x_window[x2] != 0)
-            {
-                display.drawString(x2 * WINDOW_SIZE + WINDOW_SIZE, 0,
-                                   "-" + String(max_x_window[x2]));
-            }
-            max_x_window[x2] = 999;
-        }
-#endif
-        //    Render display data here
+        // Render display data here
         display.display();
 #ifdef OSD_ENABLED
         // Sometimes OSD prints entire screen with the digits.
