@@ -367,6 +367,7 @@ void osdProcess()
 #endif
 
 BarChart *bar;
+StackedChart stacked(display, 0, 0, 0, 0);
 
 void init_radio()
 {
@@ -657,11 +658,18 @@ void setup(void)
     xTaskCreate(logToSerialTask, "LOG_DATA_JSON", 2048, NULL, 1, NULL);
 #endif
 
-    bar = new DecoratedBarChart(
-        display, 0, 0, display.width(), display.height() / 2 + AXIS_HEIGHT, FREQ_BEGIN,
-        FREQ_END, LO_RSSI_THRESHOLD, HI_RSSI_THRESHOLD, -(float)show_db_after);
+    bar = new DecoratedBarChart(display, 0, 0, display.width(), 0, FREQ_BEGIN, FREQ_END,
+                                LO_RSSI_THRESHOLD, HI_RSSI_THRESHOLD,
+                                -(float)show_db_after);
 
-    bar->reset();
+    stacked.reset(0, 0, display.width(), display.height() - 6);
+
+    size_t b = stacked.addChart(bar);
+    size_t c =
+        stacked.addChart(new Chart(display, 0, 0, display.width(), 0));
+
+    stacked.setHeight(c, stacked.height - WATERFALL_START);
+    stacked.setHeight(b, stacked.height);
 }
 
 // Formula to translate 33 bin to approximate RSSI value
@@ -1245,7 +1253,7 @@ void loop(void)
         }
 #endif
 
-        bar->draw();
+        stacked.draw();
         // Render display data here
         display.display();
 #ifdef OSD_ENABLED

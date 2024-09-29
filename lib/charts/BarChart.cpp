@@ -1,7 +1,22 @@
 #include "charts.h"
 
-void BarChart::reset()
+void BarChart::reset(uint16_t x, uint16_t y, uint16_t w, uint16_t h)
 {
+    pos_x = x;
+    pos_y = y;
+
+    if (w != width)
+    {
+        delete[] ys;
+        delete[] changed;
+
+        width = w;
+        ys = new float[width];
+        changed = new bool[width];
+    }
+
+    height = h;
+
     memset(ys, 0, width * sizeof(float));
     memset(changed, false, width * sizeof(bool));
     redraw_all = true;

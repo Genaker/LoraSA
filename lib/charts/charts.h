@@ -17,7 +17,21 @@ struct Chart
     /*
      * This method resets the state and sets the reference time.
      */
-    virtual void reset() = 0;
+    virtual void reset(uint16_t x, uint16_t y, uint16_t w, uint16_t h) {};
+
+    /*
+     * Redraw everything that needs redrawing.
+     */
+    virtual void draw() {};
+};
+
+/*
+ * ProgressChart supports updates with progressive redraw of just the affected area.
+ */
+struct ProgressChart : Chart
+{
+    ProgressChart(OLEDDisplay &d, uint16_t x, uint16_t y, uint16_t w, uint16_t h)
+        : Chart(d, x, y, w, h) {};
 
     /*
      * Update one data point, and return what column needs redrawing.
@@ -28,14 +42,9 @@ struct Chart
      * If you fancy animated progress, then pass the output of updatePoint to here.
      */
     virtual void drawOne(int x) = 0;
-
-    /*
-     * Redraw everything that needs redrawing.
-     */
-    virtual void draw() = 0;
 };
 
-struct BarChart : Chart
+struct BarChart : ProgressChart
 {
     float min_x, max_x, min_y, max_y;
     float level_y;
@@ -46,8 +55,8 @@ struct BarChart : Chart
 
     BarChart(OLEDDisplay &d, uint16_t x, uint16_t y, uint16_t w, uint16_t h, float min_x,
              float max_x, float min_y, float max_y, float level_y)
-        : Chart(d, x, y, w, h), min_x(min_x), max_x(max_x), min_y(min_y), max_y(max_y),
-          level_y(level_y), redraw_all(true)
+        : ProgressChart(d, x, y, w, h), min_x(min_x), max_x(max_x), min_y(min_y),
+          max_y(max_y), level_y(level_y), redraw_all(true)
     {
         ys = new float[w];
         changed = new bool[w];
@@ -56,7 +65,7 @@ struct BarChart : Chart
         memset(changed, 0, w * sizeof(bool));
     };
 
-    void reset() override;
+    void reset(uint16_t x, uint16_t y, uint16_t w, uint16_t h) override;
     int updatePoint(float x, float y) override;
     void drawOne(int x) override;
     void draw() override;
@@ -81,6 +90,33 @@ struct DecoratedBarChart : BarChart
         : BarChart(d, x, y + LABEL_HEIGHT, w, h - LABEL_HEIGHT - AXIS_HEIGHT, min_x,
                    max_x, min_y, max_y, level_y),
           text_y(y) {};
+
+    void draw() override;
+};
+
+struct StackedChart : Chart
+{
+    Chart **charts;
+    size_t charts_sz;
+
+    StackedChart(OLEDDisplay &d, uint16_t x, uint16_t y, uint16_t w, uint16_t h)
+        : Chart(d, x, y, w, h), charts(NULL), charts_sz(0) {};
+
+    /*
+     * addChart adds c to the StackedChart, treats pos_x and pos_y of the chart
+     * as relative to this chart's origin, and trims width to fit. Adjust the
+     * height and pack charts using setHeight.
+     */
+    size_t addChart(Chart *c);
+
+    /*
+     * Adjust the height of the chart and return the resulting required height.
+     * If h is >= height, the chart gets a special treatment: packs all other
+     * charts, and uses up the rest of space.
+     */
+    uint16_t setHeight(size_t c, uint16_t h);
+
+    void reset(uint16_t x, uint16_t y, uint16_t w, uint16_t h) override;
 
     void draw() override;
 };
