@@ -366,7 +366,9 @@ void osdProcess()
 }
 #endif
 
+#define WATERFALL_SENSITIVITY 0.05
 DecoratedBarChart *bar;
+WaterfallChart *waterChart;
 StackedChart stacked(display, 0, 0, 0, 0);
 
 void init_radio()
@@ -664,9 +666,21 @@ void setup(void)
 
     stacked.reset(0, 0, display.width(), display.height() - 6);
 
+    size_t *multiples = new size_t[6]{5, 3, 4, 15, 4, 3};
+    WaterfallModel *model =
+        new WaterfallModel((size_t)display.width(), 1000, 6, multiples);
+    model->reset(millis(), display.width());
+
+    delete[] multiples;
+
+    waterChart =
+        new WaterfallChart(display, 0, WATERFALL_START, display.width(), 0, FREQ_BEGIN,
+                           FREQ_END, -(float)show_db_after, WATERFALL_SENSITIVITY, model);
+
+    stacked.reset(0, 0, display.width(), display.height() - 6);
+
     size_t b = stacked.addChart(bar);
-    size_t c =
-        stacked.addChart(new Chart(display, 0, 0, display.width(), 0));
+    size_t c = stacked.addChart(waterChart);
 
     stacked.setHeight(c, stacked.height - WATERFALL_START);
     stacked.setHeight(b, stacked.height);
@@ -1086,6 +1100,8 @@ void loop(void)
                 rr = LO_RSSI_THRESHOLD;
             }
 
+            waterChart->updatePoint(millis(), freq, rr);
+
             int updated = bar->bar.updatePoint(freq, rr);
 
             if (first_run || ANIMATED_RELOAD)
@@ -1108,7 +1124,7 @@ void loop(void)
                         {
                             waterfall[display_x] = true;
                             display.setColor(WHITE);
-                            display.setPixel(display_x, w);
+                            // display.setPixel(display_x, w);
                         }
                     }
 #endif
@@ -1150,7 +1166,7 @@ void loop(void)
                     // TODO: make something like scrolling up if possible
                     waterfall[display_x] = false;
                     display.setColor(BLACK);
-                    display.setPixel(display_x, w);
+                    // display.setPixel(display_x, w);
                     display.setColor(WHITE);
                 }
 #endif
@@ -1248,7 +1264,7 @@ void loop(void)
         if (single_page_scan)
         {
             display.setColor(BLACK);
-            display.drawHorizontalLine(0, w, STEPS);
+            // display.drawHorizontalLine(0, w, STEPS);
             display.setColor(WHITE);
         }
 #endif

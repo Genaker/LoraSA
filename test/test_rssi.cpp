@@ -3,10 +3,6 @@
 #include "../lib/scan/scan.cpp"
 #include <unity.h>
 
-void setUp(void) {}
-
-void tearDown(void) {}
-
 struct TestScan : Scan
 {
     TestScan(float *ctx, int sz) : ctx(ctx), sz(sz), idx(0) {}
@@ -65,14 +61,4 @@ void test_detect()
 
     TEST_ASSERT_EQUAL_INT16(1, r);
     TEST_ASSERT_EQUAL_INT8_ARRAY(expect2, result, test_sz);
-}
-
-int main(int argc, char **argv)
-{
-    UNITY_BEGIN();
-
-    RUN_TEST(test_rssi);
-    RUN_TEST(test_detect);
-
-    UNITY_END();
 }

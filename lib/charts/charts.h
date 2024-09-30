@@ -3,6 +3,7 @@
 
 #include <OLEDDisplay.h>
 #include <cstdint>
+#include <models.h>
 #include <stdlib.h>
 
 struct Chart
@@ -126,6 +127,30 @@ struct StackedChart : Chart
     void reset(uint16_t x, uint16_t y, uint16_t w, uint16_t h) override;
 
     void draw() override;
+};
+
+struct WaterfallChart : Chart
+{
+    float min_x, max_x;
+    float level_y, threshold;
+
+    size_t update_to;
+
+    WaterfallModel *model;
+
+    WaterfallChart(OLEDDisplay &d, uint16_t x, uint16_t y, uint16_t w, uint16_t h,
+                   float min_x, float max_x, float level_y, float threshold,
+                   WaterfallModel *m)
+        : Chart(d, x, y, w, h), model(m), min_x(min_x), max_x(max_x), level_y(level_y),
+          threshold(threshold), update_to(m->buckets) {};
+
+    void updatePoint(uint64_t t, float x, float y);
+
+    void reset(uint16_t x, uint16_t y, uint16_t w, uint16_t h) override;
+
+    void draw() override;
+
+    int x2pos(float x);
 };
 
 #endif
