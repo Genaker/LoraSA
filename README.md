@@ -180,13 +180,22 @@ If less, ESP32 will turn off. Fast pressing(less than 0.5 second) P button chang
 
 7. Select Proper Environment
    ![image](https://github.com/user-attachments/assets/a9c6557b-a387-4457-b59b-b3d7242d2826)
-8. Select ESP32 USB Device to program
+
+   ---
+   
+   >**Important note:** make sure your ESP32 Expressif catalog is up to date before selecting environment, otherwise you'll get error `Error: Unknown board ID 'heltec_wifi_lora_32_V3'` when trying to select environment.
+   >
+   >Open a PlatformIO CLI: https://docs.platformio.org/en/latest/integration/ide/vscode.html#platformio-core-cli
+   >
+   >Run: `pio pkg update -g -p espressif32`
+   
+9. Select ESP32 USB Device to program
    ![image](https://github.com/user-attachments/assets/af76c4b1-7122-45e1-b26b-08b59e03ca3b)
 Note: It is theoretically possible to program via WiFi and BTH.
-9. Program your ESP32
+10. Program your ESP32
     ![image](https://github.com/user-attachments/assets/9e67afd8-0522-4a96-82dc-8e1cdb32add5)
 
-10. Wait until you are done with the compilation and upload.
+11. Wait until you are done with the compilation and upload.
     Usually takes 1 minute. The first run is slower. It needs to compile all libraries.
     ![image](https://github.com/user-attachments/assets/6796eb5d-6e3f-45bc-b88c-251499f1ad47)
 You will have the UCOG SA logo and spectrum analyzing scanning screen when done.
