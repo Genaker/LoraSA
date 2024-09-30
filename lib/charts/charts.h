@@ -17,7 +17,13 @@ struct Chart
     /*
      * This method resets the state and sets the reference time.
      */
-    virtual void reset(uint16_t x, uint16_t y, uint16_t w, uint16_t h) {};
+    virtual void reset(uint16_t x, uint16_t y, uint16_t w, uint16_t h)
+    {
+        pos_x = x;
+        pos_y = y;
+        width = w;
+        height = h;
+    }
 
     /*
      * Redraw everything that needs redrawing.

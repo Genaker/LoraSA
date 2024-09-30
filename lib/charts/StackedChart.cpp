@@ -74,10 +74,7 @@ void StackedChart::reset(uint16_t x, uint16_t y, uint16_t w, uint16_t h)
                          charts[i]->height);
     }
 
-    pos_x = x;
-    pos_y = y;
-    width = w;
-    height = h;
+    Chart::reset(x, y, w, h);
 }
 
 void StackedChart::draw()
