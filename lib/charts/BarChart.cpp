@@ -102,37 +102,43 @@ int BarChart::y2pos(float y)
     return height - height * (y - min_y) / (max_y - min_y);
 }
 
+void DecoratedBarChart::reset(uint16_t x, uint16_t y, uint16_t w, uint16_t h)
+{
+    Chart::reset(x, y, w, h);
+    bar.reset(x, y + LABEL_HEIGHT, w, h - LABEL_HEIGHT - AXIS_HEIGHT);
+}
+
 void DecoratedBarChart::draw()
 {
-    bool draw_axis = redraw_all;
+    bool draw_axis = bar.redraw_all;
 
-    BarChart::draw();
+    bar.draw();
 
     display.setColor(BLACK);
-    display.fillRect(pos_x, text_y, width, pos_y - text_y);
+    display.fillRect(pos_x, pos_y, width, bar.pos_y - pos_y);
 
     display.setColor(WHITE);
     display.setTextAlignment(TEXT_ALIGN_LEFT);
 
     for (uint16_t x = 0; x < width; x++)
     {
-        float y = ys[x];
-        if (y >= level_y)
+        float y = bar.ys[x];
+        if (y >= bar.level_y)
         {
-            String s = String(ys[x], 0);
+            String s = String(bar.ys[x], 0);
             uint16_t w = display.getStringWidth(s);
             uint16_t x1 = x;
             for (; x < x1 + w; x++)
             {
-                if (ys[x] > y)
+                if (bar.ys[x] > y)
                 {
-                    y = ys[x];
+                    y = bar.ys[x];
                     s = String(y, 0);
                     w = max(w, display.getStringWidth(s));
                 }
             }
 
-            display.drawString(x1, text_y, s);
+            display.drawString(x1, pos_y, s);
         }
     }
 
@@ -140,23 +146,23 @@ void DecoratedBarChart::draw()
     {
         display.setColor(WHITE);
 
-        uint16_t y = pos_y + height + 1;
-        display.fillRect(pos_x, y, width, X_AXIS_WEIGHT);
+        uint16_t y = pos_y + height - AXIS_HEIGHT + 2;
+        display.fillRect(pos_x, y - 1, width, X_AXIS_WEIGHT);
 
         // Start and end ticks
-        display.fillRect(pos_x, y + 1, 2, AXIS_HEIGHT);
-        display.fillRect(pos_x + width - 2, y + 1, 2, AXIS_HEIGHT);
+        display.fillRect(pos_x, y - 1, 2, AXIS_HEIGHT);
+        display.fillRect(pos_x + width - 2, y - 1, 2, AXIS_HEIGHT);
 
-        for (float step = 0; min_x + step * MAJOR_TICKS < max_x; step += 1)
+        for (float step = 0; bar.min_x + step * MAJOR_TICKS < bar.max_x; step += 1)
         {
-            int tick_pos = x2pos(min_x + step * MAJOR_TICKS);
-            display.drawVerticalLine(pos_x + tick_pos, y + 1, MAJOR_TICK_LENGTH);
+            int tick_pos = bar.x2pos(bar.min_x + step * MAJOR_TICKS);
+            display.drawVerticalLine(pos_x + tick_pos, y, MAJOR_TICK_LENGTH);
         }
 
-        for (float step = 0; min_x + step * MINOR_TICKS < max_x; step += 1)
+        for (float step = 0; bar.min_x + step * MINOR_TICKS < bar.max_x; step += 1)
         {
-            int tick_pos = x2pos(min_x + step * MINOR_TICKS);
-            display.drawVerticalLine(pos_x + tick_pos, y + 1, MINOR_TICK_LENGTH);
+            int tick_pos = bar.x2pos(bar.min_x + step * MINOR_TICKS);
+            display.drawVerticalLine(pos_x + tick_pos, y, MINOR_TICK_LENGTH);
         }
     }
 }

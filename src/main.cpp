@@ -366,7 +366,7 @@ void osdProcess()
 }
 #endif
 
-BarChart *bar;
+DecoratedBarChart *bar;
 StackedChart stacked(display, 0, 0, 0, 0);
 
 void init_radio()
@@ -1086,11 +1086,11 @@ void loop(void)
                 rr = LO_RSSI_THRESHOLD;
             }
 
-            int updated = bar->updatePoint(freq, rr);
+            int updated = bar->bar.updatePoint(freq, rr);
 
             if (first_run || ANIMATED_RELOAD)
             {
-                bar->drawOne(updated);
+                bar->bar.drawOne(updated);
             }
 
             if (detected_at <= drone_detection_level)

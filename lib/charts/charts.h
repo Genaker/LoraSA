@@ -86,17 +86,18 @@ struct BarChart : ProgressChart
 #define MAJOR_TICKS 10
 #define MINOR_TICK_LENGTH 1
 #define MINOR_TICKS 5
-#define AXIS_HEIGHT (X_AXIS_WEIGHT + MAJOR_TICK_LENGTH + 1)
-struct DecoratedBarChart : BarChart
+#define AXIS_HEIGHT (X_AXIS_WEIGHT + MAJOR_TICK_LENGTH + 2)
+struct DecoratedBarChart : Chart
 {
-    int text_y;
+    BarChart bar;
 
     DecoratedBarChart(OLEDDisplay &d, uint16_t x, uint16_t y, uint16_t w, uint16_t h,
                       float min_x, float max_x, float min_y, float max_y, float level_y)
-        : BarChart(d, x, y + LABEL_HEIGHT, w, h - LABEL_HEIGHT - AXIS_HEIGHT, min_x,
-                   max_x, min_y, max_y, level_y),
-          text_y(y) {};
+        : Chart(d, x, y, w, h),
+          bar(d, x, y + LABEL_HEIGHT, w, h - LABEL_HEIGHT - AXIS_HEIGHT, min_x, max_x,
+              min_y, max_y, level_y) {};
 
+    void reset(uint16_t x, uint16_t y, uint16_t w, uint16_t h) override;
     void draw() override;
 };
 
