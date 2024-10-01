@@ -1,6 +1,8 @@
 #ifndef __GLOBAL_CONFIG_H__
 #define __GLOBAL_CONFIG_H__
 
+#include "utilities.h"
+
 #ifndef FREQ_BEGIN
 // frequency range in MHz to scan
 #define FREQ_BEGIN 850
@@ -25,14 +27,24 @@
 #ifdef LILYGO
 #define BUZZER_PIN 45
 #endif
+#ifdef T3_V1_6_SX1276
+#define BUZZER_PIN 35
+#endif
 
 // REB trigger PIN
 #define REB_PIN 42
+#ifdef T3_V1_6_SX1276
+#define REB_PIN 35
+#endif
 
 #define WATERFALL_ENABLED true
 #define WATERFALL_START 37
 
 #ifdef LILYGO
-#define LED 46
+#define LED BOARD_LED
 #endif // end not LILYGO
+#ifdef T3_V1_6_SX1276
+#define LED BOARD_LED
+#endif
+
 #endif

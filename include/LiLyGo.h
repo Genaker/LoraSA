@@ -13,8 +13,11 @@
 #else
 #define DISPLAY_WIDTH 128
 #define DISPLAY_HEIGHT 64
-#include "OLEDDisplayUi.h"
+// #include "OLEDDisplayUi.h"
+// #include "SH1106Wire.h"
+// #include "SSD1306Brzo.h"
 #include "SSD1306Wire.h"
+
 #endif
 #define ARDUINO_heltec_wifi_32_lora_V3
 #ifndef HELTEC_NO_RADIO_INSTANCE
@@ -32,6 +35,10 @@ SX1280 radio = new Module(RADIO_CS_PIN, RADIO_DIO1_PIN, RADIO_RST_PIN, RADIO_BUS
 // Default SPI on pins from pins_arduino.h
 SX1262 radio = new Module(RADIO_CS_PIN, RADIO_DIO1_PIN, RADIO_RST_PIN, RADIO_BUSY_PIN);
 #endif // end USING_SX1262
+#ifdef USING_SX1276
+// Default SPI on pins from pins_arduino.h
+SX1276 radio = new Module(RADIO_CS_PIN, RADIO_DIO1_PIN, RADIO_RST_PIN, RADIO_BUSY_PIN);
+#endif // end USING_SX1276
 #endif // end ARDUINO_heltec_wifi_32_lora_V3
 #endif // end HELTEC_NO_RADIO_INSTANCE
 
@@ -76,17 +83,28 @@ class PrintSplitter : public Print
 #else
 #define DISPLAY_GEOMETRY GEOMETRY_128_64
 #endif
-SSD1306Wire display(0x3c, 18, 17, DISPLAY_GEOMETRY);
+#define SCREEN_ADDRESS 0x3C
+
+SSD1306Wire display(SCREEN_ADDRESS, I2C_SDA, I2C_SCL, DISPLAY_GEOMETRY);
+// SH1106Wire display(0x3c, I2C_SDA, I2C_SCL, DISPLAY_GEOMETRY);
 PrintSplitter both(Serial, display);
 #else
 Print &both = Serial;
 #endif
 // some fake pin
+#ifdef T3_V1_6_SX1276
+#define BUTTON_PIN 22
+#endif
 #define BUTTON BUTTON_PIN
 #include "HotButton.h"
 HotButton button(BUTTON);
 
-void heltec_loop() { button.update(); }
+void heltec_loop()
+{
+#ifndef DT3_V1_6_SX1276
+    button.update();
+#endif
+}
 
 // This file contains a binary patch for the SX1262
 #include "modules/SX126x/patches/SX126x_patch_scan.h"
@@ -138,7 +156,7 @@ void heltec_setup()
 #ifndef HELTEC_NO_DISPLAY_INSTANCE
     heltec_display_power(true);
     display.init();
-    display.setContrast(200);
+    // display.setContrast(200);
     display.flipScreenVertically();
 #endif
 }
