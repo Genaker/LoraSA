@@ -153,4 +153,14 @@ struct WaterfallChart : Chart
     int x2pos(float x);
 };
 
+struct UptimeClock : Chart
+{
+    uint64_t t0;
+    uint64_t t1;
+    UptimeClock(OLEDDisplay &d, uint64_t t0) : Chart(d, 0, 0, 0, 0), t0(t0), t1(t0) {};
+
+    void draw(uint64_t t);
+    virtual void draw() override;
+};
+
 #endif

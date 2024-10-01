@@ -371,6 +371,8 @@ DecoratedBarChart *bar;
 WaterfallChart *waterChart;
 StackedChart stacked(display, 0, 0, 0, 0);
 
+UptimeClock *uptime;
+
 void init_radio()
 {
     // initialize SX1262 FSK modem at the initial frequency
@@ -684,6 +686,10 @@ void setup(void)
 
     stacked.setHeight(c, stacked.height - WATERFALL_START);
     stacked.setHeight(b, stacked.height);
+
+#ifdef UPTIME_CLOCK
+    uptime = new UptimeClock(display, millis());
+#endif
 }
 
 // Formula to translate 33 bin to approximate RSSI value
@@ -1271,6 +1277,10 @@ void loop(void)
 
         stacked.draw();
         // Render display data here
+
+#ifdef UPTIME_CLOCK
+        uptime->draw(millis());
+#endif
         display.display();
 #ifdef OSD_ENABLED
         // Sometimes OSD prints entire screen with the digits.
