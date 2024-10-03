@@ -33,6 +33,20 @@ constexpr float LO_RSSI_THRESHOLD = HI_RSSI_THRESHOLD - 66;
 
 struct Scan
 {
+    uint64_t epoch;
+    float current_frequency;
+    uint64_t fr_begin;
+    uint64_t fr_end;
+    uint64_t drone_detection_level;
+    bool sound_on;
+    bool led_flag;
+    uint64_t detection_count;
+
+    Scan()
+        : epoch(0), current_frequency(0), fr_begin(0), fr_end(0),
+          drone_detection_level(0), sound_on(false), led_flag(false),
+          detection_count(0) {};
+
     virtual float getRSSI() = 0;
 
     // rssiMethod gets the data similar to the scan method,

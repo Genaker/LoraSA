@@ -172,13 +172,11 @@ constexpr int WINDOW_SIZE = 15;
 #define SINGLE_STEP (float)(RANGE / (STEPS * SCAN_RBW_FACTOR))
 
 uint64_t range = (int)(FREQ_END - FREQ_BEGIN);
-uint64_t fr_begin = FREQ_BEGIN;
-uint64_t fr_end = FREQ_BEGIN;
 
 uint64_t iterations = RANGE / RANGE_PER_PAGE;
 
 // uint64_t range_frequency = FREQ_END - FREQ_BEGIN;
-uint64_t median_frequency = FREQ_BEGIN + FREQ_END - FREQ_BEGIN / 2;
+uint64_t median_frequency = (FREQ_BEGIN + FREQ_END) / 2;
 
 // #define DISABLE_PLOT_CHART false   // unused
 
@@ -190,8 +188,7 @@ bool filtered_result[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
 int max_bins_array_value[MAX_POWER_LEVELS];
 int max_step_range = 32;
 
-// Waterfall array
-bool waterfall[STEPS], detected_y[STEPS]; // 20 - ??? steps of the waterfall
+bool detected_y[STEPS]; // 20 - ??? steps
 
 // global variable
 
@@ -203,9 +200,7 @@ uint64_t drone_detection_level = DEFAULT_DRONE_DETECTION_LEVEL;
 uint64_t show_db_after = 80;
 uint64_t drone_detected_frequency_start = 0;
 uint64_t drone_detected_frequency_end = 0;
-uint64_t detection_count = 0;
 bool single_page_scan = false;
-bool SOUND_ON = false;
 
 // #define PRINT_DEBUG
 #define PRINT_PROFILE_TIME
@@ -225,7 +220,6 @@ uint64_t x, y, range_item, w = WATERFALL_START, i = 0;
 int osd_x = 1, osd_y = 2, col = 0, max_bin = 32;
 uint64_t ranges_count = 0;
 
-float freq = 0;
 int rssi = 0;
 int state = 0;
 
@@ -238,7 +232,6 @@ constexpr int samples = SAMPLES_RSSI;
 
 uint8_t result_index = 0;
 uint8_t button_pressed_counter = 0;
-uint64_t loop_cnt = 0;
 
 #ifndef LILYGO
 // #define JOYSTICK_ENABLED
@@ -365,6 +358,27 @@ void osdProcess()
     }
 }
 #endif
+
+struct RadioScan : Scan
+{
+    float getRSSI() override;
+};
+
+float RadioScan::getRSSI()
+{
+#ifdef USING_SX1280PA
+    // radio.startReceive();
+    // get instantaneous RSSI value
+    // When PR will be merged we can use radi.getRSSI(false);
+    uint8_t data[3] = {0, 0, 0}; // RssiInst, Status, RFU
+    radio.mod->SPIreadStream(RADIOLIB_SX128X_CMD_GET_RSSI_INST, data, 3);
+    return ((float)data[0] / (-2.0));
+#else
+    return radio.getRSSI(false);
+#endif
+}
+
+RadioScan r;
 
 #define WATERFALL_SENSITIVITY 0.05
 DecoratedBarChart *bar;
@@ -532,7 +546,6 @@ void setup(void)
 #endif
     float vbat;
     float resolution;
-    loop_cnt = 0;
     bt_start = millis();
     wf_start = millis();
 
@@ -551,7 +564,7 @@ void setup(void)
         delay(10);
         if (button.pressed())
         {
-            SOUND_ON = !SOUND_ON;
+            r.sound_on = !r.sound_on;
             tone(BUZZER_PIN, 205, 100);
             delay(50);
             tone(BUZZER_PIN, 205, 100);
@@ -662,12 +675,17 @@ void setup(void)
     xTaskCreate(logToSerialTask, "LOG_DATA_JSON", 2048, NULL, 1, NULL);
 #endif
 
+    stacked.reset(0, 0, display.width(), display.height());
+
     bar = new DecoratedBarChart(display, 0, 0, display.width(), 0, FREQ_BEGIN, FREQ_END,
                                 LO_RSSI_THRESHOLD, HI_RSSI_THRESHOLD,
                                 -(float)show_db_after);
 
-    stacked.reset(0, 0, display.width(), display.height() - 6);
+    size_t b = stacked.addChart(bar);
 
+    Chart *statusBar = new StatusBar(display, 0, 0, display.width(), r);
+
+#if (WATERFALL_ENABLED == true)
     size_t *multiples = new size_t[6]{5, 3, 4, 15, 4, 3};
     WaterfallModel *model =
         new WaterfallModel((size_t)display.width(), 1000, 6, multiples);
@@ -679,12 +697,11 @@ void setup(void)
         new WaterfallChart(display, 0, WATERFALL_START, display.width(), 0, FREQ_BEGIN,
                            FREQ_END, -(float)show_db_after, WATERFALL_SENSITIVITY, model);
 
-    stacked.reset(0, 0, display.width(), display.height() - 6);
-
-    size_t b = stacked.addChart(bar);
     size_t c = stacked.addChart(waterChart);
+    stacked.setHeight(c, stacked.height - WATERFALL_START - statusBar->height);
+#endif
 
-    stacked.setHeight(c, stacked.height - WATERFALL_START);
+    size_t d = stacked.addChart(statusBar);
     stacked.setHeight(b, stacked.height);
 
 #ifdef UPTIME_CLOCK
@@ -788,12 +805,12 @@ void drone_sound_alarm(int drone_detection_level, int detection_count,
             tone_freq_db = 285 - tone_freq_db;
         }
 
-        if (detection_count == 1 && SOUND_ON)
+        if (r.detection_count == 1 && r.sound_on)
         {
             tone(BUZZER_PIN, tone_freq_db,
                  10); // same action ??? but first time
         }
-        if (detection_count % 5 == 0 && SOUND_ON)
+        if (r.detection_count % 5 == 0 && r.sound_on)
         {
             tone(BUZZER_PIN, tone_freq_db,
                  10); // same action ??? but every 5th time
@@ -801,7 +818,7 @@ void drone_sound_alarm(int drone_detection_level, int detection_count,
     }
     else
     {
-        if (detection_count % 20 == 0 && SOUND_ON)
+        if (r.detection_count % 20 == 0 && r.sound_on)
         {
             tone(BUZZER_PIN, 205,
                  10); // same action ??? but every 20th detection
@@ -815,7 +832,7 @@ void joystickMoveCursor(int joy_x_pressed)
     if (joy_x_pressed > 0)
     {
         cursor_x_position--;
-        display.drawString(cursor_x_position, 0, String((int)freq));
+        display.drawString(cursor_x_position, 0, String((int)r.current_frequency));
         display.drawLine(cursor_x_position, 1, cursor_x_position, 10);
         display.display();
         delay(10);
@@ -823,7 +840,7 @@ void joystickMoveCursor(int joy_x_pressed)
     else if (joy_x_pressed < 0)
     {
         cursor_x_position++;
-        display.drawString(cursor_x_position, 0, String((int)freq));
+        display.drawString(cursor_x_position, 0, String((int)r.current_frequency));
         display.drawLine(cursor_x_position, 1, cursor_x_position, 10);
         display.display();
         delay(10);
@@ -831,7 +848,7 @@ void joystickMoveCursor(int joy_x_pressed)
     if (cursor_x_position > DISPLAY_WIDTH || cursor_x_position < 0)
     {
         cursor_x_position = 0;
-        display.drawString(cursor_x_position, 0, String((int)freq));
+        display.drawString(cursor_x_position, 0, String((int)r.current_frequency));
         display.drawLine(cursor_x_position, 1, cursor_x_position, 10);
         display.display();
         delay(10);
@@ -869,45 +886,23 @@ void check_ranges()
     }
 }
 
-struct RadioScan : Scan
-{
-    float getRSSI() override;
-};
-
-float RadioScan::getRSSI()
-{
-#ifdef USING_SX1280PA
-    // radio.startReceive();
-    // get instantaneous RSSI value
-    // When PR will be merged we can use radi.getRSSI(false);
-    uint8_t data[3] = {0, 0, 0}; // RssiInst, Status, RFU
-    radio.mod->SPIreadStream(RADIOLIB_SX128X_CMD_GET_RSSI_INST, data, 3);
-    return ((float)data[0] / (-2.0));
-#else
-    return radio.getRSSI(false);
-#endif
-}
-
 // MAX Frequency RSSI BIN value of the samples
 int max_rssi_x = 999;
 
-RadioScan r;
-
 void loop(void)
 {
-    UI_displayDecorate(0, 0, false); // some default values
+    r.led_flag = false;
 
-    detection_count = 0;
+    r.detection_count = 0;
     drone_detected_frequency_start = 0;
     ranges_count = 0;
 
 // reset scan time
 #ifdef PRINT_PROFILE_TIME
     scan_time = 0;
-    // general purpose loop counter
-    loop_cnt++;
     loop_start = millis();
 #endif
+    r.epoch++;
 
     if (!ANIMATED_RELOAD || !single_page_scan)
     {
@@ -923,8 +918,8 @@ void loop(void)
         RANGE_PER_PAGE = range;
     }
 
-    fr_begin = FREQ_BEGIN;
-    fr_end = fr_begin;
+    r.fr_begin = FREQ_BEGIN;
+    r.fr_end = r.fr_begin;
 
     // 50 is a single-screen range
     // TODO: Make 50 a variable with the option to show the full range
@@ -946,14 +941,14 @@ void loop(void)
         range = RANGE_PER_PAGE;
         if (ranges_count == 0)
         {
-            fr_begin = (range_item == 0) ? fr_begin : fr_begin += range;
-            fr_end = fr_begin + RANGE_PER_PAGE;
+            r.fr_begin = (range_item == 0) ? r.fr_begin : r.fr_begin + range;
+            r.fr_end = r.fr_begin + RANGE_PER_PAGE;
         }
         else
         {
-            fr_begin = SCAN_RANGES[range_item] / 1000;
-            fr_end = SCAN_RANGES[range_item] % 1000;
-            range = fr_end - fr_begin;
+            r.fr_begin = SCAN_RANGES[range_item] / 1000;
+            r.fr_end = SCAN_RANGES[range_item] % 1000;
+            range = r.fr_end - r.fr_begin;
         }
 
 #ifdef DISABLED_CODE
@@ -963,11 +958,6 @@ void loop(void)
             UI_clearPlotter();
         }
 #endif
-
-        if (single_page_scan == false)
-        {
-            UI_displayDecorate(fr_begin, fr_end, true);
-        }
 
         drone_detected_frequency_start = 0;
         display.setTextAlignment(TEXT_ALIGN_RIGHT);
@@ -999,26 +989,29 @@ void loop(void)
             // Because of the SCAN_RBW_FACTOR x is not a display coordinate anymore
             // x > STEPS on SCAN_RBW_FACTOR
             int display_x = x / SCAN_RBW_FACTOR;
-            waterfall[display_x] = false;
             float step = (range * ((float)x / (STEPS * SCAN_RBW_FACTOR)));
 
-            freq = fr_begin + step;
-            LOG("setFrequency:%f\n", freq);
+            r.current_frequency = r.fr_begin + step;
+            LOG("setFrequency:%f\n", r.current_frequency);
 
 #ifdef USING_SX1280PA
-            state = radio.setFrequency(freq); // 1280 doesn't have calibration
+            state =
+                radio.setFrequency(r.current_frequency); // 1280 doesn't have calibration
             radio.startReceive(RADIOLIB_SX128X_RX_TIMEOUT_INF);
 #elif USING_SX1276
             state = radio.setFrequency(freq);
 #else
-            state = radio.setFrequency(freq, false); // false = no calibration need here
+            state = radio.setFrequency(r.current_frequency,
+                                       false); // false = no calibration need here
 #endif
             int radio_error_count = 0;
             if (state != RADIOLIB_ERR_NONE)
             {
-                display.drawString(
-                    0, 64 - 10, "E(" + String(state) + "):setFrequency:" + String(freq));
-                Serial.println("E(" + String(state) + "):setFrequency:" + String(freq));
+                display.drawString(0, 64 - 10,
+                                   "E(" + String(state) +
+                                       "):setFrequency:" + String(r.current_frequency));
+                Serial.println("E(" + String(state) +
+                               "):setFrequency:" + String(r.current_frequency));
                 display.display();
                 delay(2);
                 radio_error_count++;
@@ -1026,7 +1019,7 @@ void loop(void)
                     continue;
             }
 
-            LOG("Step:%d Freq: %f\n", x, freq);
+            LOG("Step:%d Freq: %f\n", x, r.current_frequency);
             // SpectralScan Method
 #ifdef METHOD_SPECTRAL
             {
@@ -1106,9 +1099,13 @@ void loop(void)
                 rr = LO_RSSI_THRESHOLD;
             }
 
-            waterChart->updatePoint(millis(), freq, rr);
+            r.drone_detection_level = drone_detection_level;
 
-            int updated = bar->bar.updatePoint(freq, rr);
+#if (WATERFALL_ENABLED == true)
+            waterChart->updatePoint(millis(), r.current_frequency, rr);
+#endif
+
+            int updated = bar->bar.updatePoint(r.current_frequency, rr);
 
             if (first_run || ANIMATED_RELOAD)
             {
@@ -1121,30 +1118,18 @@ void loop(void)
                 if (detected_y[display_x] == false) // detection threshold match
                 {
                     // Set LED to ON (filtered in UI component)
-                    UI_setLedFlag(true);
-#if (WATERFALL_ENABLED == true)
-                    if (single_page_scan)
-                    {
-                        // Drone detection true for waterfall
-                        if (!waterfall[display_x])
-                        {
-                            waterfall[display_x] = true;
-                            display.setColor(WHITE);
-                            // display.setPixel(display_x, w);
-                        }
-                    }
-#endif
+                    r.led_flag = true;
                     if (drone_detected_frequency_start == 0)
                     {
                         // mark freq start
-                        drone_detected_frequency_start = freq;
+                        drone_detected_frequency_start = r.current_frequency;
                     }
 
                     // mark freq end ... will shift right to last detected range
-                    drone_detected_frequency_end = freq;
-                    if (SOUND_ON == true)
+                    drone_detected_frequency_end = r.current_frequency;
+                    if (r.sound_on)
                     {
-                        drone_sound_alarm(drone_detection_level, detection_count,
+                        drone_sound_alarm(r.drone_detection_level, r.detection_count,
                                           max_rssi_x * 2);
                     }
 
@@ -1165,34 +1150,13 @@ void loop(void)
 #endif
                     }
                 }
-#if (WATERFALL_ENABLED == true)
-                if ((single_page_scan) && (waterfall[display_x] != true) && new_pixel)
-                {
-                    // If drone not found set dark pixel on the waterfall
-                    // TODO: make something like scrolling up if possible
-                    waterfall[display_x] = false;
-                    display.setColor(BLACK);
-                    // display.setPixel(display_x, w);
-                    display.setColor(WHITE);
-                }
-#endif
             }
-
-#ifdef PRINT_DEBUG
-            for (int y = 0; y < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE; y++)
-            {
-                if (filtered_result[y] == 1)
-                {
-                    LOG("Pixel:%i(%i):%i,", display_x, x, y);
-                }
-            }
-#endif
 
 #ifdef JOYSTICK_ENABLED
             // Draw joystick cursor and Frequency RSSI value
             if (display_x == cursor_x_position)
             {
-                display.drawString(display_x - 1, 0, String((int)freq));
+                display.drawString(display_x - 1, 0, String((int)r.current_frequency));
                 display.drawLine(display_x, 1, display_x, 12);
                 // if method scan RSSI we can get exact RSSI value
                 display.drawString(display_x + 17, 0, "-" + String((int)max_rssi_x * 4));
@@ -1205,7 +1169,7 @@ void loop(void)
             // count detected
             if (detected)
             {
-                detection_count++;
+                r.detection_count++;
             }
 
 #ifdef PRINT_DEBUG
@@ -1216,7 +1180,7 @@ void loop(void)
                 display.display();
             }
 
-            if (buttonPressHandler(freq) == false)
+            if (buttonPressHandler(r.current_frequency) == false)
                 break;
 
             // wait a little bit before the next scan,
@@ -1265,15 +1229,6 @@ void loop(void)
         {
             w = WATERFALL_START;
         }
-#if (WATERFALL_ENABLED == true)
-        // Draw waterfall position cursor
-        if (single_page_scan)
-        {
-            display.setColor(BLACK);
-            // display.drawHorizontalLine(0, w, STEPS);
-            display.setColor(WHITE);
-        }
-#endif
 
         stacked.draw();
         // Render display data here

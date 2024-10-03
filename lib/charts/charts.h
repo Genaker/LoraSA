@@ -1,7 +1,14 @@
 #ifndef CHARTS_H
 #define CHARTS_H
 
+#ifdef Vision_Master_E290
+#include "HT_DEPG0290BxS800FxX_BW.h"
+typedef DEPG0290BxS800FxX_BW Display_t;
+#else
 #include <OLEDDisplay.h>
+typedef OLEDDisplay Display_t;
+#endif
+
 #include <cstdint>
 #include <models.h>
 #include <stdlib.h>
@@ -10,9 +17,9 @@ struct Chart
 {
     uint16_t pos_x, pos_y;
     uint16_t width, height;
-    OLEDDisplay &display;
+    Display_t &display;
 
-    Chart(OLEDDisplay &d, uint16_t x, uint16_t y, uint16_t w, uint16_t h)
+    Chart(Display_t &d, uint16_t x, uint16_t y, uint16_t w, uint16_t h)
         : display(d), pos_x(x), pos_y(y), width(w), height(h) {};
 
     /*
@@ -37,7 +44,7 @@ struct Chart
  */
 struct ProgressChart : Chart
 {
-    ProgressChart(OLEDDisplay &d, uint16_t x, uint16_t y, uint16_t w, uint16_t h)
+    ProgressChart(Display_t &d, uint16_t x, uint16_t y, uint16_t w, uint16_t h)
         : Chart(d, x, y, w, h) {};
 
     /*
@@ -60,7 +67,7 @@ struct BarChart : ProgressChart
     bool *changed;
     bool redraw_all;
 
-    BarChart(OLEDDisplay &d, uint16_t x, uint16_t y, uint16_t w, uint16_t h, float min_x,
+    BarChart(Display_t &d, uint16_t x, uint16_t y, uint16_t w, uint16_t h, float min_x,
              float max_x, float min_y, float max_y, float level_y)
         : ProgressChart(d, x, y, w, h), min_x(min_x), max_x(max_x), min_y(min_y),
           max_y(max_y), level_y(level_y), redraw_all(true)
@@ -81,7 +88,7 @@ struct BarChart : ProgressChart
     int y2pos(float y);
 };
 
-#define LABEL_HEIGHT 6
+#define LABEL_HEIGHT 7
 #define X_AXIS_WEIGHT 1
 #define MAJOR_TICK_LENGTH 2
 #define MAJOR_TICKS 10
@@ -92,7 +99,7 @@ struct DecoratedBarChart : Chart
 {
     BarChart bar;
 
-    DecoratedBarChart(OLEDDisplay &d, uint16_t x, uint16_t y, uint16_t w, uint16_t h,
+    DecoratedBarChart(Display_t &d, uint16_t x, uint16_t y, uint16_t w, uint16_t h,
                       float min_x, float max_x, float min_y, float max_y, float level_y)
         : Chart(d, x, y, w, h),
           bar(d, x, y + LABEL_HEIGHT, w, h - LABEL_HEIGHT - AXIS_HEIGHT, min_x, max_x,
@@ -107,7 +114,7 @@ struct StackedChart : Chart
     Chart **charts;
     size_t charts_sz;
 
-    StackedChart(OLEDDisplay &d, uint16_t x, uint16_t y, uint16_t w, uint16_t h)
+    StackedChart(Display_t &d, uint16_t x, uint16_t y, uint16_t w, uint16_t h)
         : Chart(d, x, y, w, h), charts(NULL), charts_sz(0) {};
 
     /*
@@ -138,7 +145,7 @@ struct WaterfallChart : Chart
 
     WaterfallModel *model;
 
-    WaterfallChart(OLEDDisplay &d, uint16_t x, uint16_t y, uint16_t w, uint16_t h,
+    WaterfallChart(Display_t &d, uint16_t x, uint16_t y, uint16_t w, uint16_t h,
                    float min_x, float max_x, float level_y, float threshold,
                    WaterfallModel *m)
         : Chart(d, x, y, w, h), model(m), min_x(min_x), max_x(max_x), level_y(level_y),
@@ -157,7 +164,7 @@ struct UptimeClock : Chart
 {
     uint64_t t0;
     uint64_t t1;
-    UptimeClock(OLEDDisplay &d, uint64_t t0) : Chart(d, 0, 0, 0, 0), t0(t0), t1(t0) {};
+    UptimeClock(Display_t &d, uint64_t t0) : Chart(d, 0, 0, 0, 0), t0(t0), t1(t0) {};
 
     void draw(uint64_t t);
     virtual void draw() override;
