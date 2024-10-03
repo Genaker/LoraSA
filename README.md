@@ -180,6 +180,15 @@ If less, ESP32 will turn off. Fast pressing(less than 0.5 second) P button chang
 
 7. Select Proper Environment
    ![image](https://github.com/user-attachments/assets/a9c6557b-a387-4457-b59b-b3d7242d2826)
+
+   ---
+   
+   >**Important note:** If using a Heltec V3 board, make sure your ESP32 Expressif catalog is up to date before selecting environment, otherwise might get a build time error such as: `Error: Unknown board ID 'heltec_wifi_lora_32_V3'` when trying to select the environment.
+   >
+   >Open a PlatformIO CLI: https://docs.platformio.org/en/latest/integration/ide/vscode.html#platformio-core-cli
+   >
+   >Run: `pio pkg update -g -p espressif32`
+   
 8. Select ESP32 USB Device to program
    ![image](https://github.com/user-attachments/assets/af76c4b1-7122-45e1-b26b-08b59e03ca3b)
 Note: It is theoretically possible to program via WiFi and BTH.
