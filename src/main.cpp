@@ -24,6 +24,9 @@
 //  #define HELTEC_NO_DISPLAY
 
 #include <Arduino.h>
+#include <ArduinoJson.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 // #define OSD_ENABLED true
 // #define WIFI_SCANNING_ENABLED true
@@ -202,7 +205,7 @@ bool single_page_scan = false;
 bool SOUND_ON = false;
 
 // #define PRINT_DEBUG
-#define PRINT_PROFILE_TIME
+// #define PRINT_PROFILE_TIME
 
 #ifdef PRINT_PROFILE_TIME
 uint64_t loop_start = 0;
@@ -210,6 +213,10 @@ uint64_t loop_time = 0;
 uint64_t scan_time = 0;
 uint64_t scan_start_time = 0;
 #endif
+
+// log data via serial console, JSON format:
+#define LOG_DATA_JSON true
+int LOG_DATA_JSON_INTERVAL = 100;
 
 uint64_t x, y, range_item, w = WATERFALL_START, i = 0;
 int osd_x = 1, osd_y = 2, col = 0, max_bin = 32;
@@ -435,6 +442,49 @@ void init_radio()
     delay(50);
 }
 
+struct FrequencyRange
+{
+    uint64_t begin;
+    uint64_t end;
+} frequencyRange;
+
+void logToSerialTask(void *parameter)
+{
+    JsonDocument doc;
+    char jsonOutput[200];
+
+    for (;;)
+    {
+        if (frequencyRange.begin != frequencyRange.end)
+        {
+            String max_result = "-999";
+            int highest_value_scanned = 999;
+
+            for (int rssi_item = 0; rssi_item < STEPS / WINDOW_SIZE; rssi_item++)
+            {
+                if (max_x_window[rssi_item] != 0 &&
+                    max_x_window[rssi_item] < highest_value_scanned)
+                {
+                    max_result = "-" + String(max_x_window[rssi_item]);
+                    highest_value_scanned = max_x_window[rssi_item];
+                }
+            }
+            if (max_result == "-999")
+            {
+                continue;
+            }
+
+            doc["low_range_freq"] = frequencyRange.begin;
+            doc["high_range_freq"] = frequencyRange.end;
+            doc["value"] = max_result;
+
+            serializeJson(doc, jsonOutput);
+            Serial.println(jsonOutput);
+        }
+        vTaskDelay(LOG_DATA_JSON_INTERVAL / portTICK_PERIOD_MS);
+    }
+}
+
 void setup(void)
 {
 #ifdef LILYGO
@@ -586,6 +636,10 @@ void setup(void)
     w = WATERFALL_START;
 #ifdef OSD_ENABLED
     osd.clear();
+#endif
+
+#ifdef LOG_DATA_JSON
+    xTaskCreate(logToSerialTask, "LOG_DATA_JSON", 2048, NULL, 1, NULL);
 #endif
 }
 
@@ -798,13 +852,11 @@ void loop(void)
     drone_detected_frequency_start = 0;
     ranges_count = 0;
 
-    // reset scan time
+// reset scan time
+#ifdef PRINT_PROFILE_TIME
     scan_time = 0;
-
     // general purpose loop counter
     loop_cnt++;
-
-#ifdef PRINT_PROFILE_TIME
     loop_start = millis();
 #endif
 
@@ -1043,6 +1095,9 @@ void loop(void)
                                           max_rssi_x * 2);
                     }
 
+                    frequencyRange.begin = drone_detected_frequency_start;
+                    frequencyRange.end = drone_detected_frequency_end;
+
                     if (DRAW_DETECTION_TICKS == true)
                     {
 // draw vertical line on top of display for "drone detected"
@@ -1230,10 +1285,10 @@ void loop(void)
 // Serial.println("----");
 #endif
 
-    loop_time = millis() - loop_start;
     joy_btn_clicked = false;
 
 #ifdef PRINT_PROFILE_TIME
+    loop_time = millis() - loop_start;
     Serial.printf("LOOP: %lld ms; SCAN: %lld ms;\n  ", loop_time, scan_time);
 #endif
 // No WiFi and BT Scan Without OSD
