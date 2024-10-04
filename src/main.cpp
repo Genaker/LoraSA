@@ -442,11 +442,11 @@ void init_radio()
     delay(50);
 }
 
-struct FrequencyRange
+struct frequency_scan_result
 {
     uint64_t begin;
     uint64_t end;
-} frequencyRange;
+} frequency_scan_result;
 
 void logToSerialTask(void *parameter)
 {
@@ -455,7 +455,7 @@ void logToSerialTask(void *parameter)
 
     for (;;)
     {
-        if (frequencyRange.begin != frequencyRange.end)
+        if (frequency_scan_result.begin != frequency_scan_result.end)
         {
             String max_result = "-999";
             int highest_value_scanned = 999;
@@ -469,13 +469,13 @@ void logToSerialTask(void *parameter)
                     highest_value_scanned = max_x_window[rssi_item];
                 }
             }
-            if (max_result == "-999")
+            if (highest_value_scanned == 999)
             {
                 continue;
             }
 
-            doc["low_range_freq"] = frequencyRange.begin;
-            doc["high_range_freq"] = frequencyRange.end;
+            doc["low_range_freq"] = frequency_scan_result.begin;
+            doc["high_range_freq"] = frequency_scan_result.end;
             doc["value"] = max_result;
 
             serializeJson(doc, jsonOutput);
@@ -1095,9 +1095,10 @@ void loop(void)
                                           max_rssi_x * 2);
                     }
 
-                    frequencyRange.begin = drone_detected_frequency_start;
-                    frequencyRange.end = drone_detected_frequency_end;
-
+#ifdef LOG_DATA_JSON
+                    frequency_scan_result.begin = drone_detected_frequency_start;
+                    frequency_scan_result.end = drone_detected_frequency_end;
+#endif
                     if (DRAW_DETECTION_TICKS == true)
                     {
 // draw vertical line on top of display for "drone detected"
