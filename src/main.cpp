@@ -24,8 +24,9 @@
 //  #define HELTEC_NO_DISPLAY
 
 #include <Arduino.h>
+#include <ArduinoJson.h>
 
-// #define OSD_ENABLED true
+#define OSD_ENABLED true
 // #define WIFI_SCANNING_ENABLED true
 // #define BT_SCANNING_ENABLED true
 
@@ -70,33 +71,12 @@ uint64_t wf_start = 0;
 uint64_t bt_start = 0;
 
 #define MAX_POWER_LEVELS 33
-#ifdef OSD_ENABLED
-#include "DFRobot_OSD.h"
-#define OSD_SIDE_BAR true
-
-// SPI pins
-#define OSD_CS 47
-#define OSD_MISO 33
-#define OSD_MOSI 34
-#define OSD_SCK 26
-#endif
-
-#define OSD_WIDTH 30
-#define OSD_HEIGHT 16
-#define OSD_CHART_WIDTH 15
-#define OSD_CHART_HEIGHT 5
-#define OSD_X_START 1
-#define OSD_Y_START 16
 
 // TODO: Calculate dynamically:
 // osd_steps = osd_mhz_in_bin / (FM range / LORA radio x Steps)
 int osd_mhz_in_bin = 5;
 int osd_steps = 12;
 int global_counter = 0;
-
-#ifdef OSD_ENABLED
-DFRobot_OSD osd(OSD_CS);
-#endif
 
 #include "global_config.h"
 #include "ui.h"
@@ -139,8 +119,6 @@ uint64_t RANGE_PER_PAGE = FREQ_END - FREQ_BEGIN; // FREQ_END - FREQ_BEGIN
 #ifdef USING_SX1280PA
 #define SCAN_RBW_FACTOR 2
 #endif
-
-constexpr int OSD_PIXELS_PER_CHAR = (STEPS * SCAN_RBW_FACTOR) / OSD_CHART_WIDTH;
 
 #define DEFAULT_RANGE_PER_PAGE 50
 
@@ -251,56 +229,13 @@ scanWiFi(osd)
 #endif
 
 #ifdef OSD_ENABLED
-        unsigned short selectFreqChar(int bin, int start_level = 0)
-{
-    if (bin >= start_level)
-    {
-        // level when we are starting show levels symbols
-        // you can override with your own character for example 0x100 = " " empty char
-        return power_level[33];
-    }
-    else if (bin >= 0 && bin < MAX_POWER_LEVELS)
-        return power_level[bin];
-    // when wrong bin number or noc har assigned we are showing "!" char
-    return 0x121;
-}
-
-void osdPrintSignalLevelChart(int col, int signal_value)
-{
-    // Third line
-    if (signal_value <= 9 && signal_value <= drone_detection_level)
-    {
-        osd.displayChar(13, col + 2, 0x100);
-        osd.displayChar(14, col + 2, 0x100);
-        osd.displayChar(12, col + 2, selectFreqChar(signal_value, drone_detection_level));
-    }
-    // Second line
-    else if (signal_value < 19 && signal_value <= drone_detection_level)
-    {
-        osd.displayChar(12, col + 2, 0x100);
-        osd.displayChar(14, col + 2, 0x100);
-        osd.displayChar(13, col + 2, selectFreqChar(signal_value, drone_detection_level));
-    }
-    // First line
-    else
-    {
-        // Clean Up symbol
-        osd.displayChar(12, col + 2, 0x100);
-        osd.displayChar(13, col + 2, 0x100);
-        osd.displayChar(14, col + 2, selectFreqChar(signal_value, drone_detection_level));
-    }
-}
-
-void osdProcess()
+        void osdProcess()
 { // OSD enabled
 
     // memset(max_step_range, 33, 30);
     max_bin = 32;
 
-    osd.displayString(12, 1, String(FREQ_BEGIN));
-    osd.displayString(12, OSD_WIDTH - 8, String(FREQ_END));
     // Finding biggest in result
-    //  Skiping 0 and 32 31 to avoid overflow
     for (int i = 1; i < MAX_POWER_LEVELS - 3; i++)
     {
 
@@ -329,23 +264,16 @@ void osdProcess()
 #endif
     }
     // Going to the next OSD step
-    if (x % osd_steps == 0 && col < OSD_WIDTH)
+    if (x % osd_steps == 0)
     {
-        // OSD SIDE BAR with frequency log
-#ifdef OSD_SIDE_BAR
-        {
-            osd.displayString(col, OSD_WIDTH - 7,
-                              String(FREQ_BEGIN + (col * osd_mhz_in_bin)) + "-" +
-                                  String(max_step_range) + " ");
-        }
-#endif
-        // Test with Random Result...
-        // max_step_range = rand() % 32;
-#ifdef METHOD_RSSI
-        // With THe RSSI method we can get real RSSI value not just a bin
-#endif
-        // PRINT SIGNAL CHAR ROW, COL, VALUE
-        osdPrintSignalLevelChart(col, max_step_range);
+        JsonDocument doc;
+        char jsonOutput[200];
+        doc["low_range_freq"] = String(drone_detected_frequency_start);
+        doc["high_range_freq"] = String(drone_detected_frequency_end);
+        doc["value"] = "-" + String(max_bins_array_value[col]);
+
+        serializeJson(doc, jsonOutput);
+        Serial.println(jsonOutput);
 
 #ifdef PRINT_DEBUG
         Serial.println("MAX:" + String(max_step_range));
@@ -445,21 +373,7 @@ void setup(void)
 
     // LED brightness
     heltec_led(25);
-#ifdef OSD_ENABLED
-    osd.init(OSD_SCK, OSD_MISO, OSD_MOSI);
-    osd.clear();
 
-    /* Write the custom character to the OSD, replacing the original character*/
-    /* Expand 0xe0 to 0x0e0, the high 8 bits indicate page number and the low 8 bits
-     * indicate the inpage address.*/
-    osd.storeChar(0xe0, buf0);
-
-    // Display Satellite icon in the left bottom corner
-    osd.displayChar(14, 1, 0x10f);
-    /*display String*/
-    osd.displayString(14, 15, "    Lora SA");
-    osd.displayString(2, 1, "   Spectral RF Analyzer");
-#endif
     float vbat;
     float resolution;
     loop_cnt = 0;
@@ -584,9 +498,6 @@ void setup(void)
 #endif
     // waterfall start line y-axis
     w = WATERFALL_START;
-#ifdef OSD_ENABLED
-    osd.clear();
-#endif
 }
 
 // Formula to translate 33 bin to approximate RSSI value
@@ -1217,8 +1128,14 @@ void loop(void)
         if (global_counter != 0 && global_counter % 10 == 0)
         {
 #if !defined(BT_SCANNING_ENABLED) && !defined(WIFI_SCANNING_ENABLED)
-            osd.clear();
-            osd.displayChar(14, 1, 0x10f);
+            JsonDocument doc;
+            char jsonOutput[200];
+            doc["low_range_freq"] = "";
+            doc["high_range_freq"] = "";
+            doc["value"] = "";
+
+            serializeJson(doc, jsonOutput);
+            Serial.println(jsonOutput);
             global_counter = 0;
 #endif
         }
