@@ -10,6 +10,7 @@ typedef OLEDDisplay Display_t;
 #endif
 
 #include <cstdint>
+#include <events.h>
 #include <models.h>
 #include <stdlib.h>
 
@@ -58,7 +59,7 @@ struct ProgressChart : Chart
     virtual void drawOne(int x) = 0;
 };
 
-struct BarChart : ProgressChart
+struct BarChart : ProgressChart, Listener
 {
     float min_x, max_x, min_y, max_y;
     float level_y;
@@ -83,6 +84,7 @@ struct BarChart : ProgressChart
     int updatePoint(float x, float y) override;
     void drawOne(int x) override;
     void draw() override;
+    void onEvent(Event &) override;
 
     int x2pos(float x);
     int y2pos(float y);
@@ -109,7 +111,7 @@ struct DecoratedBarChart : Chart
     void draw() override;
 };
 
-struct StackedChart : Chart
+struct StackedChart : Chart, Listener
 {
     Chart **charts;
     size_t charts_sz;
@@ -134,9 +136,11 @@ struct StackedChart : Chart
     void reset(uint16_t x, uint16_t y, uint16_t w, uint16_t h) override;
 
     void draw() override;
+
+    void onEvent(Event &e) override;
 };
 
-struct WaterfallChart : Chart
+struct WaterfallChart : Chart, Listener
 {
     float min_x, max_x;
     float level_y, threshold;
@@ -156,6 +160,7 @@ struct WaterfallChart : Chart
     void reset(uint16_t x, uint16_t y, uint16_t w, uint16_t h) override;
 
     void draw() override;
+    void onEvent(Event &e) override;
 
     int x2pos(float x);
 };

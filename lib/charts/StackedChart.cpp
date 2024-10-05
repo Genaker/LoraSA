@@ -12,7 +12,8 @@ size_t StackedChart::addChart(Chart *c)
     cc[charts_sz] = c;
     free(charts);
 
-    c->reset(pos_x + c->pos_x, pos_y + c->pos_y, trim_w(c->pos_x, c->width, width), c->height);
+    c->reset(pos_x + c->pos_x, pos_y + c->pos_y, trim_w(c->pos_x, c->width, width),
+             c->height);
     charts = cc;
     return charts_sz++;
 }
@@ -81,4 +82,14 @@ void StackedChart::draw()
 {
     for (int i = 0; i < charts_sz; i++)
         charts[i]->draw();
+}
+
+void StackedChart::onEvent(Event &e)
+{
+    if (e.type != SCAN_TASK_COMPLETE)
+    {
+        return;
+    }
+
+    draw();
 }

@@ -55,3 +55,13 @@ int WaterfallChart::x2pos(float x)
 
     return width * (x - min_x) / (max_x - min_x);
 }
+
+void WaterfallChart::onEvent(Event &e)
+{
+    if (e.type != DETECTED)
+    {
+        return;
+    }
+
+    updatePoint(e.time_ms, e.detected.freq, e.detected.rssi);
+}

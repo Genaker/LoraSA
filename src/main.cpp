@@ -42,6 +42,7 @@
 #define RADIOLIB_GODMODE (1)
 
 #include <charts.h>
+#include <events.h>
 #include <scan.h>
 
 #ifndef LILYGO
@@ -197,7 +198,7 @@ bool first_run, new_pixel, detected_x = false;
 // drone detection flag
 bool detected = false;
 uint64_t drone_detection_level = DEFAULT_DRONE_DETECTION_LEVEL;
-uint64_t show_db_after = 80;
+#define TRIGGER_LEVEL -80.0
 uint64_t drone_detected_frequency_start = 0;
 uint64_t drone_detected_frequency_end = 0;
 bool single_page_scan = false;
@@ -675,12 +676,14 @@ void setup(void)
     xTaskCreate(logToSerialTask, "LOG_DATA_JSON", 2048, NULL, 1, NULL);
 #endif
 
+    r.trigger_level = TRIGGER_LEVEL;
     stacked.reset(0, 0, display.width(), display.height());
+    r.addEventListener(SCAN_TASK_COMPLETE, stacked);
 
     bar = new DecoratedBarChart(display, 0, 0, display.width(), 0, FREQ_BEGIN, FREQ_END,
-                                LO_RSSI_THRESHOLD, HI_RSSI_THRESHOLD,
-                                -(float)show_db_after);
+                                LO_RSSI_THRESHOLD, HI_RSSI_THRESHOLD, r.trigger_level);
 
+    r.addEventListener(DETECTED, bar->bar);
     size_t b = stacked.addChart(bar);
 
     Chart *statusBar = new StatusBar(display, 0, 0, display.width(), r);
@@ -695,10 +698,12 @@ void setup(void)
 
     waterChart =
         new WaterfallChart(display, 0, WATERFALL_START, display.width(), 0, FREQ_BEGIN,
-                           FREQ_END, -(float)show_db_after, WATERFALL_SENSITIVITY, model);
+                           FREQ_END, r.trigger_level, WATERFALL_SENSITIVITY, model);
 
     size_t c = stacked.addChart(waterChart);
     stacked.setHeight(c, stacked.height - WATERFALL_START - statusBar->height);
+
+    r.addEventListener(DETECTED, *waterChart);
 #endif
 
     size_t d = stacked.addChart(statusBar);
@@ -1053,6 +1058,7 @@ void loop(void)
                 LOG("METHOD RSSI");
                 uint16_t max_rssi = r.rssiMethod(SAMPLES_RSSI, result,
                                                  RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE);
+
                 if (max_x_rssi[display_x] > max_rssi)
                 {
                     max_x_rssi[display_x] = max_rssi;
@@ -1077,42 +1083,24 @@ void loop(void)
                 display.setColor(WHITE);
             }
 #endif
-            size_t detected_at = r.detect(
-                result, filtered_result, RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE, samples);
+            Event event = r.detect(result, filtered_result,
+                                   RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE, samples);
+            event.time_ms = millis();
 
+            size_t detected_at = event.detected.detected_at;
             if (max_rssi_x > detected_at)
             {
                 // MAx bin Value not RSSI
                 max_rssi_x = detected_at;
             }
 
-            detected = detected_at < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE;
+            detected = event.detected.detected;
             detected_y[display_x] = false;
 
-            float rr;
-            if (detected)
-            {
-                rr = -(float)result[detected_at];
-            }
-            else
-            {
-                rr = LO_RSSI_THRESHOLD;
-            }
-
+            float rr = event.detected.rssi;
             r.drone_detection_level = drone_detection_level;
 
-#if (WATERFALL_ENABLED == true)
-            waterChart->updatePoint(millis(), r.current_frequency, rr);
-#endif
-
-            int updated = bar->bar.updatePoint(r.current_frequency, rr);
-
-            if (first_run || ANIMATED_RELOAD)
-            {
-                bar->bar.drawOne(updated);
-            }
-
-            if (detected_at <= drone_detection_level)
+            if (event.detected.trigger)
             {
                 // check if we should alarm about a drone presence
                 if (detected_y[display_x] == false) // detection threshold match
@@ -1152,6 +1140,8 @@ void loop(void)
                 }
             }
 
+            r.fireEvent(event);
+
 #ifdef JOYSTICK_ENABLED
             // Draw joystick cursor and Frequency RSSI value
             if (display_x == cursor_x_position)
@@ -1166,16 +1156,10 @@ void loop(void)
 #ifdef PRINT_PROFILE_TIME
             scan_time += (millis() - scan_start_time);
 #endif
-            // count detected
-            if (detected)
-            {
-                r.detection_count++;
-            }
-
 #ifdef PRINT_DEBUG
             Serial.println("....\n");
 #endif
-            if (first_run || ANIMATED_RELOAD)
+            if (r.animated)
             {
                 display.display();
             }
@@ -1230,7 +1214,10 @@ void loop(void)
             w = WATERFALL_START;
         }
 
-        stacked.draw();
+        {
+            Event event(r, SCAN_TASK_COMPLETE, millis());
+            r.fireEvent(event);
+        }
         // Render display data here
 
 #ifdef UPTIME_CLOCK

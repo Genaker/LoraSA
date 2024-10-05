@@ -48,14 +48,17 @@ void test_detect()
     uint16_t samples[test_sz] = {20, 50, 55, 60, 0, 70, 75, 80, 0, 90, 0, 100, 110};
     bool result[test_sz];
 
-    size_t r = Scan::detect(samples, result, test_sz, 1);
+    TestScan test_scan({}, 0);
+    Event e = test_scan.detect(samples, result, test_sz, 1);
+    size_t r = e.detected.detected_at;
 
     bool expect[test_sz] = {1, 1, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1};
 
     TEST_ASSERT_EQUAL_INT16(0, r);
     TEST_ASSERT_EQUAL_INT8_ARRAY(expect, result, test_sz);
 
-    r = Scan::detect(samples, result, test_sz, 2);
+    Event e2 = test_scan.detect(samples, result, test_sz, 2);
+    r = e2.detected.detected_at;
 
     bool expect2[test_sz] = {0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0};
 

@@ -102,6 +102,20 @@ int BarChart::y2pos(float y)
     return height - height * (y - min_y) / (max_y - min_y);
 }
 
+void BarChart::onEvent(Event &e)
+{
+    if (e.type != DETECTED)
+    {
+        return;
+    }
+
+    int u = updatePoint(e.emitter.current_frequency, e.detected.rssi);
+    if (e.emitter.animated)
+    {
+        drawOne(u);
+    }
+}
+
 void DecoratedBarChart::reset(uint16_t x, uint16_t y, uint16_t w, uint16_t h)
 {
     Chart::reset(x, y, w, h);
