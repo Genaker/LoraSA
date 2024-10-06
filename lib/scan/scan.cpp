@@ -154,6 +154,21 @@ size_t Scan::addEventListener(EventType t, Listener &l)
     return c;
 }
 
+struct CallbackFunction : Listener
+{
+    void (*cb)(void *arg, Event &e);
+    void *arg;
+
+    CallbackFunction(void cb(void *arg, Event &e), void *arg) : cb(cb), arg(arg) {}
+
+    void onEvent(Event &e) { cb(arg, e); }
+};
+
+size_t Scan::addEventListener(EventType t, void cb(void *arg, Event &e), void *arg)
+{
+    return addEventListener(t, *(new CallbackFunction(cb, arg)));
+}
+
 void Scan::fireEvent(Event &event)
 {
     Listener **list = eventListeners[(size_t)event.type];

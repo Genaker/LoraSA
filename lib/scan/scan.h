@@ -69,6 +69,7 @@ struct Scan
                  int samples);
 
     size_t addEventListener(EventType t, Listener &l);
+    size_t addEventListener(EventType t, void cb(void *, Event &), void *arg);
     void fireEvent(Event &e);
 };
 

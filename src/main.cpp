@@ -520,6 +520,8 @@ void logToSerialTask(void *parameter)
     }
 }
 
+void drone_sound_alarm(void *arg, Event &e);
+
 void setup(void)
 {
 #ifdef LILYGO
@@ -678,12 +680,10 @@ void setup(void)
 
     r.trigger_level = TRIGGER_LEVEL;
     stacked.reset(0, 0, display.width(), display.height());
-    r.addEventListener(SCAN_TASK_COMPLETE, stacked);
 
     bar = new DecoratedBarChart(display, 0, 0, display.width(), 0, FREQ_BEGIN, FREQ_END,
                                 LO_RSSI_THRESHOLD, HI_RSSI_THRESHOLD, r.trigger_level);
 
-    r.addEventListener(DETECTED, bar->bar);
     size_t b = stacked.addChart(bar);
 
     Chart *statusBar = new StatusBar(display, 0, 0, display.width(), r);
@@ -708,6 +708,10 @@ void setup(void)
 
     size_t d = stacked.addChart(statusBar);
     stacked.setHeight(b, stacked.height);
+
+    r.addEventListener(DETECTED, bar->bar);
+    r.addEventListener(DETECTED, drone_sound_alarm, &r);
+    r.addEventListener(SCAN_TASK_COMPLETE, stacked);
 
 #ifdef UPTIME_CLOCK
     uptime = new UptimeClock(display, millis());
@@ -796,9 +800,21 @@ bool buttonPressHandler(float freq)
     return true;
 }
 
-void drone_sound_alarm(int drone_detection_level, int detection_count,
-                       int tone_freq_db = 205)
+void drone_sound_alarm(void *arg, Event &e)
 {
+    if (e.type != DETECTED)
+    {
+        return;
+    }
+
+    Scan &r = *((Scan *)arg);
+    if (!r.sound_on)
+        return;
+
+    int tone_freq_db = e.detected.detected_at * 2;
+    int drone_detection_level = r.drone_detection_level;
+    int detection_count = r.detection_count;
+
     // If level is set to sensitive,
     // start beeping every 10th frequency and shorter
     // it improves performance less short beep delays...
@@ -1115,11 +1131,6 @@ void loop(void)
 
                     // mark freq end ... will shift right to last detected range
                     drone_detected_frequency_end = r.current_frequency;
-                    if (r.sound_on)
-                    {
-                        drone_sound_alarm(r.drone_detection_level, r.detection_count,
-                                          max_rssi_x * 2);
-                    }
 
 #ifdef LOG_DATA_JSON
                     frequency_scan_result.begin = drone_detected_frequency_start;
