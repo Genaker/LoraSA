@@ -471,6 +471,7 @@ void logToSerialTask(void *parameter)
             }
             if (highest_value_scanned == 999)
             {
+                vTaskDelay(LOG_DATA_JSON_INTERVAL / portTICK_PERIOD_MS);
                 continue;
             }
 
