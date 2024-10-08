@@ -42,6 +42,7 @@
 #define RADIOLIB_GODMODE (1)
 
 #include <charts.h>
+#include <config.h>
 #include <events.h>
 #include <scan.h>
 
@@ -204,8 +205,8 @@ uint64_t drone_detected_frequency_end = 0;
 bool single_page_scan = false;
 
 // #define PRINT_DEBUG
-#define PRINT_PROFILE_TIME
 
+#define PRINT_PROFILE_TIME
 #ifdef PRINT_PROFILE_TIME
 uint64_t loop_start = 0;
 uint64_t loop_time = 0;
@@ -215,7 +216,6 @@ uint64_t scan_start_time = 0;
 
 // log data via serial console, JSON format:
 // #define LOG_DATA_JSON true
-int LOG_DATA_JSON_INTERVAL = 1000; // Log at least every second
 
 uint64_t x, y, range_item, w = WATERFALL_START, i = 0;
 int osd_x = 1, osd_y = 2, col = 0, max_bin = 32;
@@ -359,6 +359,8 @@ void osdProcess()
     }
 }
 #endif
+
+Config config;
 
 struct RadioScan : Scan
 {
@@ -514,7 +516,7 @@ void logToSerialTask(void *parameter)
 
     for (;;)
     {
-        ulTaskNotifyTake(true, pdMS_TO_TICKS(LOG_DATA_JSON_INTERVAL));
+        ulTaskNotifyTake(true, pdMS_TO_TICKS(config.log_data_json_interval));
         if (frequency_scan_result.begin != frequency_scan_result.end ||
             frequency_scan_result.last_epoch != last_epoch)
         {
@@ -551,7 +553,7 @@ void setup(void)
 #ifdef LILYGO
     setupBoards(); // true for disable U8g2 display library
     delay(500);
-    Serial.println("Setup LiLyGO board is done");
+    Serial.println("Setup LiLybeginSDCardGO board is done");
 #endif
 
     // LED brightness
@@ -575,6 +577,8 @@ void setup(void)
     float resolution;
     bt_start = millis();
     wf_start = millis();
+
+    config = Config::init();
 
     pinMode(LED, OUTPUT);
     pinMode(BUZZER_PIN, OUTPUT);
@@ -938,11 +942,12 @@ void loop(void)
     drone_detected_frequency_start = 0;
     ranges_count = 0;
 
-// reset scan time
-#ifdef PRINT_PROFILE_TIME
-    scan_time = 0;
-    loop_start = millis();
-#endif
+    // reset scan time
+    if (config.print_profile_time)
+    {
+        scan_time = 0;
+        loop_start = millis();
+    }
     r.epoch++;
 
     if (!ANIMATED_RELOAD || !single_page_scan)
@@ -1337,10 +1342,13 @@ void loop(void)
 
     joy_btn_clicked = false;
 
+    if (config.print_profile_time)
+    {
 #ifdef PRINT_PROFILE_TIME
-    loop_time = millis() - loop_start;
-    Serial.printf("LOOP: %lld ms; SCAN: %lld ms;\n  ", loop_time, scan_time);
+        loop_time = millis() - loop_start;
+        Serial.printf("LOOP: %lld ms; SCAN: %lld ms;\n  ", loop_time, scan_time);
 #endif
+    }
 // No WiFi and BT Scan Without OSD
 #ifdef OSD_ENABLED
 #ifdef WIFI_SCANNING_ENABLED
