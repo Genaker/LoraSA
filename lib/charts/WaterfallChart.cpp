@@ -63,5 +63,7 @@ void WaterfallChart::onEvent(Event &e)
         return;
     }
 
+    level_y = e.emitter.trigger_level;
+
     updatePoint(e.time_ms, e.detected.freq, e.detected.rssi);
 }

@@ -109,6 +109,8 @@ void BarChart::onEvent(Event &e)
         return;
     }
 
+    level_y = e.emitter.trigger_level;
+
     int u = updatePoint(e.emitter.current_frequency, e.detected.rssi);
     if (e.emitter.animated)
     {
@@ -134,6 +136,8 @@ void DecoratedBarChart::draw()
     display.setColor(WHITE);
     display.setTextAlignment(TEXT_ALIGN_LEFT);
 
+    uint16_t first_untouched = 0;
+
     for (uint16_t x = 0; x < width; x++)
     {
         float y = bar.ys[x];
@@ -142,7 +146,7 @@ void DecoratedBarChart::draw()
             String s = String(bar.ys[x], 0);
             uint16_t w = display.getStringWidth(s);
             uint16_t x1 = x;
-            for (; x < x1 + w; x++)
+            for (; x < x1 + w && x < width; x++)
             {
                 if (bar.ys[x] > y)
                 {
@@ -152,7 +156,15 @@ void DecoratedBarChart::draw()
                 }
             }
 
-            display.drawString(x1, pos_y, s);
+            if (x > width && first_untouched <= width - w)
+            {
+                x1 = width - w;
+            }
+
+            first_untouched = x;
+
+            if (x1 + w <= width)
+                display.drawString(pos_x + x1, pos_y, s);
         }
     }
 

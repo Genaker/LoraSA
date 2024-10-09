@@ -725,10 +725,9 @@ int binToRSSI(int bin)
     return 11 + (bin * 4);
 }
 
-// return true if continue the code is false break the loop
-bool buttonPressHandler(float freq)
+// is there an input using Hot Button or joystick
+bool buttonInputRequested()
 {
-    // Detection level button short press
     if (button.pressedFor(100)
 #ifdef JOYSTICK_ENABLED
         || joy_btn_click()
@@ -736,68 +735,63 @@ bool buttonPressHandler(float freq)
     )
     {
         button.update();
-        button_pressed_counter = 0;
-        // if long press stop
-        while (button.pressedNow()
+        if (button.pressedNow()
 #ifdef JOYSTICK_ENABLED
-               || joy_btn_click()
+            || joy_btn_click()
 #endif
         )
         {
-            // Print Curent frequency once
-            if (button_pressed_counter == 0)
-            {
-                display.setTextAlignment(TEXT_ALIGN_CENTER);
-                display.drawString(128 / 2, 0, String(freq));
-                display.display();
-            }
-            delay(10);
-            button_pressed_counter++;
-            if (button_pressed_counter > 150)
-            {
-                digitalWrite(LED, HIGH);
-                delay(150);
-                digitalWrite(LED, LOW);
-            }
-        }
-        if (button_pressed_counter > 150)
-        {
-            // Remove Curent Frequency Text
-            display.setTextAlignment(TEXT_ALIGN_CENTER);
-            display.setColor(BLACK);
-            display.drawString(128 / 2, 0, String(freq));
-            display.setColor(WHITE);
-            display.display();
-            return false;
-        }
-        if (button_pressed_counter > 50 && button_pressed_counter < 150)
-        {
-            if (!joy_btn_clicked)
-            {
-                // Visually confirm it's off so user releases button
-                display.displayOff();
-                // Deep sleep (has wait for release so we don't wake up
-                // immediately)
-                heltec_deep_sleep();
-            }
-            return false;
-        }
-        button.update();
-        display.setTextAlignment(TEXT_ALIGN_RIGHT);
-        // erase old drone detection level value
-        display.setColor(BLACK);
-        display.fillRect(128 - 13, 0, 13, 13);
-        display.setColor(WHITE);
-        drone_detection_level++;
-        // print new value
-        display.drawString(128, 0, String(drone_detection_level));
-        tone(BUZZER_PIN, 104, 150);
-        if (drone_detection_level > 30)
-        {
-            drone_detection_level = 1;
+            return true;
         }
     }
-    return true;
+
+    return false;
+}
+
+enum ButtonEvent
+{
+    NONE = 0,
+    LONG_PRESS,
+    SHORT_PRESS,
+    TOO_SHORT,
+    SUSPEND
+};
+
+ButtonEvent buttonPressEvent()
+{
+    button_pressed_counter = 0;
+    // if long press stop
+    while (button.pressedNow()
+#ifdef JOYSTICK_ENABLED
+           || joy_btn_click()
+#endif
+    )
+    {
+        delay(10);
+        button_pressed_counter++;
+        if (button_pressed_counter > 150)
+        {
+            digitalWrite(LED, HIGH);
+            delay(150);
+            digitalWrite(LED, LOW);
+        }
+    }
+    if (button_pressed_counter > 150)
+    {
+        return LONG_PRESS;
+    }
+
+    if (button_pressed_counter > 50)
+    {
+        if (!joy_btn_clicked)
+        {
+            return SUSPEND;
+        }
+        return SHORT_PRESS;
+    }
+    button.update();
+
+    return TOO_SHORT;
 }
 
 void drone_sound_alarm(void *arg, Event &e)
@@ -1175,8 +1169,68 @@ void loop(void)
                 display.display();
             }
 
-            if (buttonPressHandler(r.current_frequency) == false)
-                break;
+            if (buttonInputRequested())
+            {
+                display.setTextAlignment(TEXT_ALIGN_CENTER);
+                display.drawString(display.width() / 2, 0, String(r.current_frequency));
+                display.display();
+
+                ButtonEvent e = buttonPressEvent();
+
+                if (e == LONG_PRESS)
+                {
+                    // Remove Curent Frequency Text
+                    display.setTextAlignment(TEXT_ALIGN_CENTER);
+                    display.setColor(BLACK);
+                    display.drawString(display.width() / 2, 0,
+                                       String(r.current_frequency));
+                    display.setColor(WHITE);
+                    display.display();
+
+                    break;
+                }
+
+                if (e == SUSPEND)
+                {
+                    // Visually confirm it's off so user releases button
+                    display.displayOff();
+                    // Deep sleep (has wait for release so we don't wake up
+                    // immediately)
+                    heltec_deep_sleep();
+                    break;
+                }
+
+                if (e == SHORT_PRESS)
+                    break;
+
+                if (e == TOO_SHORT)
+                {
+                    String v = String(r.trigger_level) + " dB";
+                    uint16_t w = display.getStringWidth(v);
+                    display.setTextAlignment(TEXT_ALIGN_RIGHT);
+                    // erase old drone detection level value
+                    display.setColor(BLACK);
+                    display.fillRect(display.width() - w, 0, 13, w);
+                    display.setColor(WHITE);
+
+                    // dt is roughly single-pixel increment
+                    float dt =
+                        bar->bar.height == 0
+                            ? 0.0
+                            : (LO_RSSI_THRESHOLD - HI_RSSI_THRESHOLD) / bar->bar.height;
+                    r.trigger_level += dt;
+                    if (r.trigger_level <= LO_RSSI_THRESHOLD)
+                    {
+                        r.trigger_level = HI_RSSI_THRESHOLD;
+                    }
+
+                    // print new value
+                    display.drawString(display.width(), 0, v);
+                    tone(BUZZER_PIN, 104, 150);
+
+                    bar->bar.redraw_all = true;
+                }
+            }
 
             // wait a little bit before the next scan,
             // otherwise the SX1262 hangs
