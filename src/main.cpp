@@ -28,6 +28,13 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
+#include <MSP.h>
+
+#include <cstring> // for memset
+#include <iostream>
+#include <string>
+#include <vector>
+
 // #define OSD_ENABLED true
 // #define WIFI_SCANNING_ENABLED true
 // #define BT_SCANNING_ENABLED true
@@ -236,6 +243,7 @@ constexpr int samples = SAMPLES_RSSI;
 uint8_t result_index = 0;
 uint8_t button_pressed_counter = 0;
 uint64_t loop_cnt = 0;
+MSP msp;
 
 #ifndef LILYGO
 // #define JOYSTICK_ENABLED
@@ -257,8 +265,24 @@ scanWiFi(osd)
     scanBT(osd)
 #endif
 
+        uint8_t *stringToUint8(const std::string &craft_name, size_t MAX_NAME_LENGTH);
+
+uint8_t *stringToUint8(const std::string &craft_name, size_t MAX_NAME_LENGTH)
+{
+    // Allocate memory for the result
+    uint8_t *result = new uint8_t[MAX_NAME_LENGTH];
+
+    // Clear the memory to set all bytes to 0x00 (padding)
+    std::memset(result, 0x00, MAX_NAME_LENGTH);
+
+    // Copy the string content into the result (up to MAX_NAME_LENGTH bytes)
+    std::memcpy(result, craft_name.c_str(), std::min(craft_name.size(), MAX_NAME_LENGTH));
+
+    return result; // Return the pointer to the uint8_t array
+}
+
 #ifdef OSD_ENABLED
-        unsigned short selectFreqChar(int bin, int start_level = 0)
+unsigned short selectFreqChar(int bin, int start_level = 0)
 {
     if (bin >= start_level)
     {
@@ -488,6 +512,9 @@ void logToSerialTask(void *parameter)
 
 void setup(void)
 {
+    Serial.begin(9600);
+    msp.begin(Serial);
+
 #ifdef LILYGO
     setupBoards(); // true for disable U8g2 display library
     delay(500);
@@ -847,6 +874,19 @@ RadioScan r;
 
 void loop(void)
 {
+
+    // MSP musings:
+
+    size_t MAX_NAME_LENGTH = 16;
+
+    uint8_t test[16] = {
+        0x4B, 0x6F, 0x6E, 0x72, 0x61, 0x64, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    };
+
+    msp.send(0x5000, test, 16);
+    delay(1000);
+
     UI_displayDecorate(0, 0, false); // some default values
 
     detection_count = 0;
