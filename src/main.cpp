@@ -205,7 +205,7 @@ bool single_page_scan = false;
 bool SOUND_ON = false;
 
 // #define PRINT_DEBUG
-// #define PRINT_PROFILE_TIME
+#define PRINT_PROFILE_TIME
 
 #ifdef PRINT_PROFILE_TIME
 uint64_t loop_start = 0;
@@ -215,7 +215,7 @@ uint64_t scan_start_time = 0;
 #endif
 
 // log data via serial console, JSON format:
-#define LOG_DATA_JSON true
+// #define LOG_DATA_JSON true
 int LOG_DATA_JSON_INTERVAL = 100;
 
 uint64_t x, y, range_item, w = WATERFALL_START, i = 0;
