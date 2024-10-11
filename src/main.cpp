@@ -24,7 +24,9 @@
 //  #define HELTEC_NO_DISPLAY
 
 #include <Arduino.h>
+#ifdef HELTEC
 #include <ArduinoJson.h>
+#endif
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -450,7 +452,9 @@ struct frequency_scan_result
 
 void logToSerialTask(void *parameter)
 {
+#ifdef HELTEC
     JsonDocument doc;
+#endif
     char jsonOutput[200];
 
     for (;;)
@@ -475,12 +479,19 @@ void logToSerialTask(void *parameter)
                 continue;
             }
 
+#ifdef HELTEC
             doc["low_range_freq"] = frequency_scan_result.begin;
             doc["high_range_freq"] = frequency_scan_result.end;
             doc["value"] = max_result;
 
             serializeJson(doc, jsonOutput);
             Serial.println(jsonOutput);
+#else
+            Serial.printf("{\"low_range_freq\": %ull, \"high_range_freq\": %ull, "
+                          "\"value\": \"%s\"}\n",
+                          frequency_scan_result.begin, frequency_scan_result.end,
+                          max_result);
+#endif
         }
         vTaskDelay(LOG_DATA_JSON_INTERVAL / portTICK_PERIOD_MS);
     }
