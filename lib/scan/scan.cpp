@@ -66,10 +66,10 @@ uint16_t Scan::rssiMethod(size_t samples, uint16_t *result, size_t res_size)
     return max_signal;
 }
 
-size_t Scan::detect(uint16_t *result, bool *filtered_result, size_t result_size,
-                    int samples)
+Event Scan::detect(uint16_t *result, bool *filtered_result, size_t result_size,
+                   int samples)
 {
-    size_t max_rssi_x = 999;
+    size_t max_rssi_x = result_size;
 
     for (int y = 0; y < result_size; y++)
     {
@@ -122,7 +122,61 @@ size_t Scan::detect(uint16_t *result, bool *filtered_result, size_t result_size,
         }
     }
 
-    return max_rssi_x;
+    Event event(*this, EventType::DETECTED, 0);
+    event.epoch = epoch;
+    event.detected.detected = max_rssi_x < result_size;
+    event.detected.freq = current_frequency;
+    event.detected.rssi =
+        event.detected.detected ? -(float)result[max_rssi_x] : LO_RSSI_THRESHOLD;
+    event.detected.detected_at = max_rssi_x;
+    event.detected.trigger =
+        event.detected.detected && event.detected.rssi >= trigger_level;
+    detection_count++;
+
+    return event;
+}
+
+size_t Scan::addEventListener(EventType t, Listener &l)
+{
+    size_t c = listener_count[(size_t)t];
+    Listener **new_list = new Listener *[c + 1];
+    new_list[c] = &l;
+    listener_count[(size_t)t] = c + 1;
+
+    if (c > 0)
+    {
+        Listener **old_list = eventListeners[(size_t)t];
+        memcpy(new_list, old_list, c * sizeof(Listener *));
+        delete[] old_list;
+    }
+
+    eventListeners[(size_t)t] = new_list;
+    return c;
+}
+
+struct CallbackFunction : Listener
+{
+    void (*cb)(void *arg, Event &e);
+    void *arg;
+
+    CallbackFunction(void cb(void *arg, Event &e), void *arg) : cb(cb), arg(arg) {}
+
+    void onEvent(Event &e) { cb(arg, e); }
+};
+
+size_t Scan::addEventListener(EventType t, void cb(void *arg, Event &e), void *arg)
+{
+    return addEventListener(t, *(new CallbackFunction(cb, arg)));
+}
+
+void Scan::fireEvent(Event &event)
+{
+    Listener **list = eventListeners[(size_t)event.type];
+    size_t c = listener_count[(size_t)event.type];
+    for (int i = 0; i < c; i++)
+    {
+        list[i]->onEvent(event);
+    }
 }
 
 #endif

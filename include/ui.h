@@ -8,6 +8,9 @@
 #include <Arduino.h>
 #endif
 
+#include <charts.h>
+#include <scan.h>
+
 // #include <heltec_unofficial.h>
 
 // (optional) major and minor tick-marks at x MHz
@@ -31,14 +34,21 @@
 
 #define SCREEN_HEIGHT 64 // ???? not used
 
-// publish functions
-#ifdef Vision_Master_E290
-extern void UI_Init(DEPG0290BxS800FxX_BW *);
-#else
-extern void UI_Init(SSD1306Wire *);
-#endif
-extern void UI_displayDecorate(int, int, bool);
-extern void UI_setLedFlag(bool);
+extern void UI_Init(Display_t *);
 extern void UI_clearPlotter(void);
 extern void UI_clearTopStatus(void);
 extern void UI_drawCursor(int16_t);
+
+struct StatusBar : Chart
+{
+    Scan &r;
+    bool ui_initialized;
+    uint16_t scan_progress_count;
+
+    StatusBar(Display_t &d, uint16_t x, uint16_t y, uint16_t w, Scan &r)
+        : Chart(d, x, y, w, LABEL_HEIGHT), r(r), ui_initialized(false),
+          scan_progress_count(0) {};
+
+    virtual void clearStatus();
+    virtual void draw() override;
+};
