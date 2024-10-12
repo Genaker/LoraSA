@@ -215,7 +215,7 @@ uint64_t scan_start_time = 0;
 
 // log data via serial console, JSON format:
 // #define LOG_DATA_JSON true
-int LOG_DATA_JSON_INTERVAL = 100;
+int LOG_DATA_JSON_INTERVAL = 1000; // Log at least every second
 
 uint64_t x, y, range_item, w = WATERFALL_START, i = 0;
 int osd_x = 1, osd_y = 2, col = 0, max_bin = 32;
@@ -475,6 +475,8 @@ struct frequency_scan_result
     int16_t rssi; // deliberately not a float; floats can pin task to wrong core forever
 } frequency_scan_result;
 
+TaskHandle_t logToSerial = NULL;
+
 void eventListenerForMSP(void *arg, Event &e)
 {
     if (e.type == EventType::DETECTED)
@@ -492,6 +494,10 @@ void eventListenerForMSP(void *arg, Event &e)
     if (e.type == EventType::SCAN_TASK_COMPLETE)
     {
         // notify async communication that the data is ready
+        if (logToSerial != NULL)
+        {
+            xTaskNotifyGive(logToSerial);
+        }
         return;
     }
 }
@@ -509,7 +515,7 @@ void logToSerialTask(void *parameter)
 
     for (;;)
     {
-        vTaskDelay(LOG_DATA_JSON_INTERVAL / portTICK_PERIOD_MS);
+        ulTaskNotifyTake(true, pdMS_TO_TICKS(LOG_DATA_JSON_INTERVAL));
         if (frequency_scan_result.begin != frequency_scan_result.end ||
             frequency_scan_result.last_epoch != last_epoch)
         {
@@ -694,7 +700,7 @@ void setup(void)
 #endif
 
 #ifdef LOG_DATA_JSON
-    xTaskCreate(logToSerialTask, "LOG_DATA_JSON", 2048, NULL, 1, NULL);
+    xTaskCreate(logToSerialTask, "LOG_DATA_JSON", 2048, NULL, 1, &logToSerial);
 #endif
 
     r.trigger_level = TRIGGER_LEVEL;
@@ -732,7 +738,7 @@ void setup(void)
     r.addEventListener(DETECTED, drone_sound_alarm, &r);
     r.addEventListener(SCAN_TASK_COMPLETE, stacked);
 
-    r.addEventListener(DETECTED, eventListenerForMSP, NULL);
+    r.addEventListener(ALL_EVENTS, eventListenerForMSP, NULL);
 
 #ifdef UPTIME_CLOCK
     uptime = new UptimeClock(display, millis());
