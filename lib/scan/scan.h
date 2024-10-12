@@ -45,8 +45,8 @@ struct Scan
     bool animated;
     float trigger_level;
 
-    Listener **eventListeners[(size_t)EventType::_MAX_EVENT_TYPE];
-    size_t listener_count[(size_t)EventType::_MAX_EVENT_TYPE];
+    Listener **eventListeners[(size_t)EventType::_MAX_EVENT_TYPE + 1];
+    size_t listener_count[(size_t)EventType::_MAX_EVENT_TYPE + 1];
 
     Scan()
         : epoch(0), current_frequency(0), fr_begin(0), fr_end(0),
