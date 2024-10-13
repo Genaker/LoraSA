@@ -508,7 +508,6 @@ void logToSerialTask(void *parameter)
     JsonDocument doc;
     char jsonOutput[200];
 #endif
- 
 
     uint64_t last_epoch = frequency_scan_result.last_epoch;
     frequency_scan_result.rssi = -999;
@@ -530,7 +529,7 @@ void logToSerialTask(void *parameter)
 #ifdef HELTEC
             doc["low_range_freq"] = frequency_scan_result.begin;
             doc["high_range_freq"] = frequency_scan_result.end;
-            doc["value"] = max_result;
+            // doc["value"] = max_result; /ToDO: Fix
 
             serializeJson(doc, jsonOutput);
             Serial.println(jsonOutput);
