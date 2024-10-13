@@ -4,9 +4,10 @@
 struct Event;
 enum EventType
 {
-    DETECTED = 0,
+    ALL_EVENTS = 0, // used only at registration time
+    DETECTED,
     SCAN_TASK_COMPLETE,
-    _MAX_EVENT_TYPE // unused as event type
+    _MAX_EVENT_TYPE = SCAN_TASK_COMPLETE // unused as event type
 };
 struct Listener;
 

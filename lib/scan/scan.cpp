@@ -177,6 +177,13 @@ void Scan::fireEvent(Event &event)
     {
         list[i]->onEvent(event);
     }
+
+    list = eventListeners[(size_t)EventType::ALL_EVENTS];
+    c = listener_count[(size_t)EventType::ALL_EVENTS];
+    for (int i = 0; i < c; i++)
+    {
+        list[i]->onEvent(event);
+    }
 }
 
 #endif

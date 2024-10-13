@@ -215,7 +215,7 @@ uint64_t scan_start_time = 0;
 
 // log data via serial console, JSON format:
 // #define LOG_DATA_JSON true
-int LOG_DATA_JSON_INTERVAL = 100;
+int LOG_DATA_JSON_INTERVAL = 1000; // Log at least every second
 
 uint64_t x, y, range_item, w = WATERFALL_START, i = 0;
 int osd_x = 1, osd_y = 2, col = 0, max_bin = 32;
@@ -471,52 +471,76 @@ struct frequency_scan_result
 {
     uint64_t begin;
     uint64_t end;
+    uint64_t last_epoch;
+    int16_t rssi; // deliberately not a float; floats can pin task to wrong core forever
 } frequency_scan_result;
+
+TaskHandle_t logToSerial = NULL;
+
+void eventListenerForMSP(void *arg, Event &e)
+{
+    if (e.type == EventType::DETECTED)
+    {
+        if (e.epoch != frequency_scan_result.last_epoch ||
+            e.detected.rssi > frequency_scan_result.rssi)
+        {
+            frequency_scan_result.last_epoch = e.epoch;
+            frequency_scan_result.rssi = e.detected.rssi;
+        }
+
+        return;
+    }
+
+    if (e.type == EventType::SCAN_TASK_COMPLETE)
+    {
+        // notify async communication that the data is ready
+        if (logToSerial != NULL)
+        {
+            xTaskNotifyGive(logToSerial);
+        }
+        return;
+    }
+}
 
 void logToSerialTask(void *parameter)
 {
 #ifdef HELTEC
     JsonDocument doc;
-#endif
     char jsonOutput[200];
+#endif
+
+    uint64_t last_epoch = frequency_scan_result.last_epoch;
+    frequency_scan_result.rssi = -999;
 
     for (;;)
     {
-        if (frequency_scan_result.begin != frequency_scan_result.end)
+        ulTaskNotifyTake(true, pdMS_TO_TICKS(LOG_DATA_JSON_INTERVAL));
+        if (frequency_scan_result.begin != frequency_scan_result.end ||
+            frequency_scan_result.last_epoch != last_epoch)
         {
-            String max_result = "-999";
-            int highest_value_scanned = 999;
-
-            for (int rssi_item = 0; rssi_item < STEPS / WINDOW_SIZE; rssi_item++)
+            int16_t highest_value_scanned = frequency_scan_result.rssi;
+            frequency_scan_result.rssi = -999;
+            last_epoch = frequency_scan_result.last_epoch;
+            if (highest_value_scanned == -999)
             {
-                if (max_x_window[rssi_item] != 0 &&
-                    max_x_window[rssi_item] < highest_value_scanned)
-                {
-                    max_result = "-" + String(max_x_window[rssi_item]);
-                    highest_value_scanned = max_x_window[rssi_item];
-                }
-            }
-            if (highest_value_scanned == 999)
-            {
-                vTaskDelay(LOG_DATA_JSON_INTERVAL / portTICK_PERIOD_MS);
                 continue;
             }
 
 #ifdef HELTEC
             doc["low_range_freq"] = frequency_scan_result.begin;
             doc["high_range_freq"] = frequency_scan_result.end;
-            doc["value"] = max_result;
+            // doc["value"] = max_result; /ToDO: Fix
 
             serializeJson(doc, jsonOutput);
             Serial.println(jsonOutput);
 #else
-            Serial.printf("{\"low_range_freq\": %ull, \"high_range_freq\": %ull, "
-                          "\"value\": \"%s\"}\n",
+            Serial.printf("{\"low_range_freq\": %" PRIu64
+                          ", \"high_range_freq\": %" PRIu64 ", "
+                          "\"value\": \"%" PRIi16 "\"}\n",
                           frequency_scan_result.begin, frequency_scan_result.end,
-                          max_result);
+                          highest_value_scanned);
 #endif
         }
-        vTaskDelay(LOG_DATA_JSON_INTERVAL / portTICK_PERIOD_MS);
     }
 }
 
@@ -675,7 +699,7 @@ void setup(void)
 #endif
 
 #ifdef LOG_DATA_JSON
-    xTaskCreate(logToSerialTask, "LOG_DATA_JSON", 2048, NULL, 1, NULL);
+    xTaskCreate(logToSerialTask, "LOG_DATA_JSON", 2048, NULL, 1, &logToSerial);
 #endif
 
     r.trigger_level = TRIGGER_LEVEL;
@@ -712,6 +736,8 @@ void setup(void)
     r.addEventListener(DETECTED, bar->bar);
     r.addEventListener(DETECTED, drone_sound_alarm, &r);
     r.addEventListener(SCAN_TASK_COMPLETE, stacked);
+
+    r.addEventListener(ALL_EVENTS, eventListenerForMSP, NULL);
 
 #ifdef UPTIME_CLOCK
     uptime = new UptimeClock(display, millis());
