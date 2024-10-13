@@ -103,6 +103,19 @@ Config Config::init()
         if (r.key.equalsIgnoreCase("log_data_json_interval"))
         {
             c.log_data_json_interval = r.value.toInt();
+            continue;
+        }
+
+        if (r.key.equalsIgnoreCase("listen_on_serial0"))
+        {
+            c.listen_on_serial0 = r.value;
+            continue;
+        }
+
+        if (r.key.equalsIgnoreCase("listen_on_usb"))
+        {
+            c.listen_on_serial0 = r.value;
+            continue;
         }
 
         Serial.printf("Unknown key '%s' will be ignored\n", r.key);
@@ -122,6 +135,8 @@ bool Config::write_config(const char *path)
 
     f.println("print_profile_time = " + String(print_profile_time ? "true" : "false"));
     f.println("log_data_json_interval = " + String(log_data_json_interval));
+    f.println("listen_on_serial0 = " + listen_on_serial0);
+    f.println("listen_on_usb = " + listen_on_usb);
 
     f.close();
     return true;
