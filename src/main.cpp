@@ -27,8 +27,17 @@
 #ifdef HELTEC
 #include <ArduinoJson.h>
 #endif
+#include "FS.h"
+#include <AsyncTCP.h>
+#include <ESPAsyncWebServer.h>
+#include <File.h>
+#include <LittleFS.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+
+#include "WIFI_SERVER.h"
+
+#define FORMAT_LITTLEFS_IF_FAILED true
 
 // #define OSD_ENABLED true
 // #define WIFI_SCANNING_ENABLED true
@@ -548,6 +557,7 @@ void drone_sound_alarm(void *arg, Event &e);
 
 void setup(void)
 {
+
 #ifdef LILYGO
     setupBoards(); // true for disable U8g2 display library
     delay(500);
@@ -580,6 +590,7 @@ void setup(void)
     pinMode(BUZZER_PIN, OUTPUT);
     pinMode(REB_PIN, OUTPUT);
     heltec_setup();
+    serverStart();
 #ifdef JOYSTICK_ENABLED
     calibrate_joy();
     pinMode(JOY_BTN_PIN, INPUT_PULLUP);
@@ -600,6 +611,14 @@ void setup(void)
     }
 
     init_radio();
+
+    if (!LittleFS.begin(FORMAT_LITTLEFS_IF_FAILED))
+    {
+        Serial.println("LittleFS Mount Failed");
+    }
+
+    // writeFile(LittleFS, "/text.txt", "{WIFI:{name:\"sdfsdf\", Password:\"sdfsdf\"}");
+    Serial.println(readFile(LittleFS, "/text.txt"));
 #ifndef LILYGO
     vbat = heltec_vbat();
     both.printf("V battery: %.2fV (%d%%)\n", vbat, heltec_battery_percent(vbat));
