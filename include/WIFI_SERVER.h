@@ -7,25 +7,23 @@
 AsyncWebServer server(80);
 
 // Search for parameter in HTTP POST request
-const char *PARAM_INPUT_1 = "ssid";
-const char *PARAM_INPUT_2 = "pass";
-const char *PARAM_INPUT_3 = "ip";
-const char *PARAM_INPUT_4 = "gateway";
-const char *PARAM_INPUT_5 = "fstart";
-const char *PARAM_INPUT_6 = "fend";
+const String SSID = "ssid";
+const String PASS = "pass";
+const String IP = "ip";
+const String GATEWAY = "gateway";
+const String FSTART = "fstart";
+const String FEND = "fend";
 
 // File paths to save input values permanently
-const char *ssidPath = "/ssid.txt";
-const char *passPath = "/pass.txt";
-const char *ipPath = "/ip.txt";
-const char *gatewayPath = "/gateway.txt";
+// const char *ssidPath = "/ssid.txt";
 
 // Variables to save values from HTML form
-String ssid = "LoraSA", pass = "1234567890", ip, gateway, fstart, fend;
+String ssid = "LoraSA", pass = "1234567890", ip = "192.168.1.100",
+       gateway = "192.168.1.1", fstart = "", fend = "";
 
-IPAddress localIP(192, 168, 1, 200);
+IPAddress localIP;
 // Set your Gateway IP address
-IPAddress localGateway(192, 168, 1, 1);
+IPAddress localGateway;
 IPAddress subnet(255, 255, 0, 0);
 
 // Timer variables
@@ -35,6 +33,11 @@ const long interval = 10000; // interval to wait for Wi-Fi connection (milliseco
 // Initialize WiFi
 bool initWiFi()
 {
+    Serial.println("SSID:" + ssid);
+    Serial.println("PSWD:" + pass);
+    Serial.println("IP:" + ip);
+    Serial.println("SUB:" + subnet);
+    Serial.println("GATAWAY:" + gateway);
     if (ssid == "" || ip == "")
     {
         Serial.println("Undefined SSID or IP address.");
@@ -42,8 +45,8 @@ bool initWiFi()
     }
 
     WiFi.mode(WIFI_STA);
-    // localIP.fromString(ip.c_str());
-    // localGateway.fromString(gateway.c_str());
+    localIP.fromString(ip.c_str());
+    localGateway.fromString(gateway.c_str());
 
     if (!WiFi.config(localIP, localGateway, subnet))
     {
@@ -70,37 +73,100 @@ bool initWiFi()
     return true;
 }
 
+void writeParameterToFile(String value, String file)
+{
+    // Write file to save value
+    writeFile(LittleFS, file.c_str(), value.c_str());
+}
+
+void writeParameterToParameterFile(String param, String value)
+{
+    String file = String("/" + param + ".txt");
+    // Write file to save value
+    writeParameterToFile(value, file.c_str());
+}
+
+String readParameterFromParameterFile(String param)
+{
+    String file = String("/" + param + ".txt");
+    return readFile(LittleFS, file.c_str());
+}
+
+void serverServer()
+{
+    // Route for root / web page
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
+              { request->send(LittleFS, "/index.html", "text/html"); });
+
+    server.serveStatic("/", LittleFS, "/");
+
+    server.on("/", HTTP_POST,
+              [](AsyncWebServerRequest *request)
+              {
+                  int params = request->params();
+                  for (int i = 0; i < params; i++)
+                  {
+                      Serial.println("Parameter " + String(i) + ": " +
+                                     request->getParam(i)->value());
+                  }
+                  Serial.println(request->params());
+
+                  String p = request->getParam(SSID, true)->value();
+                  writeParameterToParameterFile(SSID, p);
+
+                  p = request->getParam(PASS, true)->value();
+                  writeParameterToParameterFile(PASS, p);
+
+                  p = request->getParam(IP, true)->value();
+                  writeParameterToParameterFile(IP, p);
+
+                  p = request->getParam(GATEWAY, true)->value();
+                  writeParameterToParameterFile(GATEWAY, p);
+
+                  p = request->getParam(FSTART, true)->value();
+                  writeParameterToParameterFile(FSTART, p);
+
+                  p = request->getParam(FEND, true)->value();
+                  writeParameterToParameterFile(FEND, p);
+
+                  request->send(200, "text/plain",
+                                "Done. ESP will restart, connect to your router and "
+                                "go to IP address: " +
+                                    ip);
+                  delay(3000);
+                  ESP.restart();
+              });
+
+    /* // Route to set GPIO state to HIGH
+     server.on("/on", HTTP_GET,
+               [](AsyncWebServerRequest *request)
+               {
+                   digitalWrite(ledPin, HIGH);
+                   request->send(LittleFS, "/index.html", "text/html", false,
+                                 processor);
+               });
+
+     // Route to set GPIO state to LOW
+     server.on("/off", HTTP_GET,
+               [](AsyncWebServerRequest *request)
+               {
+                   digitalWrite(ledPin, LOW);
+                   request->send(LittleFS, "/index.html", "text/html", false,
+                                 processor);
+               });*/
+    server.begin();
+}
+
 void serverStart()
 {
     if (initWiFi())
     {
-        // Route for root / web page
-        server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
-                  { request->send(LittleFS, "/index.html", "text/html"); });
-        server.serveStatic("/", LittleFS, "/");
-
-        /* // Route to set GPIO state to HIGH
-         server.on("/on", HTTP_GET,
-                   [](AsyncWebServerRequest *request)
-                   {
-                       digitalWrite(ledPin, HIGH);
-                       request->send(LittleFS, "/index.html", "text/html", false,
-                                     processor);
-                   });
-
-         // Route to set GPIO state to LOW
-         server.on("/off", HTTP_GET,
-                   [](AsyncWebServerRequest *request)
-                   {
-                       digitalWrite(ledPin, LOW);
-                       request->send(LittleFS, "/index.html", "text/html", false,
-                                     processor);
-                   });*/
-        server.begin();
+        Serial.println("Setting Secure WIFI (Access Point)");
+        serverServer();
     }
     else
     {
-        // Connect to Wi-Fi network with SSID and password
+        // Connect to Wi-Fi network with default SSID and password
         Serial.println("Setting AP (Access Point)");
         // NULL sets an open Access Point
         WiFi.softAP("LoraSA", NULL);
@@ -109,68 +175,6 @@ void serverStart()
         Serial.print("AP IP address: ");
         Serial.println(IP);
 
-        // Web Server Root URL
-        server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
-                  { request->send(LittleFS, "/index.html", "text/html"); });
-
-        server.serveStatic("/", LittleFS, "/");
-
-        server.on("/", HTTP_POST,
-                  [](AsyncWebServerRequest *request)
-                  {
-                      int params = request->params();
-                      for (int i = 0; i < params; i++)
-                      {
-                          const AsyncWebParameter *p = request->getParam(i);
-                          if (p->isPost())
-                          {
-                              // HTTP POST ssid value
-                              if (p->name() == PARAM_INPUT_1)
-                              {
-                                  ssid = p->value().c_str();
-                                  Serial.print("SSID set to: ");
-                                  Serial.println(ssid);
-                                  // Write file to save value
-                                  writeFile(LittleFS, ssidPath, ssid.c_str());
-                              }
-                              // HTTP POST pass value
-                              if (p->name() == PARAM_INPUT_2)
-                              {
-                                  pass = p->value().c_str();
-                                  Serial.print("Password set to: ");
-                                  Serial.println(pass);
-                                  // Write file to save value
-                                  writeFile(LittleFS, passPath, pass.c_str());
-                              }
-                              // HTTP POST ip value
-                              if (p->name() == PARAM_INPUT_3)
-                              {
-                                  ip = p->value().c_str();
-                                  Serial.print("IP Address set to: ");
-                                  Serial.println(ip);
-                                  // Write file to save value
-                                  writeFile(LittleFS, ipPath, ip.c_str());
-                              }
-                              // HTTP POST gateway value
-                              if (p->name() == PARAM_INPUT_4)
-                              {
-                                  gateway = p->value().c_str();
-                                  Serial.print("Gateway set to: ");
-                                  Serial.println(gateway);
-                                  // Write file to save value
-                                  writeFile(LittleFS, gatewayPath, gateway.c_str());
-                              }
-                              // Serial.printf("POST[%s]: %s\n", p->name().c_str(),
-                              // p->value().c_str());
-                          }
-                      }
-                      request->send(200, "text/plain",
-                                    "Done. ESP will restart, connect to your router and "
-                                    "go to IP address: " +
-                                        ip);
-                      delay(3000);
-                      ESP.restart();
-                  });
-        server.begin();
+        serverServer();
     }
 }

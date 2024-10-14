@@ -54,6 +54,8 @@
 #include <events.h>
 #include <scan.h>
 
+#include <stdlib.h>
+
 #ifndef LILYGO
 #include <heltec_unofficial.h>
 // This file contains a binary patch for the SX1262
@@ -143,8 +145,9 @@ int SCAN_RANGES[] = {};
 
 // MHZ per page
 // to put everything into one page set RANGE_PER_PAGE = FREQ_END - 800
-uint64_t RANGE_PER_PAGE = FREQ_END - FREQ_BEGIN; // FREQ_END - FREQ_BEGIN
+uint64_t RANGE_PER_PAGE; // FREQ_END - FREQ_BEGIN
 
+uint64_t CONF_FREQ_END, CONF_FREQ_BEGIN;
 // To Enable Multi Screen scan
 //  uint64_t RANGE_PER_PAGE = 50;
 //  Default Range on Menu Button Switch
@@ -177,16 +180,8 @@ constexpr int WINDOW_SIZE = 15;
 // if more than 100 it can freeze
 #define SAMPLES 35 //(scan time = 1294)
 
-#define RANGE (int)(FREQ_END - FREQ_BEGIN)
-
-#define SINGLE_STEP (float)(RANGE / (STEPS * SCAN_RBW_FACTOR))
-
-uint64_t range = (int)(FREQ_END - FREQ_BEGIN);
-
-uint64_t iterations = RANGE / RANGE_PER_PAGE;
-
-// uint64_t range_frequency = FREQ_END - FREQ_BEGIN;
-uint64_t median_frequency = (FREQ_BEGIN + FREQ_END) / 2;
+uint64_t RANGE, range, iterations, median_frequency;
+float SINGLE_STEP;
 
 // #define DISABLE_PLOT_CHART false   // unused
 
@@ -376,13 +371,20 @@ struct RadioScan : Scan
 
 float RadioScan::getRSSI()
 {
-#ifdef USING_SX1280PA
+#if defined(USING_SX1280PA)
     // radio.startReceive();
     // get instantaneous RSSI value
     // When PR will be merged we can use radi.getRSSI(false);
     uint8_t data[3] = {0, 0, 0}; // RssiInst, Status, RFU
     radio.mod->SPIreadStream(RADIOLIB_SX128X_CMD_GET_RSSI_INST, data, 3);
     return ((float)data[0] / (-2.0));
+
+#elif defined(USING_LR1121)
+    // Try getRssiInst
+    float rssi;
+    radio.getRssiInst(&rssi);
+    // pass the replies
+    return rssi;
 #else
     return radio.getRSSI(false);
 #endif
@@ -401,7 +403,7 @@ void init_radio()
 {
     // initialize SX1262 FSK modem at the initial frequency
     both.println("Init radio");
-#ifdef USING_SX1280PA
+#if defined(USING_SX1280PA) || defined(USING_LR1121)
     state = radio.beginGFSK(FREQ_BEGIN);
 #else
     state = radio.beginFSK(FREQ_BEGIN);
@@ -590,7 +592,7 @@ void setup(void)
     pinMode(BUZZER_PIN, OUTPUT);
     pinMode(REB_PIN, OUTPUT);
     heltec_setup();
-    serverStart();
+
 #ifdef JOYSTICK_ENABLED
     calibrate_joy();
     pinMode(JOY_BTN_PIN, INPUT_PULLUP);
@@ -612,16 +614,53 @@ void setup(void)
 
     init_radio();
 
-    if (!LittleFS.begin(FORMAT_LITTLEFS_IF_FAILED))
-    {
-        Serial.println("LittleFS Mount Failed");
-    }
+    initLittleFS();
 
     // writeFile(LittleFS, "/text.txt", "{WIFI:{name:\"sdfsdf\", Password:\"sdfsdf\"}");
-    Serial.println(readFile(LittleFS, "/text.txt"));
+    ssid = readParameterFromParameterFile(SSID);
+    Serial.println("SSID: " + ssid);
+
+    pass = readParameterFromParameterFile(PASS);
+    Serial.println("PASS: " + pass);
+
+    ip = readParameterFromParameterFile(IP);
+    Serial.println("PASS: " + ip);
+
+    gateway = readParameterFromParameterFile(GATEWAY);
+    Serial.println("GATEWAY: " + gateway);
+
+    fstart = readParameterFromParameterFile(FSTART);
+    Serial.println("FSTART: " + fstart);
+
+    fend = readParameterFromParameterFile(FEND);
+    Serial.println("FEND: " + fend);
+
+    both.println("Starting WIFI-SERVER");
+    serverStart();
+
+    CONF_FREQ_BEGIN = (fstart == "") ? FREQ_BEGIN : atoi(fstart.c_str());
+    CONF_FREQ_END = (fend == "") ? FREQ_END : atoi(fend.c_str());
+
+    both.println("C FREQ BEGIN:" + String(CONF_FREQ_BEGIN));
+    both.println("C FREQ END:" + String(CONF_FREQ_END));
+
+    RANGE_PER_PAGE = CONF_FREQ_END - CONF_FREQ_BEGIN; // FREQ_END - FREQ_BEGIN
+
+    RANGE = (int)(CONF_FREQ_END - CONF_FREQ_BEGIN);
+
+    SINGLE_STEP = (float)(RANGE / (STEPS * SCAN_RBW_FACTOR));
+
+    range = (int)(CONF_FREQ_END - CONF_FREQ_BEGIN);
+
+    iterations = RANGE / RANGE_PER_PAGE;
+
+    // uint64_t range_frequency = FREQ_END - FREQ_BEGIN;
+    median_frequency = (CONF_FREQ_BEGIN + CONF_FREQ_END) / 2;
+
 #ifndef LILYGO
     vbat = heltec_vbat();
     both.printf("V battery: %.2fV (%d%%)\n", vbat, heltec_battery_percent(vbat));
+    delay(1000);
 #endif // end not LILYGO
 #ifdef WIFI_SCANNING_ENABLED
     WiFi.mode(WIFI_STA);
