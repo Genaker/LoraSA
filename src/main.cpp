@@ -49,11 +49,11 @@
 //  public and so will be exposed to the user. This allows direct manipulation of the
 //  library internals.
 #define RADIOLIB_GODMODE (1)
+#define RADIOLIB_CHECK_PARAMS (0)
 
 #include <charts.h>
 #include <events.h>
 #include <scan.h>
-
 #include <stdlib.h>
 
 #ifndef LILYGO
@@ -612,6 +612,34 @@ void setup(void)
         }
     }
 
+    display.clear();
+
+    both.println("CLICK for WIFI settings.");
+
+    for (int i = 0; i < 200; i++)
+    {
+
+        both.print(".");
+
+        button.update();
+        delay(10);
+        if (button.pressedNow())
+        {
+            both.println("-----------");
+            both.println("Starting WIFI-SERVER...");
+            tone(BUZZER_PIN, 205, 100);
+            delay(50);
+            tone(BUZZER_PIN, 205, 500);
+            tone(BUZZER_PIN, 205, 100);
+            delay(50);
+
+            serverStart();
+            break;
+        }
+    }
+    both.print("\n");
+
+    both.println("Init File System");
     initLittleFS();
 
     // writeFile(LittleFS, "/text.txt", "{WIFI:{name:\"sdfsdf\", Password:\"sdfsdf\"}");
@@ -635,9 +663,6 @@ void setup(void)
 
     smpls = readParameterFromParameterFile("samples");
     Serial.println("SAMPLES: " + smpls);
-
-    both.println("Starting WIFI-SERVER");
-    serverStart();
 
     CONF_SAMPLES = (smpls == "") ? samples : atoi(smpls.c_str());
     samples = CONF_SAMPLES;
