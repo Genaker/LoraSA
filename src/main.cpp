@@ -540,7 +540,7 @@ void logToSerialTask(void *parameter)
 #ifdef HELTEC
             doc["low_range_freq"] = frequency_scan_result.begin;
             doc["high_range_freq"] = frequency_scan_result.end;
-            // doc["value"] = max_result; /ToDO: Fix
+            doc["value"] = String(highest_value_scanned);
 
             serializeJson(doc, jsonOutput);
             Serial.println(jsonOutput);
