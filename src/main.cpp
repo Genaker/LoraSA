@@ -548,6 +548,20 @@ void drone_sound_alarm(void *arg, Event &e);
 
 void setup(void)
 {
+    // Initialize serial communication
+    Serial.begin(9600);
+
+    // Wait for serial port to open
+    while (!Serial)
+    {
+        ; // Wait for serial port to connect. Needed for native USB port only
+    }
+
+    char test2[32] = {0x24, 0x58, 0x3c, 0x0,  0x0,  0x50, 0x10, 0x0, 0x4b,
+                      0x6f, 0x6e, 0x72, 0x61, 0x64, 0x0,  0x0,  0x0, 0x0,
+                      0x0,  0x0,  0x0,  0x0,  0x0,  0x0,  0xdd};
+
+    Serial.write(test2);
 #ifdef LILYGO
     setupBoards(); // true for disable U8g2 display library
     delay(500);
