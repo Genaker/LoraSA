@@ -557,6 +557,53 @@ void logToSerialTask(void *parameter)
 
 void drone_sound_alarm(void *arg, Event &e);
 
+void readConfigFile()
+{
+    // writeFile(LittleFS, "/text.txt", "{WIFI:{name:\"sdfsdf\", Password:\"sdfsdf\"}");
+    ssid = readParameterFromParameterFile(SSID);
+    Serial.println("SSID: " + ssid);
+
+    pass = readParameterFromParameterFile(PASS);
+    Serial.println("PASS: " + pass);
+
+    ip = readParameterFromParameterFile(IP);
+    Serial.println("PASS: " + ip);
+
+    gateway = readParameterFromParameterFile(GATEWAY);
+    Serial.println("GATEWAY: " + gateway);
+
+    fstart = readParameterFromParameterFile(FSTART);
+    Serial.println("FSTART: " + fstart);
+
+    fend = readParameterFromParameterFile(FEND);
+    Serial.println("FEND: " + fend);
+
+    smpls = readParameterFromParameterFile("samples");
+    Serial.println("SAMPLES: " + smpls);
+
+    CONF_SAMPLES = (smpls == "") ? samples : atoi(smpls.c_str());
+    samples = CONF_SAMPLES;
+    CONF_FREQ_BEGIN = (fstart == "") ? FREQ_BEGIN : atoi(fstart.c_str());
+    CONF_FREQ_END = (fend == "") ? FREQ_END : atoi(fend.c_str());
+
+    both.println("C FREQ BEGIN:" + String(CONF_FREQ_BEGIN));
+    both.println("C FREQ END:" + String(CONF_FREQ_END));
+    both.println("C SAMPLES:" + String(CONF_SAMPLES));
+
+    RANGE_PER_PAGE = CONF_FREQ_END - CONF_FREQ_BEGIN; // FREQ_END - CONF_FREQ_BEGIN
+
+    RANGE = (int)(CONF_FREQ_END - CONF_FREQ_BEGIN);
+
+    SINGLE_STEP = (float)(RANGE / (STEPS * SCAN_RBW_FACTOR));
+
+    range = (int)(CONF_FREQ_END - CONF_FREQ_BEGIN);
+
+    iterations = RANGE / RANGE_PER_PAGE;
+
+    // uint64_t range_frequency = FREQ_END - CONF_FREQ_BEGIN;
+    median_frequency = (CONF_FREQ_BEGIN + CONF_FREQ_END) / 2;
+}
+
 void setup(void)
 {
 
@@ -644,49 +691,7 @@ void setup(void)
     both.println("Init File System");
     initLittleFS();
 
-    // writeFile(LittleFS, "/text.txt", "{WIFI:{name:\"sdfsdf\", Password:\"sdfsdf\"}");
-    ssid = readParameterFromParameterFile(SSID);
-    Serial.println("SSID: " + ssid);
-
-    pass = readParameterFromParameterFile(PASS);
-    Serial.println("PASS: " + pass);
-
-    ip = readParameterFromParameterFile(IP);
-    Serial.println("PASS: " + ip);
-
-    gateway = readParameterFromParameterFile(GATEWAY);
-    Serial.println("GATEWAY: " + gateway);
-
-    fstart = readParameterFromParameterFile(FSTART);
-    Serial.println("FSTART: " + fstart);
-
-    fend = readParameterFromParameterFile(FEND);
-    Serial.println("FEND: " + fend);
-
-    smpls = readParameterFromParameterFile("samples");
-    Serial.println("SAMPLES: " + smpls);
-
-    CONF_SAMPLES = (smpls == "") ? samples : atoi(smpls.c_str());
-    samples = CONF_SAMPLES;
-    CONF_FREQ_BEGIN = (fstart == "") ? FREQ_BEGIN : atoi(fstart.c_str());
-    CONF_FREQ_END = (fend == "") ? FREQ_END : atoi(fend.c_str());
-
-    both.println("C FREQ BEGIN:" + String(CONF_FREQ_BEGIN));
-    both.println("C FREQ END:" + String(CONF_FREQ_END));
-    both.println("C SAMPLES:" + String(CONF_SAMPLES));
-
-    RANGE_PER_PAGE = CONF_FREQ_END - CONF_FREQ_BEGIN; // FREQ_END - CONF_FREQ_BEGIN
-
-    RANGE = (int)(CONF_FREQ_END - CONF_FREQ_BEGIN);
-
-    SINGLE_STEP = (float)(RANGE / (STEPS * SCAN_RBW_FACTOR));
-
-    range = (int)(CONF_FREQ_END - CONF_FREQ_BEGIN);
-
-    iterations = RANGE / RANGE_PER_PAGE;
-
-    // uint64_t range_frequency = FREQ_END - CONF_FREQ_BEGIN;
-    median_frequency = (CONF_FREQ_BEGIN + CONF_FREQ_END) / 2;
+    readConfigFile();
 
     init_radio();
 
