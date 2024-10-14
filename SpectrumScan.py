@@ -7,32 +7,21 @@ import sys
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-
+import json
 from datetime import datetime
 from argparse import RawTextHelpFormatter
 
-import json
+# Constants
+SCAN_WIDTH = 33  # number of samples in each scanline
+OUT_PATH = "out"  # output path for saved files
 
-# number of samples in each scanline
-SCAN_WIDTH = 33
-
-# scanline Serial start/end markers
-SCAN_MARK_START = 'SCAN '
-SCAN_MARK_FREQ = 'FREQ '
-SCAN_MARK_END = ' END'
-
-# output path
-OUT_PATH = 'out'
-
-# default settings
+# Default settings
 DEFAULT_BAUDRATE = 115200
 DEFAULT_COLOR_MAP = 'viridis'
 DEFAULT_SCAN_LEN = 200
 DEFAULT_RSSI_OFFSET = -11
 
-# Print iterations progress
-# from https://stackoverflow.com/questions/3173320/text-progress-bar-in-terminal-with-block-characters
-def printProgressBar (iteration, total, prefix = '', suffix = '', decimals = 1, length = 50, fill = '█', printEnd = "\r"):
+def print_progress_bar(iteration, total, prefix='', suffix='', decimals=1, length=50, fill='█', print_end="\r"):
     """
     Call in a loop to create terminal progress bar
     @params:
@@ -43,80 +32,72 @@ def printProgressBar (iteration, total, prefix = '', suffix = '', decimals = 1, 
         decimals    - Optional  : positive number of decimals in percent complete (Int)
         length      - Optional  : character length of bar (Int)
         fill        - Optional  : bar fill character (Str)
-        printEnd    - Optional  : end character (e.g. "\r", "\r\n") (Str)
+        print_end    - Optional  : end character (e.g. "\r", "\r\n") (Str)
     """
     percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
-    filledLength = int(length * iteration // total)
-    bar = fill * filledLength + '-' * (length - filledLength)
-    print(f'\r{prefix} |{bar}| {percent}% {suffix}', end = printEnd)
+    filled_length = int(length * iteration // total)
+    bar = fill * filled_length + '-' * (length - filled_length)
+    print(f'\r{prefix} |{bar}| {percent}% {suffix}', end=print_end)
     if iteration == total: 
         print()
 
 def parse_line(line):
-    json_line = json.loads(line)
-    return json_line
+    """Parse a JSON line from the serial input."""
+    return json.loads(line)
 
 def main():
-    parser = argparse.ArgumentParser(formatter_class=RawTextHelpFormatter, description='''
+    parser = argparse.ArgumentParser(formatter_class=RawTextHelpFormatter, description='''\
         Parse serial data from LOG_DATA_JSON functionality.
 
         1. #define LOG_DATA_JSON true - add this line in main.cpp, upload to device
         2. Run the script with appropriate arguments.
         3. Once the scan is complete, output files will be saved to out/
     ''')
-    parser.add_argument('port',
-        type=str,
-        help='COM port to connect to the device')
-    parser.add_argument('--speed',
-        default=DEFAULT_BAUDRATE,
-        type=int,
-        help=f'COM port baudrate (defaults to {DEFAULT_BAUDRATE})')
-    parser.add_argument('--map',
-        default=DEFAULT_COLOR_MAP,
-        type=str,
-        help=f'Matplotlib color map to use for the output (defaults to "{DEFAULT_COLOR_MAP}")')
-    parser.add_argument('--len',
-        default=DEFAULT_SCAN_LEN,
-        type=int,
-        help=f'Number of scanlines to record (defaults to {DEFAULT_SCAN_LEN})')
-    parser.add_argument('--offset',
-        default=DEFAULT_RSSI_OFFSET,
-        type=int,
-        help=f'Default RSSI offset in dBm (defaults to {DEFAULT_RSSI_OFFSET})')
-    parser.add_argument('--freq',
-        default=-1,
-        type=float,
-        help=f'Default starting frequency in MHz')
+    parser.add_argument('port', type=str, help='COM port to connect to the device')
+    parser.add_argument('--speed', default=DEFAULT_BAUDRATE, type=int,
+                        help=f'COM port baudrate (defaults to {DEFAULT_BAUDRATE})')
+    parser.add_argument('--map', default=DEFAULT_COLOR_MAP, type=str,
+                        help=f'Matplotlib color map to use for the output (defaults to "{DEFAULT_COLOR_MAP}")')
+    parser.add_argument('--len', default=DEFAULT_SCAN_LEN, type=int,
+                        help=f'Number of scanlines to record (defaults to {DEFAULT_SCAN_LEN})')
+    parser.add_argument('--offset', default=DEFAULT_RSSI_OFFSET, type=int,
+                        help=f'Default RSSI offset in dBm (defaults to {DEFAULT_RSSI_OFFSET})')
+    parser.add_argument('--freq', default=-1, type=float,
+                        help='Default starting frequency in MHz')
     args = parser.parse_args()
 
-    # create the result array
+    # Create the result array
+    scan_len = args.len
     arr = np.zeros((scan_len, SCAN_WIDTH))
 
-    # scanline counter
+    # Scanline counter
     row = 0
 
-    # list of frequencies
+    # List of frequencies
     freq_list = []
 
-    # open the COM port
+    # Open the COM port
     with serial.Serial(args.port, args.speed, timeout=None) as com:
-        while(True):
-            # update the progress bar
-            printProgressBar(row, scan_len)
+        while True:
+            # Update the progress bar
+            print_progress_bar(row, scan_len)
 
-            # read a single line
+            # Read a single line
             try:
-                line = com.readline().decode('utf-8')
-            except:
+                line = com.readline().decode('utf-8').strip()
+            except UnicodeDecodeError:
                 continue
-            print(line)
-            if "{" in line:
+
+            if line.startswith("{"):
                 try:
                     data = parse_line(line)
-                except:
+                except json.JSONDecodeError:
                     continue
 
+                # get the lowest frequency for now, could be averaged too.
                 freq = data["low_range_freq"]
+
+                # value in negative, eg: -70
                 rssi = int(data["value"])
 
                 if freq not in freq_list:
@@ -125,24 +106,24 @@ def main():
                 col = freq_list.index(freq)
                 arr[row][col] = rssi
                 
-                # increment the row counter
-                row = row + 1
+                # Increment the row counter
+                row += 1
 
-                # check if we're done
-                if (row >= scan_len):
+                # Check if we're done
+                if row >= scan_len:
                     break
 
-    # create the figure
+    # Create the figure
     fig, ax = plt.subplots(figsize=(12, 8))
 
-    # display the result as heatmap
+    # Display the result as heatmap
     extent = [0, scan_len, freq_list[0], freq_list[-1]]
     im = ax.imshow(arr.T, cmap=args.map, extent=extent, aspect='auto', origin='lower')
     fig.colorbar(im, label='RSSI (dBm)')
 
-    # set some properties and show 
+    # Set plot properties and show
     timestamp = datetime.now().strftime('%y-%m-%d %H-%M-%S')
-    title = f'RadioLib SX126x Spectral Scan {timestamp}'
+    title = f'LoraSA Spectral Scan {timestamp}'
     plt.xlabel("Time (sample)")
     plt.ylabel("Frequency (MHz)")
     fig.suptitle(title)
