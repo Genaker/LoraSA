@@ -19,7 +19,7 @@ const String FEND = "fend";
 
 // Variables to save values from HTML form
 String ssid = "LoraSA", pass = "1234567890", ip = "192.168.1.100",
-       gateway = "192.168.1.1", fstart = "", fend = "";
+       gateway = "192.168.1.1", fstart = "", fend = "", smpls = "";
 
 IPAddress localIP;
 // Set your Gateway IP address
@@ -111,23 +111,48 @@ void serverServer()
                   }
                   Serial.println(request->params());
 
-                  String p = request->getParam(SSID, true)->value();
-                  writeParameterToParameterFile(SSID, p);
+                  String p;
+                  if (request->hasParam(IP, true))
+                  {
+                      p = request->getParam(IP, true)->value();
+                      writeParameterToParameterFile(IP, p);
+                  }
 
-                  p = request->getParam(PASS, true)->value();
-                  writeParameterToParameterFile(PASS, p);
+                  if (request->hasParam(IP, true))
+                  {
+                      p = request->getParam(IP, true)->value();
+                      writeParameterToParameterFile(IP, p);
+                  }
 
-                  p = request->getParam(IP, true)->value();
-                  writeParameterToParameterFile(IP, p);
+                  if (request->hasParam(IP, true))
+                  {
+                      p = request->getParam(IP, true)->value();
+                      writeParameterToParameterFile(IP, p);
+                  }
 
-                  p = request->getParam(GATEWAY, true)->value();
-                  writeParameterToParameterFile(GATEWAY, p);
+                  if (request->hasParam(GATEWAY, true))
+                  {
+                      p = request->getParam(GATEWAY, true)->value();
+                      writeParameterToParameterFile(GATEWAY, p);
+                  }
 
-                  p = request->getParam(FSTART, true)->value();
-                  writeParameterToParameterFile(FSTART, p);
+                  if (request->hasParam(FSTART, true))
+                  {
+                      p = request->getParam(FSTART, true)->value();
+                      writeParameterToParameterFile(FSTART, p);
+                  }
 
-                  p = request->getParam(FEND, true)->value();
-                  writeParameterToParameterFile(FEND, p);
+                  if (request->hasParam(FEND, true))
+                  {
+                      p = request->getParam(FEND, true)->value();
+                      writeParameterToParameterFile(FEND, p);
+                  }
+
+                  if (request->hasParam("samples", true))
+                  {
+                      p = request->getParam("samples", true)->value();
+                      writeParameterToParameterFile("samples", p);
+                  }
 
                   request->send(200, "text/plain",
                                 "Done. ESP will restart, connect to your router and "
