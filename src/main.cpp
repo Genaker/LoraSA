@@ -618,7 +618,6 @@ void setup(void)
 
     for (int i = 0; i < 200; i++)
     {
-
         both.print(".");
 
         button.update();
@@ -627,6 +626,7 @@ void setup(void)
         {
             both.println("-----------");
             both.println("Starting WIFI-SERVER...");
+            // Error here: E (15752) ledc: ledc_get_duty(745): LEDC is not initialized
             tone(BUZZER_PIN, 205, 100);
             delay(50);
             tone(BUZZER_PIN, 205, 500);
@@ -634,6 +634,8 @@ void setup(void)
             delay(50);
 
             serverStart();
+            both.println("Ready to Connect: 192.168.4.1");
+            delay(600);
             break;
         }
     }
