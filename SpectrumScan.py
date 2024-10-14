@@ -11,6 +11,8 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 from argparse import RawTextHelpFormatter
 
+import json
+
 # number of samples in each scanline
 SCAN_WIDTH = 33
 
@@ -50,17 +52,15 @@ def printProgressBar (iteration, total, prefix = '', suffix = '', decimals = 1, 
     if iteration == total: 
         print()
 
+def parse_line(line):
+    json_line = json.loads(line)
+    return json_line
 
 def main():
     parser = argparse.ArgumentParser(formatter_class=RawTextHelpFormatter, description='''
-        RadioLib SX126x_Spectrum_Scan plotter script. Displays output from SX126x_Spectrum_Scan example
-        as grayscale and 
+        Parse serial data from LOG_DATA_JSON functionality.
 
-        Depends on pyserial and matplotlib, install by:
-        'python3 -m pip install pyserial matplotlib'
-
-        Step-by-step guide on how to use the script:
-        1. Upload the SX126x_Spectrum_Scan example to your Arduino board with SX1262 connected.
+        1. #define LOG_DATA_JSON true - add this line in main.cpp, upload to device
         2. Run the script with appropriate arguments.
         3. Once the scan is complete, output files will be saved to out/
     ''')
@@ -89,84 +89,62 @@ def main():
         help=f'Default starting frequency in MHz')
     args = parser.parse_args()
 
-    freq_mode = False
-    scan_len = args.len
-    if (args.freq != -1):
-        freq_mode = True
-        scan_len = 1000
-
-    # create the color map and the result array
-    arr = np.zeros((SCAN_WIDTH, scan_len))
+    # create the result array
+    arr = np.zeros((scan_len, SCAN_WIDTH))
 
     # scanline counter
     row = 0
 
-    # list of frequencies in frequency mode
+    # list of frequencies
     freq_list = []
 
     # open the COM port
     with serial.Serial(args.port, args.speed, timeout=None) as com:
         while(True):
             # update the progress bar
-            if not freq_mode:
-                printProgressBar(row, scan_len)
+            printProgressBar(row, scan_len)
 
             # read a single line
             try:
                 line = com.readline().decode('utf-8')
             except:
                 continue
+            print(line)
+            if "{" in line:
+                try:
+                    data = parse_line(line)
+                except:
+                    continue
 
-            if SCAN_MARK_FREQ in line:
-                new_freq = float(line.split(' ')[1])
-                if (len(freq_list) > 1) and (new_freq < freq_list[-1]):
-                    break
+                freq = data["low_range_freq"]
+                rssi = int(data["value"])
 
-                freq_list.append(new_freq)
-                print('{:.3f}'.format(new_freq), end = '\r')
-                continue
-
-            # check the markers
-            if (SCAN_MARK_START in line) and (SCAN_MARK_END in line):
-                # get the values
-                scanline = line[len(SCAN_MARK_START):-len(SCAN_MARK_END)].split(',')
-                for col in range(SCAN_WIDTH):
-                    arr[col][row] = int(scanline[col])
+                if freq not in freq_list:
+                    freq_list.append(freq)
+                
+                col = freq_list.index(freq)
+                arr[row][col] = rssi
                 
                 # increment the row counter
                 row = row + 1
 
                 # check if we're done
-                if (not freq_mode) and (row >= scan_len):
+                if (row >= scan_len):
                     break
-    
-    # scale to the number of scans (sum of any given scanline)
-    num_samples = arr.sum(axis=0)[0]
-    arr *= (num_samples/arr.max())
-
-    if freq_mode:
-        scan_len = len(freq_list)
 
     # create the figure
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=(12, 8))
 
     # display the result as heatmap
-    extent = [0, scan_len, -4*(SCAN_WIDTH + 1), args.offset]
-    if freq_mode:
-        extent[0] = freq_list[0]
-        extent[1] = freq_list[-1]
-    im = ax.imshow(arr[:,:scan_len], cmap=args.map, extent=extent)
-    fig.colorbar(im)
+    extent = [0, scan_len, freq_list[0], freq_list[-1]]
+    im = ax.imshow(arr.T, cmap=args.map, extent=extent, aspect='auto', origin='lower')
+    fig.colorbar(im, label='RSSI (dBm)')
 
-    # set some properites and show 
+    # set some properties and show 
     timestamp = datetime.now().strftime('%y-%m-%d %H-%M-%S')
     title = f'RadioLib SX126x Spectral Scan {timestamp}'
-    if freq_mode:
-        plt.xlabel("Frequency [Hz]")
-    else:
-        plt.xlabel("Time [sample]")
-    plt.ylabel("RSSI [dBm]")
-    ax.set_aspect('auto')
+    plt.xlabel("Time (sample)")
+    plt.ylabel("Frequency (MHz)")
     fig.suptitle(title)
     fig.canvas.manager.set_window_title(title)
     plt.savefig(f'{OUT_PATH}/{title.replace(" ", "_")}.png', dpi=300)
