@@ -16,6 +16,8 @@
 
 // temporary dirty import ... to be solved durring upcoming refactoring
 extern unsigned int RANGE_PER_PAGE;
+extern uint64_t CONF_FREQ_BEGIN;
+extern uint64_t CONF_FREQ_END;
 extern unsigned int median_frequency;
 extern unsigned int drone_detected_frequency_start;
 extern unsigned int drone_detected_frequency_end;
@@ -95,7 +97,8 @@ void StatusBar::draw()
         // Frequency start
         display.setTextAlignment(TEXT_ALIGN_LEFT);
         display.drawString(pos_x, text_y,
-                           (r.fr_begin == 0) ? String(FREQ_BEGIN) : String(r.fr_begin));
+                           (r.fr_begin == 0) ? String(CONF_FREQ_BEGIN)
+                                             : String(r.fr_begin));
 
         // Frequency detected
         display.setTextAlignment(TEXT_ALIGN_CENTER);
@@ -106,7 +109,7 @@ void StatusBar::draw()
         // Frequency end
         display.setTextAlignment(TEXT_ALIGN_RIGHT);
         display.drawString(pos_x + width, text_y,
-                           (r.fr_end == 0) ? String(FREQ_END) : String(r.fr_end));
+                           (r.fr_end == 0) ? String(CONF_FREQ_END) : String(r.fr_end));
     }
 
     // Status text block
@@ -170,11 +173,11 @@ void StatusBar::draw()
         display.drawString(pos_x, text_y, String(loop_time));
 #else
         display.setTextAlignment(TEXT_ALIGN_LEFT);
-        display.drawString(pos_x, text_y, String(FREQ_BEGIN));
+        display.drawString(pos_x, text_y, String(CONF_FREQ_BEGIN));
 
 #endif
         display.setTextAlignment(TEXT_ALIGN_RIGHT);
-        display.drawString(pos_x + width, text_y, String(FREQ_END));
+        display.drawString(pos_x + width, text_y, String(CONF_FREQ_END));
     }
     else if (ranges_count > 0)
     {
