@@ -86,6 +86,8 @@ def main():
 
         com.write(bytes('SCAN -1 -1\n', 'ascii'))
 
+        lines = 0
+        errors = 0
         while row < scan_len:
             # Update the progress bar
             print_progress_bar(row, scan_len)
@@ -97,14 +99,17 @@ def main():
                 continue
 
             if 'SCAN_RESULT ' in line:
+                lines += 1
                 try:
                     count, data = parse_line(line)
                     data.sort()
                 except json.JSONDecodeError:
+                    errors += 1
                     continue
 
                 r = list(zip(*data))
-                if len(r) != 2:
+                if len(r) != 2 or len(data) != count:
+                    errors += 1
                     continue
 
                 freqs, rssis = r
@@ -112,7 +117,6 @@ def main():
                 if arr is None:
                     w = count if args.buckets < 1 else args.buckets
                     arr = np.zeros((scan_len, w))
-                    arr[:] = arr[:] - 120
                     freq_list = freqs
 
                 for col in range(len(rssis)):
@@ -123,6 +127,10 @@ def main():
 
         # tell it to stop producing SCAN_RESULTS
         com.write(bytes('SCAN 0 -1\n', 'ascii'))
+
+    print("Read %d lines, encountered %d errors. Success rate: %.2f" %
+          (lines, errors, (100 - 100 * errors / lines) if lines > 0 else 0))
+    arr[arr == 0] = arr.min() - 20
 
     # Create the figure
     fig, ax = plt.subplots(figsize=(12, 8))
