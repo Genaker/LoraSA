@@ -2,24 +2,11 @@
 #include <config.h>
 
 #include <HardwareSerial.h>
+#include <USB.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
 Comms *Comms0;
-
-TaskHandle_t monitorSerial = NULL;
-
-void _onReceive0();
-
-void monitorSerialTask(void *)
-{
-    Serial.println("Spawned a task to monitor Serial.available()");
-    for (;;)
-    {
-        vTaskDelay(pdMS_TO_TICKS(10));
-        _onReceive0();
-    }
-}
 
 void _onReceive0()
 {
@@ -31,16 +18,27 @@ void _onReceive0()
     Comms0->_onReceive();
 }
 
+void _onUsbEvent0(void *arg, esp_event_base_t event_base, int32_t event_id,
+                  void *event_data)
+{
+    if (event_base == ARDUINO_HW_CDC_EVENTS)
+        {
+        // arduino_hw_cdc_event_data_t *data = (arduino_hw_cdc_event_data_t *)event_data;
+        if (event_id == ARDUINO_HW_CDC_RX_EVENT)
+        {
+            _onReceive0(/*data->rx.len*/);
+        }
+    }
+}
+
 bool Comms::initComms(Config &c)
 {
     if (c.listen_on_usb.equalsIgnoreCase("readline"))
     {
         // comms using readline plaintext protocol
         Comms0 = new ReadlineComms(Serial);
-        // Serial.onEvent(_onUsbEvent0);
-        // Serial.begin();
-        xTaskCreate(monitorSerialTask, "CHECK_SERIAL_PROCESS", 2048, NULL, 1,
-                    &monitorSerial);
+        Serial.onEvent(ARDUINO_HW_CDC_RX_EVENT, _onUsbEvent0);
+        Serial.begin();
 
         Serial.println("Initialized communications on Serial using readline protocol");
 
@@ -155,7 +153,54 @@ bool ReadlineComms::send(Message &m)
         p = _scan_result_str(m.payload.dump);
         break;
     }
-    serial.println(p);
+
+    const char *cstr = p.c_str();
+    size_t cstr_len = strlen(cstr);
+
+    int loops = 0;
+    uint64_t t0 = millis();
+    uint64_t idle_started = 0;
+
+    for (size_t a = serial.availableForWrite(); a < cstr_len;
+         a = serial.availableForWrite(), loops++)
+    {
+        uint64_t now = millis();
+        if (now - t0 > 1000)
+        {
+            Serial.printf("Unable to make progress after %d loops; %d bytes available "
+                          "for write, %d chars still to write\n",
+                          loops, a, cstr_len);
+            break;
+        }
+
+        if (a == 0)
+        {
+            if (idle_started == 0)
+            {
+                idle_started = now;
+            }
+
+            if (now - idle_started > 2)
+            {
+                vTaskDelay(pdMS_TO_TICKS(2));
+            }
+            else
+            {
+                yield();
+            }
+            continue;
+        }
+
+        idle_started = 0;
+
+        serial.write(cstr, a);
+        cstr += a;
+        cstr_len -= a;
+    }
+    serial.println(cstr);
+
+    uint64_t dt = millis() - t0;
+    Serial.printf("Wrote stuff in %d iterations and %" PRIu64 " ms.\n", loops, dt);
     return true;
 }
 
