@@ -50,6 +50,7 @@ def parse_line(line):
 
 POLY = 0x1021
 def crc16(s, c):
+    c = c ^ 0xffff
     for ch in s:
         c = c ^ (ord(ch) << 8)
         for i in range(8):
@@ -58,7 +59,7 @@ def crc16(s, c):
             else:
                 c = (c << 1) & 0xffff
 
-    return c
+    return c ^ 0xffff
 
 def main():
     parser = argparse.ArgumentParser(formatter_class=RawTextHelpFormatter, description='''\

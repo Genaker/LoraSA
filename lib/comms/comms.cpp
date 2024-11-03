@@ -123,6 +123,7 @@ String _wrap_str(String);
 #define POLY 0x1021
 uint16_t crc16(String v, uint16_t c)
 {
+    c ^= 0xffff;
     for (int i = 0; i < v.length(); i++)
     {
         uint16_t ch = v.charAt(i);
@@ -140,7 +141,7 @@ uint16_t crc16(String v, uint16_t c)
         }
     }
 
-    return c;
+    return c ^ 0xffff;
 }
 
 void ReadlineComms::_onReceive()
