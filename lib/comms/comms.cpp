@@ -22,7 +22,7 @@ void _onUsbEvent0(void *arg, esp_event_base_t event_base, int32_t event_id,
                   void *event_data)
 {
     if (event_base == ARDUINO_HW_CDC_EVENTS)
-        {
+    {
         // arduino_hw_cdc_event_data_t *data = (arduino_hw_cdc_event_data_t *)event_data;
         if (event_id == ARDUINO_HW_CDC_RX_EVENT)
         {
@@ -117,6 +117,30 @@ Message *Comms::receive()
 Message *_parsePacket(String);
 String _scan_str(ScanTask &);
 String _scan_result_str(ScanTaskResult &);
+String _wrap_str(String);
+
+#define POLY 0x1021
+uint16_t crc16(String v, uint16_t c)
+{
+    for (int i = 0; i < v.length(); i++)
+    {
+        uint16_t ch = v.charAt(i);
+        c = c ^ (ch << 8);
+        for (int j = 0; j < 8; j++)
+        {
+            if (c & 0x8000)
+            {
+                c = (c << 1) ^ POLY;
+            }
+            else
+            {
+                c <<= 1;
+            }
+        }
+    }
+
+    return c;
+}
 
 void ReadlineComms::_onReceive()
 {
@@ -126,10 +150,27 @@ void ReadlineComms::_onReceive()
         int i = partialPacket.indexOf('\n');
         while (i >= 0)
         {
-            Message *m = _parsePacket(partialPacket.substring(0, i));
+            String pack = partialPacket.substring(0, i);
+            bool messageOk = true;
+
+            if (wrap != NULL)
+            {
+                messageOk = pack.length() == wrap->payload.wrap.length;
+                if (messageOk)
+                {
+                    messageOk = crc16(pack, 0) == wrap->payload.wrap.crc;
+                }
+                delete wrap;
+                wrap = NULL;
+            }
+            Message *m = messageOk ? _parsePacket(pack) : NULL;
             if (m != NULL)
             {
-                if (!_messageArrived(*m))
+                if (m->type == WRAP)
+                {
+                    wrap = m;
+                }
+                else if (!_messageArrived(*m))
                 {
                     delete m;
                 }
@@ -154,53 +195,7 @@ bool ReadlineComms::send(Message &m)
         break;
     }
 
-    const char *cstr = p.c_str();
-    size_t cstr_len = strlen(cstr);
-
-    int loops = 0;
-    uint64_t t0 = millis();
-    uint64_t idle_started = 0;
-
-    for (size_t a = serial.availableForWrite(); a < cstr_len;
-         a = serial.availableForWrite(), loops++)
-    {
-        uint64_t now = millis();
-        if (now - t0 > 1000)
-        {
-            Serial.printf("Unable to make progress after %d loops; %d bytes available "
-                          "for write, %d chars still to write\n",
-                          loops, a, cstr_len);
-            break;
-        }
-
-        if (a == 0)
-        {
-            if (idle_started == 0)
-            {
-                idle_started = now;
-            }
-
-            if (now - idle_started > 2)
-            {
-                vTaskDelay(pdMS_TO_TICKS(2));
-            }
-            else
-            {
-                yield();
-            }
-            continue;
-        }
-
-        idle_started = 0;
-
-        serial.write(cstr, a);
-        cstr += a;
-        cstr_len -= a;
-    }
-    serial.println(cstr);
-
-    uint64_t dt = millis() - t0;
-    Serial.printf("Wrote stuff in %d iterations and %" PRIu64 " ms.\n", loops, dt);
+    serial.print(_wrap_str(p));
     return true;
 }
 
@@ -214,6 +209,20 @@ int64_t _intParam(String &p, int64_t default_v)
     }
 
     int64_t v = p.substring(0, i).toInt();
+    p = p.substring(i + 1);
+    return v;
+}
+
+int64_t _hexParam(String &p, int64_t default_v)
+{
+    p.trim();
+    int i = p.indexOf(' ');
+    if (i < 0)
+    {
+        i = p.length();
+    }
+
+    int64_t v = strtol(p.substring(0, i).c_str(), 0, 16);
     p = p.substring(i + 1);
     return v;
 }
@@ -239,6 +248,15 @@ Message *_parsePacket(String p)
         p.trim();
     }
 
+    if (cmd.equalsIgnoreCase("wrap"))
+    {
+        Message *m = new Message();
+        m->type = MessageType::WRAP;
+        m->payload.wrap.crc = _hexParam(p, -1);
+        m->payload.wrap.length = _intParam(p, -1);
+        return m;
+    }
+
     if (cmd.equalsIgnoreCase("scan"))
     {
         Message *m = new Message();
@@ -254,12 +272,12 @@ Message *_parsePacket(String p)
 
 String _scan_str(ScanTask &t)
 {
-    return "SCAN " + String(t.count) + " " + String(t.delay);
+    return "SCAN " + String(t.count) + " " + String(t.delay) + "\n";
 }
 
 String _scan_result_str(ScanTaskResult &r)
 {
-    String p = "SCAN_RESULT " + String(r.sz) + " [";
+    String p = "SCAN_RESULT " + String(r.sz) + " [ ";
 
     for (int i = 0; i < r.sz; i++)
     {
@@ -267,5 +285,11 @@ String _scan_result_str(ScanTaskResult &r)
              ")";
     }
 
-    return p + " ]";
+    return p + " ]\n";
+}
+
+String _wrap_str(String v)
+{
+    String r = String(v.length()) + "\n" + v;
+    return "WRAP " + String(crc16(r, 0), 16) + " " + r;
 }

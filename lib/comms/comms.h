@@ -6,9 +6,16 @@
 
 enum MessageType
 {
-    SCAN = 0,
+    WRAP = 0,
+    SCAN,
     SCAN_RESULT,
     _MAX_MESSAGE_TYPE = SCAN_RESULT
+};
+
+struct Wrapper
+{
+    int32_t length;
+    uint16_t crc;
 };
 
 struct ScanTask
@@ -29,6 +36,7 @@ struct Message
     MessageType type;
     union
     {
+        Wrapper wrap;
         ScanTask scan;
         ScanTaskResult dump;
     } payload;
@@ -41,8 +49,10 @@ struct Comms
     size_t received_sz;
     size_t received_pos;
 
+    Message *wrap;
+
     Comms(Stream &serial)
-        : serial(serial), received(NULL), received_sz(0), received_pos(0) {};
+        : serial(serial), received(NULL), received_sz(0), received_pos(0), wrap(NULL) {};
 
     virtual size_t available();
     virtual bool send(Message &) = 0;

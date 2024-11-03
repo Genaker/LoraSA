@@ -48,6 +48,17 @@ def parse_line(line):
     _, count, rest = line.split(' ', 2)
     return int(count), json.loads(rest.replace('(', '[').replace(')', ']'))
 
+POLY = 0x1021
+def crc16(s, c):
+    for ch in s:
+        c = c ^ (ord(ch) << 8)
+        for i in range(8):
+            if c & 0x8000:
+                c = ((c << 1) ^ POLY) & 0xffff
+            else:
+                c = (c << 1) & 0xffff
+
+    return c
 
 def main():
     parser = argparse.ArgumentParser(formatter_class=RawTextHelpFormatter, description='''\
@@ -81,6 +92,9 @@ def main():
     # List of frequencies
     freq_list = []
 
+    checksum = -1
+    so_far = 0
+
     # Open the COM port
     with serial.Serial(args.port, args.speed, timeout=None) as com:
 
@@ -94,11 +108,33 @@ def main():
 
             # Read a single line
             try:
-                line = com.readline().decode('utf-8').strip()
+                line = com.readline().decode('utf-8')
             except UnicodeDecodeError:
+                errors += 1
+                continue
+
+            if 'WRAP ' in line:
+                try:
+                    _, c, rest = line.split(' ', 2)
+                    checksum = int(c, 16)
+                    so_far = crc16(rest, 0)
+                except Exception as e:
+                    errors += 1
                 continue
 
             if 'SCAN_RESULT ' in line:
+                if checksum == -1:
+                    errors += 1
+                    continue
+
+                c16 = crc16(line, so_far)
+                if checksum != c16:
+                    errors += 1
+                    checksum = -1
+                    continue
+
+                checksum = -1
+
                 lines += 1
                 try:
                     count, data = parse_line(line)

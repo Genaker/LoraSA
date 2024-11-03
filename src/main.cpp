@@ -560,7 +560,7 @@ void dumpToCommsTask(void *parameter)
         int64_t delay = report_scans.delay;
         if (delay == 0)
         {
-            delay = (1 << 63) - 1;
+            delay = (1ull << 63) - 1;
         }
 
         ulTaskNotifyTake(true, pdMS_TO_TICKS(delay));
