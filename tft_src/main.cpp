@@ -133,6 +133,8 @@ uint64_t scan_time = 0;
 uint64_t scan_start_time = 0;
 #endif
 
+// To remove waterfall adjust this and this
+#define LOWER_LEVEL 108
 #define WATERFALL_START 115
 #define WATERFALL_END DISPLAY_HEIGHT - 10 - 2
 
@@ -249,7 +251,7 @@ void battery()
     }
 }
 
-constexpr int lower_level = 108;
+constexpr int lower_level = LOWER_LEVEL;
 constexpr int up_level = 40;
 int rssiToPix(int rssi)
 {
