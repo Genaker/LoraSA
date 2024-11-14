@@ -137,6 +137,7 @@ uint64_t scan_start_time = 0;
 #define LOWER_LEVEL 108
 #define WATERFALL_START 115
 #define WATERFALL_END DISPLAY_HEIGHT - 10 - 2
+#define DISABLE_WATERFALL 0 // to disable set to 1
 
 uint64_t x, y, range_item, w = WATERFALL_START, i = 0;
 int osd_x = 1, osd_y = 2, col = 0, max_bin = 32;
@@ -440,8 +441,11 @@ void loop()
     // Writing pixel only if it is bigger than drone detection level
     if (abs(max_scan_rssi[x1]) < drone_detection_level)
     {
-        // Waterfall Pixel
-        st7789->drawPixel(x1, w, rssiToColor(abs(max_scan_rssi[x1]), true));
+        if (DISABLE_WATERFALL == 0)
+        {
+            // Waterfall Pixel
+            st7789->drawPixel(x1, w, rssiToColor(abs(max_scan_rssi[x1]), true));
+        }
 
         detailed_scan_candidate[(int)fr] = (int)fr;
     }
@@ -471,11 +475,14 @@ void loop()
         window_max_rssi = -999;
     }
 
-    // Waterfall cursor
-    st7789->drawFastHLine(0, w + 1, DISPLAY_WIDTH, ST7789_BLACK);
-    if (w < WATERFALL_END)
+    if (DISABLE_WATERFALL == 0)
     {
-        st7789->drawFastHLine(0, w + 2, DISPLAY_WIDTH, ST7789_ORANGE);
+        // Waterfall cursor
+        st7789->drawFastHLine(0, w + 1, DISPLAY_WIDTH, ST7789_BLACK);
+        if (w < WATERFALL_END)
+        {
+            st7789->drawFastHLine(0, w + 2, DISPLAY_WIDTH, ST7789_ORANGE);
+        }
     }
 
     // drone detection level line
