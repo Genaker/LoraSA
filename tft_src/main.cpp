@@ -399,8 +399,12 @@ void loop()
         st7789->drawPixel(x1, rssiToPix(rssi2), rssiToColor(abs(rssi2)));
         st7789->drawPixel(x1, rssiToPix(rssi2) - 1, rssiToColor(abs(rssi2)));
         st7789->drawPixel(x1, rssiToPix(rssi2) - 2, rssiToColor(abs(rssi2)));
-        st7789->drawFastVLine(x1, rssiToPix(rssi2), lower_level - rssiToPix(rssi2),
-                              rssiToColor(abs(rssi2)));
+
+        if (true /*draw full line*/)
+        {
+            st7789->drawFastVLine(x1, rssiToPix(rssi2), lower_level - rssiToPix(rssi2),
+                                  rssiToColor(abs(rssi2)));
+        }
         // Draw Update Cursor
         st7789->drawFastVLine(x1 + 1, lower_level, -lower_level + 11, ST7789_BLACK);
         st7789->drawFastVLine(x1 + 2, lower_level, -lower_level + 11, ST7789_BLACK);
