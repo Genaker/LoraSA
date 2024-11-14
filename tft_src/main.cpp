@@ -13,9 +13,9 @@
 // #define ARDUINO_USB_CDC_ON_BOOT 1
 // #define LoRaWAN_DEBUG_LEVEL 0
 #include "HT_ST7789spi.h"
-#include "global_config.h"
+// #include "global_config.h"
 #include "images.h"
-#include "ui.h"
+// #include "ui.h"
 #include <Adafruit_GFX.h>
 #include <Arduino.h>
 
@@ -71,6 +71,8 @@ constexpr bool DRAW_DETECTION_TICKS = true;
 #define SAMPLES_RSSI 5 // 21 //
 
 #define FREQ_BEGIN 650
+#define FREQ_END 960
+#define BANDWIDTH 467.0
 #define DEFAULT_DRONE_DETECTION_LEVEL 90
 
 #define RANGE (int)(FREQ_END - FREQ_BEGIN)
@@ -315,6 +317,7 @@ constexpr unsigned int STATUS_BAR_HEIGHT = 5;
 
 void loop()
 {
+    Serial.println("Loop");
     if (screen_update_loop_counter == 0)
     {
         fr_x[x1] = 0;
@@ -331,7 +334,7 @@ void loop()
     fr_x[x1] = fr;
 
     int u = 0;
-    int additional_samples = 10;
+    int additional_samples = 0;
 
     // Clear old data with the cursor ...
     st7789->drawFastVLine(x1, lower_level, -lower_level + 11, ST7789_BLACK);
@@ -351,8 +354,15 @@ void loop()
             additional_samples--;
         }
 
-        radio.setFrequency((float)fr + (float)(rssi_mhz_step * u),
-                           false); // false = no calibration need here
+        bool calibrate = true;
+        float freq = (float)fr + (float)(rssi_mhz_step * u);
+        if ((int)freq % 10 == 0)
+        {
+            calibrate = true;
+        }
+        radio.setFrequency(freq,
+                           /*false*/ calibrate); // false = no calibration need here
+        // Serial.println((float)fr + (float)(rssi_mhz_step * u));
         u++;
         if (rssi_mhz_step * u >= mhz_step)
         {
@@ -363,6 +373,7 @@ void loop()
             rssi_single_start = millis();
         }
         rssi2 = radio.getRSSI(false);
+        // Serial.print(" RSSI : " + String(rssi2));
         scan_iterations++;
         if (rssi_single_end == 0)
         {
@@ -383,13 +394,21 @@ void loop()
 #ifdef PRINT_DEBUG
         Serial.println(String(fr) + ":" + String(rssi2));
 #endif
+        int lineHeight = 0;
+
         st7789->drawPixel(x1, rssiToPix(rssi2), rssiToColor(abs(rssi2)));
         st7789->drawPixel(x1, rssiToPix(rssi2) - 1, rssiToColor(abs(rssi2)));
         st7789->drawPixel(x1, rssiToPix(rssi2) - 2, rssiToColor(abs(rssi2)));
+
+        if (true /*draw full line*/)
+        {
+            st7789->drawFastVLine(x1, rssiToPix(rssi2), lower_level - rssiToPix(rssi2),
+                                  rssiToColor(abs(rssi2)));
+        }
         // Draw Update Cursor
         st7789->drawFastVLine(x1 + 1, lower_level, -lower_level + 11, ST7789_BLACK);
         st7789->drawFastVLine(x1 + 2, lower_level, -lower_level + 11, ST7789_BLACK);
-        st7789->drawFastVLine(x1 + 3, lower_level, -lower_level + 11, ST7789_BLACK);
+        // st7789->drawFastVLine(x1 + 3, lower_level, -lower_level + 11, ST7789_BLACK);
 
         if (max_scan_rssi[x1] == -999)
         {
@@ -452,7 +471,10 @@ void loop()
 
     // Waterfall cursor
     st7789->drawFastHLine(0, w + 1, DISPLAY_WIDTH, ST7789_BLACK);
-    st7789->drawFastHLine(0, w + 2, DISPLAY_WIDTH, ST7789_BLACK);
+    if (w < WATERFALL_END)
+    {
+        st7789->drawFastHLine(0, w + 2, DISPLAY_WIDTH, ST7789_ORANGE);
+    }
 
     // drone detection level line
     if (x1 % 2 == 0)
