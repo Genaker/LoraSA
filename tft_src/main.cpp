@@ -70,18 +70,19 @@ constexpr bool DRAW_DETECTION_TICKS = true;
 // number of samples for RSSI method
 #define SAMPLES_RSSI 5 // 21 //
 
-#define FREQ_BEGIN 650
-#define FREQ_END 960
+#define FREQ_BEGIN 150
+#define FREQ_END 950
 #define BANDWIDTH 467.0
+#define MHZ_PX (float)((float)(FREQ_END - FREQ_BEGIN) / DISPLAY_WIDTH)
 #define DEFAULT_DRONE_DETECTION_LEVEL 90
 
 #define RANGE (int)(FREQ_END - FREQ_BEGIN)
 
-#define SINGLE_STEP (float)(RANGE / (STEPS * SCAN_RBW_FACTOR))
+// #define SINGLE_STEP (float)(RANGE / (STEPS * SCAN_RBW_FACTOR))
 
 uint64_t range = (int)(FREQ_END - FREQ_BEGIN);
 uint64_t fr_begin = FREQ_BEGIN;
-uint64_t fr_end = FREQ_BEGIN;
+uint64_t fr_end = FREQ_END;
 
 // Feature to scan diapasones. Other frequency settings will be ignored.
 // int SCAN_RANGES[] = {850890, 920950};
@@ -92,7 +93,7 @@ int SCAN_RANGES[] = {};
 // uint64_t RANGE_PER_PAGE = FREQ_END - FREQ_BEGIN; // FREQ_END - FREQ_BEGIN
 
 // Override or e-ink
-uint64_t RANGE_PER_PAGE = FREQ_BEGIN + DISPLAY_WIDTH;
+uint64_t RANGE_PER_PAGE = FREQ_END - FREQ_BEGIN; // FREQ_BEGIN + DISPLAY_WIDTH;
 
 uint64_t iterations = RANGE / RANGE_PER_PAGE;
 
@@ -291,7 +292,7 @@ long timeSinceLastModeSwitch = 0;
 float fr = FREQ_BEGIN, fr_x[STEPS + 5], vbat = 0;
 // MHz in one screen pix step
 // END will be Begin + 289 * mhz_step
-constexpr int mhz_step = 1;
+float mhz_step = MHZ_PX;
 // TODO: make end_freq
 // Measure RSS every step
 constexpr float rssi_mhz_step = 0.33;
