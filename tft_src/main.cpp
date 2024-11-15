@@ -135,10 +135,11 @@ uint64_t scan_start_time = 0;
 #endif
 
 // To remove waterfall adjust this and this
-#define LOWER_LEVEL 108
+#define LOWER_LEVEL DISPLAY_HEIGHT - 22 // 108
+#define SPECTR_CHART_STAR_TOP 40 + 30;
 #define WATERFALL_START 115
 #define WATERFALL_END DISPLAY_HEIGHT - 10 - 2
-#define DISABLE_WATERFALL 0 // to disable set to 1
+#define DISABLE_WATERFALL 1 // to disable set to 1
 
 uint64_t x, y, range_item, w = WATERFALL_START, i = 0;
 int osd_x = 1, osd_y = 2, col = 0, max_bin = 32;
@@ -254,7 +255,7 @@ void battery()
 }
 
 constexpr int lower_level = LOWER_LEVEL;
-constexpr int up_level = 40;
+constexpr int up_level = SPECTR_CHART_STAR_TOP;
 int rssiToPix(int rssi)
 {
     // Bigger is lower signal
@@ -262,11 +263,24 @@ int rssiToPix(int rssi)
     {
         return lower_level - 1;
     }
-    if (abs(rssi) <= up_level)
+    if (abs(rssi) <= up_level && lower_level < 130)
     {
         return up_level;
     }
-    return abs(rssi);
+    // if chart moved to the bottom
+    if (lower_level > 130)
+    {
+        int returnRssi = rssi - up_level / 3;
+        if (returnRssi >= lower_level)
+        {
+            return lower_level - 1;
+        }
+        return abs(returnRssi);
+    }
+    else
+    {
+        return abs(rssi);
+    }
 }
 
 //
@@ -403,11 +417,22 @@ void loop()
         st7789->drawPixel(x1, rssiToPix(rssi2), rssiToColor(abs(rssi2)));
         st7789->drawPixel(x1, rssiToPix(rssi2) - 1, rssiToColor(abs(rssi2)));
         st7789->drawPixel(x1, rssiToPix(rssi2) - 2, rssiToColor(abs(rssi2)));
+        if (LOWER_LEVEL > 140)
+        {
+            st7789->drawPixel(x1, rssiToPix(rssi2) - 3, rssiToColor(abs(rssi2)));
+            st7789->drawPixel(x1, rssiToPix(rssi2) - 5, rssiToColor(abs(rssi2)));
+            st7789->drawPixel(x1, rssiToPix(rssi2) - 6, rssiToColor(abs(rssi2)));
+            st7789->drawPixel(x1, rssiToPix(rssi2) - 7, rssiToColor(abs(rssi2)));
+            st7789->drawPixel(x1, rssiToPix(rssi2) - 8, rssiToColor(abs(rssi2)));
+            st7789->drawPixel(x1, rssiToPix(rssi2) - 9, rssiToColor(abs(rssi2)));
+            st7789->drawPixel(x1, rssiToPix(rssi2) - 10, rssiToColor(abs(rssi2)));
+        }
 
         if (true /*draw full line*/)
         {
-            st7789->drawFastVLine(x1, rssiToPix(rssi2), lower_level - rssiToPix(rssi2),
-                                  rssiToColor(abs(rssi2)));
+            //  st7789->drawFastVLine(x1, rssiToPix(rssi2), lower_level -
+            //  rssiToPix(rssi2),
+            //                       rssiToColor(abs(rssi2)));
         }
         // Draw Update Cursor
         st7789->drawFastVLine(x1 + 1, lower_level, -lower_level + 11, ST7789_BLACK);
