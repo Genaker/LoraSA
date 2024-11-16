@@ -136,7 +136,7 @@ uint64_t scan_start_time = 0;
 
 // To remove waterfall adjust this and this
 #define LOWER_LEVEL DISPLAY_HEIGHT - 22 // 108
-#define SPECTR_CHART_STAR_TOP 40 + 30;
+#define SPECTR_CHART_STAR_TOP 40 + 50;
 #define WATERFALL_START 115
 #define WATERFALL_END DISPLAY_HEIGHT - 10 - 2
 #define DISABLE_WATERFALL 1 // to disable set to 1
@@ -270,8 +270,9 @@ int rssiToPix(int rssi)
     // if chart moved to the bottom
     if (lower_level > 130)
     {
-        int returnRssi = rssi - up_level / 3;
-        if (returnRssi >= lower_level)
+        int returnRssi = lower_level + abs(rssi) - up_level - 21;
+        Serial.println("RSSI: " + String(rssi));
+        if (returnRssi >= lower_level - 2)
         {
             return lower_level - 1;
         }
@@ -417,16 +418,8 @@ void loop()
         st7789->drawPixel(x1, rssiToPix(rssi2), rssiToColor(abs(rssi2)));
         st7789->drawPixel(x1, rssiToPix(rssi2) - 1, rssiToColor(abs(rssi2)));
         st7789->drawPixel(x1, rssiToPix(rssi2) - 2, rssiToColor(abs(rssi2)));
-        if (LOWER_LEVEL > 140)
-        {
-            st7789->drawPixel(x1, rssiToPix(rssi2) - 3, rssiToColor(abs(rssi2)));
-            st7789->drawPixel(x1, rssiToPix(rssi2) - 5, rssiToColor(abs(rssi2)));
-            st7789->drawPixel(x1, rssiToPix(rssi2) - 6, rssiToColor(abs(rssi2)));
-            st7789->drawPixel(x1, rssiToPix(rssi2) - 7, rssiToColor(abs(rssi2)));
-            st7789->drawPixel(x1, rssiToPix(rssi2) - 8, rssiToColor(abs(rssi2)));
-            st7789->drawPixel(x1, rssiToPix(rssi2) - 9, rssiToColor(abs(rssi2)));
-            st7789->drawPixel(x1, rssiToPix(rssi2) - 10, rssiToColor(abs(rssi2)));
-        }
+        st7789->drawPixel(x1, rssiToPix(rssi2) - 3, rssiToColor(abs(rssi2)));
+        st7789->drawPixel(x1, rssiToPix(rssi2) - 4, rssiToColor(abs(rssi2)));
 
         if (true /*draw full line*/)
         {
