@@ -403,8 +403,10 @@ void init_radio()
 {
     // initialize SX1262 FSK modem at the initial frequency
     both.println("Init radio");
-#if defined(USING_SX1280PA) || defined(USING_LR1121)
+#if defined(USING_SX1280PA)
     state = radio.beginGFSK(CONF_FREQ_BEGIN);
+#elif defined(USING_LR1121)
+    state = radio.beginGFSK(CONF_FREQ_BEGIN, 4.8F, 5.0F, 156.2F, 10, 16U, 1.7F);
 #else
     state = radio.beginFSK(CONF_FREQ_BEGIN);
 #endif
@@ -1140,7 +1142,7 @@ void loop(void)
             state = radio.setFrequency(freq);
 #else
             state = radio.setFrequency(r.current_frequency,
-                                       false); // false = no calibration need here
+                                       true); // true = no calibration need here
 #endif
             int radio_error_count = 0;
             if (state != RADIOLIB_ERR_NONE)
