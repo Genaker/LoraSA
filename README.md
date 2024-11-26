@@ -6,7 +6,9 @@
 - Heltec Wireless Stick Lite V3 No Display (Not Tested)
 - Heltec Vision Master E290 - e-Ink 296 x 128 (No OSD)
 - Heltec Vision MAster T190 - color TFT 320X170 (No OSD)
-- LilyGo Radio Lora T3S3 V.2 SX1262 
+- LilyGo Radio Lora T3S3 V.2 SX1262
+- LilyGo Radio Lora T3S3 V.2 SX1280
+- LilyGo Radio Lora T3_V1.6.1 SX1276 (Not Tested)
 
 ## RF Spectrum Analyzer using Lora Radio
 
@@ -158,6 +160,10 @@ If less, ESP32 will turn off. Fast pressing(less than 0.5 second) P button chang
 3. Connect ESP32 to USB. Install USB CP2101 drivers for Windows or other OS
    https://docs.heltec.org/general/establish_serial_connection.html#for-windows
    https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers?tab=downloads
+
+   ## NOTE: MACOS Heltec USB driver 
+   https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers?tab=downloads <br/>
+   I used legacy driver
    
 5. Clone this Git Repo or download zip of the sources
    ![image](https://github.com/user-attachments/assets/971b6592-3b71-414c-971c-2ecd20f0f0b7)
@@ -174,6 +180,15 @@ If less, ESP32 will turn off. Fast pressing(less than 0.5 second) P button chang
 
 7. Select Proper Environment
    ![image](https://github.com/user-attachments/assets/a9c6557b-a387-4457-b59b-b3d7242d2826)
+
+   ---
+   
+   >**Important note:** If using a Heltec V3 board, make sure your ESP32 Expressif catalog is up to date before selecting environment, otherwise might get a build time error such as: `Error: Unknown board ID 'heltec_wifi_lora_32_V3'` when trying to select the environment.
+   >
+   >Open a PlatformIO CLI: https://docs.platformio.org/en/latest/integration/ide/vscode.html#platformio-core-cli
+   >
+   >Run: `pio pkg update -g -p espressif32`
+   
 8. Select ESP32 USB Device to program
    ![image](https://github.com/user-attachments/assets/af76c4b1-7122-45e1-b26b-08b59e03ca3b)
 Note: It is theoretically possible to program via WiFi and BTH.
@@ -221,6 +236,24 @@ or buy :
 
 ![image](https://github.com/user-attachments/assets/a1e00b51-5566-4ff5-98fe-67eaeb5bc81f)
 We are using pin 41 as a Buzzer trigger. Connect buzzer + leg with pin 41 and - leg with the ground (GND). You can change the buzzer pin in the code.
+
+
+## Analog FPV OSD (ON SCREEN DISPLAY)
+To Enable OSD, Uncomment these lines </br>
+```
+//  #define OSD_ENABLED true
+```
+**OSD sidebar enabled/disable**
+comment or uncomment  this line
+```
+#define OSD_SIDE_BAR true
+```
+
+Or you can set this and other variables as a build parameter: 
+```   
+build_flags = 
+	-DOSD_ENABLED
+```
 
 ## DFRobot OSD Wiring 
 **Heltec V3 -> DFRobot OSD** <br />
@@ -287,3 +320,11 @@ Edit **paltformio.io** uncommenting/selecting your sources
 ```
 for LilyGo use env:heltec_wifi_lora_32_V3
 
+# WiFi and Bluetooth BT Scanning
+Works only with OSD enabled <br/>
+Uncomment this lines 
+```
+//  #define OSD_ENABLED true
+//  #define WIFI_SCANNING_ENABLED true
+//  #define BT_SCANNING_ENABLED true
+```

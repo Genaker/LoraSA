@@ -12,4 +12,7 @@
     },
     "files.insertFinalNewline": true,
     "files.autoSave": "onFocusChange",
+    "files.associations": {
+        "cstdint": "cpp"
+    },
 }
