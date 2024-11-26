@@ -705,7 +705,33 @@ void setupBoards(bool disable_u8g2)
 
     beginPower();
 
-    beginSDCard();
+    bool sdReady;
+    for (int i = 0; i < 5 && !(sdReady = beginSDCard()); i++)
+    {
+        Serial.println("SD card failed or not found");
+        delay(1000);
+    }
+
+    if (sdReady)
+    {
+        char *card_type = "UNKNOWN";
+        sdcard_type_t t = SD.cardType();
+
+        if (t == sdcard_type_t::CARD_MMC)
+        {
+            card_type = "MMC";
+        }
+        else if (t == sdcard_type_t::CARD_SD)
+        {
+            card_type = "SD";
+        }
+        else if (t == sdcard_type_t::CARD_SDHC)
+        {
+            card_type = "SDHC";
+        }
+
+        Serial.printf("SD card %s is ready.\n", card_type);
+    }
 
     if (!disable_u8g2)
     {
