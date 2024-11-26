@@ -27,8 +27,17 @@
 #ifdef HELTEC
 #include <ArduinoJson.h>
 #endif
+#include "FS.h"
+#include <AsyncTCP.h>
+#include <ESPAsyncWebServer.h>
+#include <File.h>
+#include <LittleFS.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+
+#include "WIFI_SERVER.h"
+
+#define FORMAT_LITTLEFS_IF_FAILED true
 
 // #define OSD_ENABLED true
 // #define WIFI_SCANNING_ENABLED true
@@ -40,12 +49,14 @@
 //  public and so will be exposed to the user. This allows direct manipulation of the
 //  library internals.
 #define RADIOLIB_GODMODE (1)
+#define RADIOLIB_CHECK_PARAMS (0)
 
 #include <charts.h>
 #include <comms.h>
 #include <config.h>
 #include <events.h>
 #include <scan.h>
+#include <stdlib.h>
 
 #ifndef LILYGO
 #include <heltec_unofficial.h>
@@ -136,9 +147,9 @@ int SCAN_RANGES[] = {};
 
 // MHZ per page
 // to put everything into one page set RANGE_PER_PAGE = FREQ_END - 800
-uint64_t RANGE_PER_PAGE = FREQ_END - FREQ_BEGIN; // FREQ_END - FREQ_BEGIN
+uint64_t RANGE_PER_PAGE; // FREQ_END - CONF_FREQ_BEGIN
 
-// To Enable Multi Screen scan
+uint64_t CONF_FREQ_END, CONF_FREQ_BEGIN; // To Enable Multi Screen scan
 //  uint64_t RANGE_PER_PAGE = 50;
 //  Default Range on Menu Button Switch
 
@@ -170,16 +181,8 @@ constexpr int WINDOW_SIZE = 15;
 // if more than 100 it can freeze
 #define SAMPLES 35 //(scan time = 1294)
 
-#define RANGE (int)(FREQ_END - FREQ_BEGIN)
-
-#define SINGLE_STEP (float)(RANGE / (STEPS * SCAN_RBW_FACTOR))
-
-uint64_t range = (int)(FREQ_END - FREQ_BEGIN);
-
-uint64_t iterations = RANGE / RANGE_PER_PAGE;
-
-// uint64_t range_frequency = FREQ_END - FREQ_BEGIN;
-uint64_t median_frequency = (FREQ_BEGIN + FREQ_END) / 2;
+uint64_t RANGE, range, iterations, median_frequency;
+float SINGLE_STEP;
 
 // #define DISABLE_PLOT_CHART false   // unused
 
@@ -225,11 +228,12 @@ uint64_t ranges_count = 0;
 int rssi = 0;
 int state = 0;
 
+int CONF_SAMPLES;
 #ifdef METHOD_SPECTRAL
-constexpr int samples = SAMPLES;
+int samples = SAMPLES;
 #endif
 #ifdef METHOD_RSSI
-constexpr int samples = SAMPLES_RSSI;
+int samples = SAMPLES_RSSI;
 #endif
 
 uint8_t result_index = 0;
@@ -302,8 +306,8 @@ void osdProcess()
     // memset(max_step_range, 33, 30);
     max_bin = 32;
 
-    osd.displayString(12, 1, String(FREQ_BEGIN));
-    osd.displayString(12, OSD_WIDTH - 8, String(FREQ_END));
+    osd.displayString(12, 1, String(CONF_FREQ_BEGIN));
+    osd.displayString(12, OSD_WIDTH - 8, String(CONF_FREQ_END));
     // Finding biggest in result
     //  Skiping 0 and 32 31 to avoid overflow
     for (int i = 1; i < MAX_POWER_LEVELS - 3; i++)
@@ -340,7 +344,7 @@ void osdProcess()
 #ifdef OSD_SIDE_BAR
         {
             osd.displayString(col, OSD_WIDTH - 7,
-                              String(FREQ_BEGIN + (col * osd_mhz_in_bin)) + "-" +
+                              String(CONF_FREQ_BEGIN + (col * osd_mhz_in_bin)) + "-" +
                                   String(max_step_range) + " ");
         }
 #endif
@@ -370,13 +374,20 @@ struct RadioScan : Scan
 
 float RadioScan::getRSSI()
 {
-#ifdef USING_SX1280PA
+#if defined(USING_SX1280PA)
     // radio.startReceive();
     // get instantaneous RSSI value
     // When PR will be merged we can use radi.getRSSI(false);
     uint8_t data[3] = {0, 0, 0}; // RssiInst, Status, RFU
     radio.mod->SPIreadStream(RADIOLIB_SX128X_CMD_GET_RSSI_INST, data, 3);
     return ((float)data[0] / (-2.0));
+
+#elif defined(USING_LR1121)
+    // Try getRssiInst
+    float rssi;
+    radio.getRssiInst(&rssi);
+    // pass the replies
+    return rssi;
 #else
     return radio.getRSSI(false);
 #endif
@@ -395,10 +406,12 @@ void init_radio()
 {
     // initialize SX1262 FSK modem at the initial frequency
     both.println("Init radio");
-#ifdef USING_SX1280PA
-    state = radio.beginGFSK(FREQ_BEGIN);
+#if defined(USING_SX1280PA)
+    state = radio.beginGFSK(CONF_FREQ_BEGIN);
+#elif defined(USING_LR1121)
+    state = radio.beginGFSK(CONF_FREQ_BEGIN, 4.8F, 5.0F, 156.2F, 10, 16U, 1.7F);
 #else
-    state = radio.beginFSK(FREQ_BEGIN);
+    state = radio.beginFSK(CONF_FREQ_BEGIN);
 #endif
     if (state == RADIOLIB_ERR_NONE)
     {
@@ -450,7 +463,7 @@ void init_radio()
 // calibrate only once ,,, at startup
 // TODO: check documentation (9.2.1) if we must calibrate in certain ranges
 #ifdef USING_SX1280PA
-    state = radio.setFrequency(FREQ_BEGIN);
+    state = radio.setFrequency(CONF_FREQ_BEGIN);
     if (state != RADIOLIB_ERR_NONE)
     {
         Serial.println("Error:setFrequency:" + String(state));
@@ -462,9 +475,9 @@ void init_radio()
     }
 #elif USING_SX1276
     // Sets carrier frequency. Allowed values range from 137.0 MHz to 1020.0 MHz.
-    radio.setFrequency(FREQ_BEGIN);
+    radio.setFrequency(CONF_FREQ_BEGIN);
 #else
-    radio.setFrequency(FREQ_BEGIN, true);
+    radio.setFrequency(CONF_FREQ_BEGIN, true);
 #endif
 
     delay(50);
@@ -625,8 +638,56 @@ void logToSerialTask(void *parameter)
 
 void drone_sound_alarm(void *arg, Event &e);
 
+void readConfigFile()
+{
+    // writeFile(LittleFS, "/text.txt", "{WIFI:{name:\"sdfsdf\", Password:\"sdfsdf\"}");
+    ssid = readParameterFromParameterFile(SSID);
+    Serial.println("SSID: " + ssid);
+
+    pass = readParameterFromParameterFile(PASS);
+    Serial.println("PASS: " + pass);
+
+    ip = readParameterFromParameterFile(IP);
+    Serial.println("PASS: " + ip);
+
+    gateway = readParameterFromParameterFile(GATEWAY);
+    Serial.println("GATEWAY: " + gateway);
+
+    fstart = readParameterFromParameterFile(FSTART);
+    Serial.println("FSTART: " + fstart);
+
+    fend = readParameterFromParameterFile(FEND);
+    Serial.println("FEND: " + fend);
+
+    smpls = readParameterFromParameterFile("samples");
+    Serial.println("SAMPLES: " + smpls);
+
+    CONF_SAMPLES = (smpls == "") ? samples : atoi(smpls.c_str());
+    samples = CONF_SAMPLES;
+    CONF_FREQ_BEGIN = (fstart == "") ? FREQ_BEGIN : atoi(fstart.c_str());
+    CONF_FREQ_END = (fend == "") ? FREQ_END : atoi(fend.c_str());
+
+    both.println("C FREQ BEGIN:" + String(CONF_FREQ_BEGIN));
+    both.println("C FREQ END:" + String(CONF_FREQ_END));
+    both.println("C SAMPLES:" + String(CONF_SAMPLES));
+
+    RANGE_PER_PAGE = CONF_FREQ_END - CONF_FREQ_BEGIN; // FREQ_END - CONF_FREQ_BEGIN
+
+    RANGE = (int)(CONF_FREQ_END - CONF_FREQ_BEGIN);
+
+    SINGLE_STEP = (float)(RANGE / (STEPS * SCAN_RBW_FACTOR));
+
+    range = (int)(CONF_FREQ_END - CONF_FREQ_BEGIN);
+
+    iterations = RANGE / RANGE_PER_PAGE;
+
+    // uint64_t range_frequency = FREQ_END - CONF_FREQ_BEGIN;
+    median_frequency = (CONF_FREQ_BEGIN + CONF_FREQ_END) / 2;
+}
+
 void setup(void)
 {
+
 #ifdef LILYGO
     setupBoards(); // true for disable U8g2 display library
     delay(500);
@@ -670,6 +731,7 @@ void setup(void)
     pinMode(BUZZER_PIN, OUTPUT);
     pinMode(REB_PIN, OUTPUT);
     heltec_setup();
+
 #ifdef JOYSTICK_ENABLED
     calibrate_joy();
     pinMode(JOY_BTN_PIN, INPUT_PULLUP);
@@ -689,10 +751,46 @@ void setup(void)
         }
     }
 
+    display.clear();
+
+    both.println("CLICK for WIFI settings.");
+
+    for (int i = 0; i < 200; i++)
+    {
+        both.print(".");
+
+        button.update();
+        delay(10);
+        if (button.pressedNow())
+        {
+            both.println("-----------");
+            both.println("Starting WIFI-SERVER...");
+            // Error here: E (15752) ledc: ledc_get_duty(745): LEDC is not initialized
+            tone(BUZZER_PIN, 205, 100);
+            delay(50);
+            tone(BUZZER_PIN, 205, 500);
+            tone(BUZZER_PIN, 205, 100);
+            delay(50);
+
+            serverStart();
+            both.println("Ready to Connect: 192.168.4.1");
+            delay(600);
+            break;
+        }
+    }
+    both.print("\n");
+
+    both.println("Init File System");
+    initLittleFS();
+
+    readConfigFile();
+
     init_radio();
+
 #ifndef LILYGO
     vbat = heltec_vbat();
     both.printf("V battery: %.2fV (%d%%)\n", vbat, heltec_battery_percent(vbat));
+    delay(1000);
 #endif // end not LILYGO
 #ifdef WIFI_SCANNING_ENABLED
     WiFi.mode(WIFI_STA);
@@ -796,8 +894,9 @@ void setup(void)
     r.trigger_level = TRIGGER_LEVEL;
     stacked.reset(0, 0, display.width(), display.height());
 
-    bar = new DecoratedBarChart(display, 0, 0, display.width(), 0, FREQ_BEGIN, FREQ_END,
-                                LO_RSSI_THRESHOLD, HI_RSSI_THRESHOLD, r.trigger_level);
+    bar = new DecoratedBarChart(display, 0, 0, display.width(), 0, CONF_FREQ_BEGIN,
+                                CONF_FREQ_END, LO_RSSI_THRESHOLD, HI_RSSI_THRESHOLD,
+                                r.trigger_level);
 
     size_t b = stacked.addChart(bar);
 
@@ -811,9 +910,9 @@ void setup(void)
 
     delete[] multiples;
 
-    waterChart =
-        new WaterfallChart(display, 0, WATERFALL_START, display.width(), 0, FREQ_BEGIN,
-                           FREQ_END, r.trigger_level, WATERFALL_SENSITIVITY, model);
+    waterChart = new WaterfallChart(display, 0, WATERFALL_START, display.width(), 0,
+                                    CONF_FREQ_BEGIN, CONF_FREQ_END, r.trigger_level,
+                                    WATERFALL_SENSITIVITY, model);
 
     size_t c = stacked.addChart(waterChart);
     stacked.setHeight(c, stacked.height - WATERFALL_START - statusBar->height);
@@ -1067,13 +1166,13 @@ void loop(void)
     }
 
     // do the scan
-    range = FREQ_END - FREQ_BEGIN;
+    range = CONF_FREQ_END - CONF_FREQ_BEGIN;
     if (RANGE_PER_PAGE > range)
     {
         RANGE_PER_PAGE = range;
     }
 
-    r.fr_begin = FREQ_BEGIN;
+    r.fr_begin = CONF_FREQ_BEGIN;
     r.fr_end = r.fr_begin;
 
     // 50 is a single-screen range
@@ -1157,7 +1256,7 @@ void loop(void)
             state = radio.setFrequency(freq);
 #else
             state = radio.setFrequency(r.current_frequency,
-                                       false); // false = no calibration need here
+                                       true); // true = no calibration need here
 #endif
             int radio_error_count = 0;
             if (state != RADIOLIB_ERR_NONE)
@@ -1206,7 +1305,7 @@ void loop(void)
             // Spectrum analyzer using getRSSI
             {
                 LOG("METHOD RSSI");
-                uint16_t max_rssi = r.rssiMethod(SAMPLES_RSSI, result,
+                uint16_t max_rssi = r.rssiMethod(CONF_SAMPLES, result,
                                                  RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE);
 
                 if (max_x_rssi[display_x] > max_rssi)
@@ -1218,7 +1317,7 @@ void loop(void)
 
             // if this code is not executed LORA radio doesn't work
             // basically SX1262 requires delay
-            // osd.displayString(12, 1, String(FREQ_BEGIN));
+            // osd.displayString(12, 1, String(CONF_FREQ_BEGIN));
             // osd.displayString(12, 30 - 8, String(FREQ_END));
             // delay(2);
 

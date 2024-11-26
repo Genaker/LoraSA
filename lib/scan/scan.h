@@ -27,7 +27,9 @@ constexpr float HI_RSSI_THRESHOLD = -44.0;
 constexpr float LO_RSSI_THRESHOLD = HI_RSSI_THRESHOLD - 66;
 
 // number of samples for RSSI method
-#define SAMPLES_RSSI 12 // 21 //
+#ifndef SAMPLES_RSSI
+#define SAMPLES_RSSI 13 // 21 //
+#endif
 #ifdef USING_SX1280PA
 #define SAMPLES_RSSI 20
 #endif

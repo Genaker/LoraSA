@@ -35,6 +35,10 @@ SX1280 radio = new Module(RADIO_CS_PIN, RADIO_DIO1_PIN, RADIO_RST_PIN, RADIO_BUS
 // Default SPI on pins from pins_arduino.h
 SX1262 radio = new Module(RADIO_CS_PIN, RADIO_DIO1_PIN, RADIO_RST_PIN, RADIO_BUSY_PIN);
 #endif // end USING_SX1262
+#ifdef USING_LR1121
+// Default SPI on pins from pins_arduino.h
+LR1121 radio = new Module(RADIO_CS_PIN, RADIO_DIO9_PIN, RADIO_RST_PIN, RADIO_BUSY_PIN);
+#endif // end USING_LR1121
 #ifdef USING_SX1276
 // Default SPI on pins from pins_arduino.h
 SX1276 radio = new Module(RADIO_CS_PIN, RADIO_DIO1_PIN, RADIO_RST_PIN, RADIO_BUSY_PIN);

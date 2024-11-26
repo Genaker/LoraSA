@@ -364,7 +364,7 @@ void loop()
     for (int i = 0; i < SAMPLES_RSSI; i++)
     {
         state = radio.setFrequency((float)fr + (float)(rssi_mhz_step * u),
-                                   false); // false = no calibration need here
+                                   true); // false = no calibration need here
         int radio_error_count = 0;
         if (state != RADIOLIB_ERR_NONE)
         {
