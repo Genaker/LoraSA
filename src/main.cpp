@@ -220,7 +220,7 @@ uint64_t scan_start_time = 0;
 // #define LOG_DATA_JSON true
 int LOG_DATA_JSON_INTERVAL = 1000; // Log at least every second
 
-#define WEB_SERVER true
+// #define WEB_SERVER true
 
 uint64_t x, y, range_item, w = WATERFALL_START, i = 0;
 int osd_x = 1, osd_y = 2, col = 0, max_bin = 32;
@@ -701,11 +701,20 @@ void setup(void)
 #endif
 
 #ifndef WEB_SERVER
-    RANGE_PER_PAGE = FREQ_END - REQ_BEGIN;
+    CONF_SAMPLES = samples;
+    CONF_FREQ_BEGIN = FREQ_BEGIN;
+    CONF_FREQ_END = FREQ_END;
+
+    both.println("FREQ BEGIN:" + String(CONF_FREQ_BEGIN));
+    both.println("FREQ END:" + String(CONF_FREQ_END));
+    both.println("SAMPLES:" + String(CONF_SAMPLES));
+
+    RANGE_PER_PAGE = CONF_FREQ_END - CONF_FREQ_BEGIN; // FREQ_END - CONF_FREQ_BEGIN
     RANGE = (int)(CONF_FREQ_END - CONF_FREQ_BEGIN);
     SINGLE_STEP = (float)(RANGE / (STEPS * SCAN_RBW_FACTOR));
     range = (int)(CONF_FREQ_END - CONF_FREQ_BEGIN);
     iterations = RANGE / RANGE_PER_PAGE;
+    median_frequency = (CONF_FREQ_BEGIN + CONF_FREQ_END) / 2;
 #endif
     init_radio();
 
