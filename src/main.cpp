@@ -220,6 +220,8 @@ uint64_t scan_start_time = 0;
 // #define LOG_DATA_JSON true
 int LOG_DATA_JSON_INTERVAL = 1000; // Log at least every second
 
+#define WEB_SERVER true
+
 uint64_t x, y, range_item, w = WATERFALL_START, i = 0;
 int osd_x = 1, osd_y = 2, col = 0, max_bin = 32;
 uint64_t ranges_count = 0;
@@ -663,6 +665,7 @@ void setup(void)
 
     display.clear();
 
+#ifdef WEB_SERVER
     both.println("CLICK for WIFI settings.");
 
     for (int i = 0; i < 200; i++)
@@ -695,6 +698,15 @@ void setup(void)
 
     readConfigFile();
 
+#endif
+
+#ifndef WEB_SERVER
+    RANGE_PER_PAGE = FREQ_END - REQ_BEGIN;
+    RANGE = (int)(CONF_FREQ_END - CONF_FREQ_BEGIN);
+    SINGLE_STEP = (float)(RANGE / (STEPS * SCAN_RBW_FACTOR));
+    range = (int)(CONF_FREQ_END - CONF_FREQ_BEGIN);
+    iterations = RANGE / RANGE_PER_PAGE;
+#endif
     init_radio();
 
 #ifndef LILYGO
