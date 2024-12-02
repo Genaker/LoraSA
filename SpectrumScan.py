@@ -43,7 +43,22 @@ def print_progress_bar(iteration, total, prefix='', suffix='', decimals=1, lengt
 
 def parse_line(line):
     """Parse a JSON line from the serial input."""
-    return json.loads(line)
+
+    line = line[line.index('SCAN_RESULT '):]  # support garbage interleaving with the string
+    _, count, rest = line.split(' ', 2)
+    return int(count), json.loads(rest.replace('(', '[').replace(')', ']'))
+
+POLY = 0x1021
+def crc16(s, c):
+    for ch in s:
+        c = c ^ (ord(ch) << 8)
+        for i in range(8):
+            if c & 0x8000:
+                c = ((c << 1) ^ POLY) & 0xffff
+            else:
+                c = (c << 1) & 0xffff
+
+    return c
 
 def main():
     parser = argparse.ArgumentParser(formatter_class=RawTextHelpFormatter, description='''\
@@ -62,13 +77,14 @@ def main():
                         help=f'Number of scanlines to record (defaults to {DEFAULT_SCAN_LEN})')
     parser.add_argument('--offset', default=DEFAULT_RSSI_OFFSET, type=int,
                         help=f'Default RSSI offset in dBm (defaults to {DEFAULT_RSSI_OFFSET})')
-    parser.add_argument('--freq', default=-1, type=float,
-                        help='Default starting frequency in MHz')
+    parser.add_argument('--buckets', default=-1, type=int,
+                        help='Default number of buckets to group frequencies into; if < 1, will autodetect')
+
     args = parser.parse_args()
 
     # Create the result array
     scan_len = args.len
-    arr = np.zeros((scan_len, SCAN_WIDTH))
+    arr = None
 
     # Scanline counter
     row = 0
@@ -76,42 +92,81 @@ def main():
     # List of frequencies
     freq_list = []
 
+    checksum = -1
+    so_far = 0
+
     # Open the COM port
     with serial.Serial(args.port, args.speed, timeout=None) as com:
-        while True:
+
+        com.write(bytes('SCAN -1 -1\n', 'ascii'))
+
+        lines = 0
+        errors = 0
+        while row < scan_len:
             # Update the progress bar
             print_progress_bar(row, scan_len)
 
             # Read a single line
             try:
-                line = com.readline().decode('utf-8').strip()
+                line = com.readline().decode('utf-8')
             except UnicodeDecodeError:
+                errors += 1
                 continue
 
-            if line.startswith("{"):
+            if 'WRAP ' in line:
                 try:
-                    data = parse_line(line)
-                except json.JSONDecodeError:
+                    _, c, rest = line.split(' ', 2)
+                    checksum = int(c, 16)
+                    so_far = crc16(rest, 0)
+                except Exception as e:
+                    errors += 1
+                continue
+
+            if 'SCAN_RESULT ' in line:
+                if checksum == -1:
+                    errors += 1
                     continue
 
-                # get the lowest frequency for now, could be averaged too.
-                freq = data["low_range_freq"]
+                c16 = crc16(line, so_far)
+                if checksum != c16:
+                    errors += 1
+                    checksum = -1
+                    continue
 
-                # value in negative, eg: -70
-                rssi = int(data["value"])
+                checksum = -1
 
-                if freq not in freq_list:
-                    freq_list.append(freq)
-                
-                col = freq_list.index(freq)
-                arr[row][col] = rssi
-                
+                lines += 1
+                try:
+                    count, data = parse_line(line)
+                    data.sort()
+                except json.JSONDecodeError:
+                    errors += 1
+                    continue
+
+                r = list(zip(*data))
+                if len(r) != 2 or len(data) != count:
+                    errors += 1
+                    continue
+
+                freqs, rssis = r
+
+                if arr is None:
+                    w = count if args.buckets < 1 else args.buckets
+                    arr = np.zeros((scan_len, w))
+                    freq_list = freqs
+
+                for col in range(len(rssis)):
+                    arr[row][col] = rssis[col]
+
                 # Increment the row counter
                 row += 1
 
-                # Check if we're done
-                if row >= scan_len:
-                    break
+        # tell it to stop producing SCAN_RESULTS
+        com.write(bytes('SCAN 0 -1\n', 'ascii'))
+
+    print("Read %d lines, encountered %d errors. Success rate: %.2f" %
+          (lines, errors, (100 - 100 * errors / lines) if lines > 0 else 0))
+    arr[arr == 0] = arr.min() - 20
 
     # Create the figure
     fig, ax = plt.subplots(figsize=(12, 8))

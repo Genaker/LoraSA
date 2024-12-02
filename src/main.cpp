@@ -52,6 +52,8 @@
 #define RADIOLIB_CHECK_PARAMS (0)
 
 #include <charts.h>
+#include <comms.h>
+#include <config.h>
 #include <events.h>
 #include <scan.h>
 #include <stdlib.h>
@@ -207,8 +209,8 @@ uint64_t drone_detected_frequency_end = 0;
 bool single_page_scan = false;
 
 // #define PRINT_DEBUG
-#define PRINT_PROFILE_TIME
 
+#define PRINT_PROFILE_TIME
 #ifdef PRINT_PROFILE_TIME
 uint64_t loop_start = 0;
 uint64_t loop_time = 0;
@@ -218,7 +220,6 @@ uint64_t scan_start_time = 0;
 
 // log data via serial console, JSON format:
 // #define LOG_DATA_JSON true
-int LOG_DATA_JSON_INTERVAL = 1000; // Log at least every second
 
 // #define WEB_SERVER true
 
@@ -366,6 +367,8 @@ void osdProcess()
 }
 #endif
 
+Config config;
+
 struct RadioScan : Scan
 {
     float getRSSI() override;
@@ -488,14 +491,50 @@ struct frequency_scan_result
     uint64_t end;
     uint64_t last_epoch;
     int16_t rssi; // deliberately not a float; floats can pin task to wrong core forever
+
+    ScanTaskResult dump;
+    size_t readings_sz;
 } frequency_scan_result;
 
 TaskHandle_t logToSerial = NULL;
+TaskHandle_t dumpToComms = NULL;
 
-void eventListenerForMSP(void *arg, Event &e)
+void eventListenerForReport(void *arg, Event &e)
 {
     if (e.type == EventType::DETECTED)
     {
+        if (e.epoch != frequency_scan_result.last_epoch)
+        {
+            frequency_scan_result.dump.sz = 0;
+        }
+
+        if (frequency_scan_result.dump.sz >= frequency_scan_result.readings_sz)
+        {
+            size_t old_sz = frequency_scan_result.readings_sz;
+            frequency_scan_result.readings_sz = frequency_scan_result.dump.sz + 1;
+            uint32_t *f = new uint32_t[frequency_scan_result.readings_sz];
+            int16_t *r = new int16_t[frequency_scan_result.readings_sz];
+
+            if (old_sz > 0)
+            {
+                memcpy(f, frequency_scan_result.dump.freqs_khz,
+                       old_sz * sizeof(uint32_t));
+                memcpy(r, frequency_scan_result.dump.rssis, old_sz * sizeof(int16_t));
+
+                delete[] frequency_scan_result.dump.freqs_khz;
+                delete[] frequency_scan_result.dump.rssis;
+            }
+
+            frequency_scan_result.dump.freqs_khz = f;
+            frequency_scan_result.dump.rssis = r;
+        }
+
+        frequency_scan_result.dump.freqs_khz[frequency_scan_result.dump.sz] =
+            e.detected.freq * 1000; // convert to kHz
+        frequency_scan_result.dump.rssis[frequency_scan_result.dump.sz] =
+            max(e.detected.rssi, -999.0f);
+        frequency_scan_result.dump.sz++;
+
         if (e.epoch != frequency_scan_result.last_epoch ||
             e.detected.rssi > frequency_scan_result.rssi)
         {
@@ -513,7 +552,47 @@ void eventListenerForMSP(void *arg, Event &e)
         {
             xTaskNotifyGive(logToSerial);
         }
+
+        if (dumpToComms != NULL)
+        {
+            xTaskNotifyGive(dumpToComms);
+        }
         return;
+    }
+}
+
+ScanTask report_scans = ScanTask{
+    count : 0, // 0 => report none; < 0 => report forever; > 0 => report that many
+    delay : 0  // 0 => as and when it happens; > 0 => at least once that many ms
+};
+
+void dumpToCommsTask(void *parameter)
+{
+    uint64_t last_epoch = frequency_scan_result.last_epoch;
+
+    for (;;)
+    {
+        int64_t delay = report_scans.delay;
+        if (delay == 0)
+        {
+            delay = (1ull << 63) - 1;
+        }
+
+        ulTaskNotifyTake(true, pdMS_TO_TICKS(delay));
+        if (report_scans.count == 0 || frequency_scan_result.last_epoch == last_epoch)
+        {
+            continue;
+        }
+
+        if (report_scans.count > 0)
+        {
+            report_scans.count--;
+        }
+
+        Message m;
+        m.type = MessageType::SCAN_RESULT;
+        m.payload.dump = frequency_scan_result.dump;
+        Comms0->send(m);
     }
 }
 
@@ -529,7 +608,7 @@ void logToSerialTask(void *parameter)
 
     for (;;)
     {
-        ulTaskNotifyTake(true, pdMS_TO_TICKS(LOG_DATA_JSON_INTERVAL));
+        ulTaskNotifyTake(true, pdMS_TO_TICKS(config.log_data_json_interval));
         if (frequency_scan_result.begin != frequency_scan_result.end ||
             frequency_scan_result.last_epoch != last_epoch)
         {
@@ -614,7 +693,7 @@ void setup(void)
 #ifdef LILYGO
     setupBoards(); // true for disable U8g2 display library
     delay(500);
-    Serial.println("Setup LiLyGO board is done");
+    Serial.println("Setup LiLybeginSDCardGO board is done");
 #endif
 
     // LED brightness
@@ -638,6 +717,17 @@ void setup(void)
     float resolution;
     bt_start = millis();
     wf_start = millis();
+
+    config = Config::init();
+    r.comms_initialized = Comms::initComms(config);
+    if (r.comms_initialized)
+    {
+        Serial.println("Comms initialized fine");
+    }
+    else
+    {
+        Serial.println("Comms did not initialize");
+    }
 
     pinMode(LED, OUTPUT);
     pinMode(BUZZER_PIN, OUTPUT);
@@ -820,6 +910,7 @@ void setup(void)
 #ifdef LOG_DATA_JSON
     xTaskCreate(logToSerialTask, "LOG_DATA_JSON", 2048, NULL, 1, &logToSerial);
 #endif
+    xTaskCreate(dumpToCommsTask, "DUMP_RESPONSE_PROCESS", 2048, NULL, 1, &dumpToComms);
 
     r.trigger_level = TRIGGER_LEVEL;
     stacked.reset(0, 0, display.width(), display.height());
@@ -857,7 +948,9 @@ void setup(void)
     r.addEventListener(DETECTED, drone_sound_alarm, &r);
     r.addEventListener(SCAN_TASK_COMPLETE, stacked);
 
-    r.addEventListener(ALL_EVENTS, eventListenerForMSP, NULL);
+    frequency_scan_result.readings_sz = 0;
+    frequency_scan_result.dump.sz = 0;
+    r.addEventListener(ALL_EVENTS, eventListenerForReport, NULL);
 
 #ifdef UPTIME_CLOCK
     uptime = new UptimeClock(display, millis());
@@ -1047,6 +1140,24 @@ void check_ranges()
     }
 }
 
+void checkComms()
+{
+    while (Comms0->available() > 0)
+    {
+        Message *m = Comms0->receive();
+        if (m == NULL)
+            continue;
+
+        switch (m->type)
+        {
+        case MessageType::SCAN:
+            report_scans = m->payload.scan;
+            break;
+        }
+        delete m;
+    }
+}
+
 // MAX Frequency RSSI BIN value of the samples
 int max_rssi_x = 999;
 
@@ -1058,11 +1169,14 @@ void loop(void)
     drone_detected_frequency_start = 0;
     ranges_count = 0;
 
-// reset scan time
-#ifdef PRINT_PROFILE_TIME
-    scan_time = 0;
-    loop_start = millis();
-#endif
+    checkComms();
+
+    // reset scan time
+    if (config.print_profile_time)
+    {
+        scan_time = 0;
+        loop_start = millis();
+    }
     r.epoch++;
 
     if (!ANIMATED_RELOAD || !single_page_scan)
@@ -1457,10 +1571,13 @@ void loop(void)
 
     joy_btn_clicked = false;
 
+    if (config.print_profile_time)
+    {
 #ifdef PRINT_PROFILE_TIME
-    loop_time = millis() - loop_start;
-    Serial.printf("LOOP: %lld ms; SCAN: %lld ms;\n  ", loop_time, scan_time);
+        loop_time = millis() - loop_start;
+        Serial.printf("LOOP: %lld ms; SCAN: %lld ms;\n  ", loop_time, scan_time);
 #endif
+    }
 // No WiFi and BT Scan Without OSD
 #ifdef OSD_ENABLED
 #ifdef WIFI_SCANNING_ENABLED
