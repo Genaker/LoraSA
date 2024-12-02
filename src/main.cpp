@@ -221,6 +221,8 @@ uint64_t scan_start_time = 0;
 // log data via serial console, JSON format:
 // #define LOG_DATA_JSON true
 
+// #define WEB_SERVER true
+
 uint64_t x, y, range_item, w = WATERFALL_START, i = 0;
 int osd_x = 1, osd_y = 2, col = 0, max_bin = 32;
 uint64_t ranges_count = 0;
@@ -753,6 +755,7 @@ void setup(void)
 
     display.clear();
 
+#ifdef WEB_SERVER
     both.println("CLICK for WIFI settings.");
 
     for (int i = 0; i < 200; i++)
@@ -785,6 +788,24 @@ void setup(void)
 
     readConfigFile();
 
+#endif
+
+#ifndef WEB_SERVER
+    CONF_SAMPLES = samples;
+    CONF_FREQ_BEGIN = FREQ_BEGIN;
+    CONF_FREQ_END = FREQ_END;
+
+    both.println("FREQ BEGIN:" + String(CONF_FREQ_BEGIN));
+    both.println("FREQ END:" + String(CONF_FREQ_END));
+    both.println("SAMPLES:" + String(CONF_SAMPLES));
+
+    RANGE_PER_PAGE = CONF_FREQ_END - CONF_FREQ_BEGIN; // FREQ_END - CONF_FREQ_BEGIN
+    RANGE = (int)(CONF_FREQ_END - CONF_FREQ_BEGIN);
+    SINGLE_STEP = (float)(RANGE / (STEPS * SCAN_RBW_FACTOR));
+    range = (int)(CONF_FREQ_END - CONF_FREQ_BEGIN);
+    iterations = RANGE / RANGE_PER_PAGE;
+    median_frequency = (CONF_FREQ_BEGIN + CONF_FREQ_END) / 2;
+#endif
     init_radio();
 
 #ifndef LILYGO
