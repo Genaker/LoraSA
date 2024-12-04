@@ -23,11 +23,9 @@
 
 //  #define HELTEC_NO_DISPLAY
 
-#include <Arduino.h>
-#ifdef HELTEC
-#include <ArduinoJson.h>
-#endif
 #include "FS.h"
+#include <Arduino.h>
+#include <ArduinoJson.h>
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include <File.h>
@@ -598,11 +596,8 @@ void dumpToCommsTask(void *parameter)
 
 void logToSerialTask(void *parameter)
 {
-#ifdef HELTEC
     JsonDocument doc;
     char jsonOutput[200];
-#endif
-
     uint64_t last_epoch = frequency_scan_result.last_epoch;
     frequency_scan_result.rssi = -999;
 
@@ -620,20 +615,12 @@ void logToSerialTask(void *parameter)
                 continue;
             }
 
-#ifdef HELTEC
             doc["low_range_freq"] = frequency_scan_result.begin;
             doc["high_range_freq"] = frequency_scan_result.end;
             doc["value"] = String(highest_value_scanned);
 
             serializeJson(doc, jsonOutput);
             Serial.println(jsonOutput);
-#else
-            Serial.printf("{\"low_range_freq\": %" PRIu64
-                          ", \"high_range_freq\": %" PRIu64 ", "
-                          "\"value\": \"%" PRIi16 "\"}\n",
-                          frequency_scan_result.begin, frequency_scan_result.end,
-                          highest_value_scanned);
-#endif
         }
     }
 }
