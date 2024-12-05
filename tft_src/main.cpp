@@ -44,6 +44,12 @@ std::vector<Entry> fpvArray = {{"FPV-ELRS", 160, 350, 100, ST7789_BLUE},
 #define st7789_LED_K_Pin 17
 #define st7789_VTFT_CTRL_Pin 7
 
+#define st7789_brightness_channel 0    // PWM channel (0-15)
+#define st7789_brightness_freq 5000    // PWM frequency in Hz
+#define st7789_brightness_resolution 8 // 8-bit resolution (0-255)
+
+int current_brightness = 255;
+
 // lcd object pointer, it's a 240x135 lcd display, Adafruit dependcy
 static HT_ST7789 *st7789 = NULL;
 static SPIClass *gspi_lcd = NULL;
@@ -234,6 +240,18 @@ void drawText(uint16_t x, uint16_t y, String text, uint16_t color = ST7789_WHITE
     st7789->setTextColor(color);
     st7789->setTextWrap(true);
     st7789->print(text.c_str());
+}
+
+// Set SPI brightness using st7789_LED_K_Pin pin.
+void setBrightness()
+{
+    current_brightness -= 50;
+
+    if (current_brightness < 50)
+    {
+        current_brightness = 255;
+    }
+    ledcWrite(st7789_brightness_channel, current_brightness);
 }
 
 #define battery_w 13
@@ -590,6 +608,7 @@ void loop()
             if (button_pressed_counter > 18)
             {
                 drawText(320 - 5, 5, "*", ST7789_WHITE);
+                setBrightness();
             }
         }
     }
@@ -740,6 +759,13 @@ void setup()
 
     pinMode(st7789_LED_K_Pin, OUTPUT);
     digitalWrite(st7789_LED_K_Pin, HIGH);
+
+    // set brightness:
+    ledcSetup(st7789_brightness_channel, st7789_brightness_freq,
+              st7789_brightness_resolution);
+    ledcAttachPin(st7789_LED_K_Pin, st7789_brightness_channel);
+    ledcWrite(st7789_brightness_channel, current_brightness);
+
     // pinMode(5, OUTPUT);
     // digitalWrite(5, HIGH);
 
