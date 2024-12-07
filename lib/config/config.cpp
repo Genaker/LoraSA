@@ -112,6 +112,12 @@ Config Config::init()
             continue;
         }
 
+        if (r.key.equalsIgnoreCase("listen_on_serial1"))
+        {
+            c.listen_on_serial1 = r.value;
+            continue;
+        }
+
         if (r.key.equalsIgnoreCase("listen_on_usb"))
         {
             c.listen_on_serial0 = r.value;
@@ -136,6 +142,7 @@ bool Config::write_config(const char *path)
     f.println("print_profile_time = " + String(print_profile_time ? "true" : "false"));
     f.println("log_data_json_interval = " + String(log_data_json_interval));
     f.println("listen_on_serial0 = " + listen_on_serial0);
+    f.println("listen_on_serial1 = " + listen_on_serial1);
     f.println("listen_on_usb = " + listen_on_usb);
 
     f.close();

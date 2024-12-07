@@ -686,6 +686,8 @@ ScanTask report_scans = ScanTask{
     delay : 0  // 0 => as and when it happens; > 0 => at least once that many ms
 };
 
+bool requested_host = true;
+
 void dumpToCommsTask(void *parameter)
 {
     uint64_t last_epoch = frequency_scan_result.last_epoch;
@@ -712,7 +714,17 @@ void dumpToCommsTask(void *parameter)
         Message m;
         m.type = MessageType::SCAN_RESULT;
         m.payload.dump = frequency_scan_result.dump;
-        Comms0->send(m);
+        if (requested_host)
+        {
+            HostComms->send(m);
+        }
+        else
+        {
+            if (Comms0 != NULL)
+                Comms0->send(m);
+            if (Comms1 != NULL)
+                Comms1->send(m);
+        }
     }
 }
 #endif
@@ -1274,9 +1286,9 @@ void check_ranges()
 #ifdef SERIAL_OUT
 void checkComms()
 {
-    while (Comms0->available() > 0)
+    while (HostComms->available() > 0)
     {
-        Message *m = Comms0->receive();
+        Message *m = HostComms->receive();
         if (m == NULL)
             continue;
 
@@ -1284,6 +1296,52 @@ void checkComms()
         {
         case MessageType::SCAN:
             report_scans = m->payload.scan;
+            requested_host = true;
+            Serial.println("Host: forwarding message SCAN to peer");
+            Comms0->send(*m); // forward to peer
+            Comms1->send(*m); // forward to peer
+            break;
+        }
+        delete m;
+    }
+
+    while (Comms0->available() > 0)
+    {
+        Message *m = Comms0->receive();
+        Serial.println("Comms0: was available, but didn't receive");
+        if (m == NULL)
+            continue;
+
+        switch (m->type)
+        {
+        case MessageType::SCAN:
+            report_scans = m->payload.scan; // receive from peer
+            requested_host = false;
+            break;
+
+        case MessageType::SCAN_RESULT:
+            HostComms->send(*m); // forward from peer
+            break;
+        }
+        delete m;
+    }
+
+    while (Comms1->available() > 0)
+    {
+        Message *m = Comms1->receive();
+        Serial.println("Comms1: was available, but didn't receive");
+        if (m == NULL)
+            continue;
+
+        switch (m->type)
+        {
+        case MessageType::SCAN:
+            report_scans = m->payload.scan; // receive from peer
+            requested_host = false;
+            break;
+
+        case MessageType::SCAN_RESULT:
+            HostComms->send(*m); // forward from peer
             break;
         }
         delete m;

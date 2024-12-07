@@ -10,12 +10,13 @@ struct Config
     bool print_profile_time;
     int log_data_json_interval;
     String listen_on_serial0;
+    String listen_on_serial1;
     String listen_on_usb;
 
     Config()
         : create_missing_config(CREATE_MISSING_CONFIG), print_profile_time(false),
           log_data_json_interval(1000), listen_on_serial0(String("none")),
-          listen_on_usb("readline") {};
+          listen_on_serial1(String("readline")), listen_on_usb("readline") {};
     bool write_config(const char *path);
 
     static Config init();

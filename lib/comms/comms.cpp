@@ -7,7 +7,19 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
-Comms *Comms0;
+Comms *HostComms;
+Comms *Comms0 = NULL;
+Comms *Comms1 = NULL;
+
+void _onReceiveUsb(size_t len)
+{
+    if (HostComms == NULL)
+    {
+        return;
+    }
+
+    HostComms->_onReceive();
+}
 
 void _onReceive0()
 {
@@ -19,54 +31,82 @@ void _onReceive0()
     Comms0->_onReceive();
 }
 
+void _onReceive1()
+{
+    if (Comms1 == NULL)
+    {
+        return;
+    }
+
+    Comms1->_onReceive();
+}
+
 void _onUsbEvent0(void *arg, esp_event_base_t event_base, int32_t event_id,
                   void *event_data)
 {
     if (event_base == ARDUINO_HW_CDC_EVENTS)
     {
-        // arduino_hw_cdc_event_data_t *data = (arduino_hw_cdc_event_data_t *)event_data;
+        arduino_hw_cdc_event_data_t *data = (arduino_hw_cdc_event_data_t *)event_data;
         if (event_id == ARDUINO_HW_CDC_RX_EVENT)
         {
-            _onReceive0(/*data->rx.len*/);
+            _onReceiveUsb(data->rx.len);
         }
     }
 }
 
 bool Comms::initComms(Config &c)
 {
+    bool fine = false;
     if (c.listen_on_usb.equalsIgnoreCase("readline"))
     {
         // comms using readline plaintext protocol
-        Comms0 = new ReadlineComms(Serial);
+        HostComms = new ReadlineComms("Host", Serial);
         Serial.onEvent(ARDUINO_HW_CDC_RX_EVENT, _onUsbEvent0);
         Serial.begin();
 
         Serial.println("Initialized communications on Serial using readline protocol");
 
-        return true;
+        fine = true;
     }
-    else if (c.listen_on_serial0.equalsIgnoreCase("readline"))
+
+    if (c.listen_on_serial0.equalsIgnoreCase("readline"))
     {
         // comms using readline plaintext protocol
-        Comms0 = new ReadlineComms(Serial0);
+        Comms0 = new ReadlineComms("UART0", Serial0);
         Serial0.onReceive(_onReceive0, false);
+        Serial0.begin(115200);
 
         Serial.println("Initialized communications on Serial0 using readline protocol");
-
-        return true;
     }
-
-    if (c.listen_on_serial0.equalsIgnoreCase("none"))
+    else
     {
         Comms0 = new NoopComms();
 
-        Serial.println("Configured none - Initialized no communications");
-        return false;
+        Serial.println("Configured none - Initialized no communications on Serial0");
     }
 
-    Comms0 = new NoopComms();
-    Serial.println("Nothing is configured - initialized no communications");
-    return false;
+    if (c.listen_on_serial1.equalsIgnoreCase("readline"))
+    {
+        // comms using readline plaintext protocol
+        Comms1 = new ReadlineComms("UART1", Serial1);
+        Serial1.onReceive(_onReceive1, false);
+        Serial1.begin(115200);
+
+        Serial.println("Initialized communications on Serial1 using readline protocol");
+    }
+    else
+    {
+        Comms1 = new NoopComms();
+
+        Serial.println("Configured none - Initialized no communications on Serial1");
+    }
+
+    if (!fine)
+    {
+        HostComms = new NoopComms();
+        Serial.println("Nothing is configured - initialized no communications");
+    }
+    return fine;
 }
 
 size_t Comms::available() { return received_pos; }
@@ -177,6 +217,10 @@ void ReadlineComms::_onReceive()
                     delete m;
                 }
             }
+            else
+            {
+                Serial.println(name + ": discarding > " + pack);
+            }
             partialPacket = partialPacket.substring(i + 1);
             i = partialPacket.indexOf('\n');
         }
@@ -191,6 +235,7 @@ bool ReadlineComms::send(Message &m)
     {
     case MessageType::SCAN:
         p = _scan_str(m.payload.scan);
+        Serial.println(name + ": the message is: " + p);
         break;
     case MessageType::SCAN_RESULT:
         p = _scan_result_str(m.payload.dump);
@@ -267,8 +312,6 @@ Message *_parsePacket(String p)
         m->payload.scan.delay = _intParam(p, -1);
         return m;
     }
-
-    Serial.println("ignoring unknown message " + p);
     return NULL;
 }
 

@@ -45,6 +45,7 @@ struct Message
 
 struct Comms
 {
+    String name;
     Stream &serial;
     Message **received;
     size_t received_sz;
@@ -52,8 +53,9 @@ struct Comms
 
     Message *wrap;
 
-    Comms(Stream &serial)
-        : serial(serial), received(NULL), received_sz(0), received_pos(0), wrap(NULL) {};
+    Comms(String name, Stream &serial)
+        : name(name), serial(serial), received(NULL), received_sz(0), received_pos(0),
+          wrap(NULL) {};
 
     virtual size_t available();
     virtual bool send(Message &) = 0;
@@ -67,7 +69,7 @@ struct Comms
 
 struct NoopComms : Comms
 {
-    NoopComms() : Comms(Serial0) {};
+    NoopComms() : Comms("no-op", Serial0) {};
 
     virtual bool send(Message &) { return true; };
     virtual void _onReceive() {};
@@ -77,14 +79,19 @@ struct ReadlineComms : Comms
 {
     String partialPacket;
 
-    ReadlineComms(Stream &serial) : Comms(serial), partialPacket("") {};
+    ReadlineComms(String name, Stream &serial)
+        : Comms(name, serial), partialPacket("") {};
 
     virtual bool send(Message &) override;
 
     virtual void _onReceive() override;
 };
 
+extern Comms *HostComms;
+
 extern Comms *Comms0;
+
+extern Comms *Comms1;
 
 #endif
 #endif

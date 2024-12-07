@@ -133,6 +133,8 @@ int main(int argc, char** argv)
                     lines--;
                     write(1, buffer, pos);
                 } else if (!is_wrap) {
+                    write(1, "> ", 2);
+                    write(1, buffer, pos);
                     errors++;
                 }
 
