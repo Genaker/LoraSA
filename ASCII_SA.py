@@ -304,10 +304,10 @@ if __name__ == "__main__":
         if args.no_debug is False:
             show_debug = input("Show debug information? (yes/no, default: yes): ").strip().lower() not in ["no", "n"]
         else: 
-            show_debug = args.no_debug
+            show_debug = not args.no_debug
         if args.no_color is False:
             use_color = input("Use colored output? (yes/no, default: yes): ").strip().lower() not in ["no", "n"]
         else: 
-            use_color = args.no_color
+            use_color = not args.no_color
         curses.wrapper(read_serial_data, selected_port, baudrate, resolution_mhz, db_threshold, db_per_hash, use_color, show_debug)
 
