@@ -340,3 +340,11 @@ Output:
 
 <img width="861" alt="image" src="https://github.com/user-attachments/assets/131842e6-2216-4da1-adb3-accb0fb80427">
 
+# Web app 
+We also have a web app interface to output ESP Lora data via USB/Serial </br>
+Go to the website (https://lora-sa.pages.dev/), click connect and select a device: </br>
+https://lora-sa.pages.dev/
+
+![image](https://github.com/user-attachments/assets/71b7d2aa-bb70-4c55-899b-0edfbeb73ed3)
+
+<img width="1625" alt="image" src="https://github.com/user-attachments/assets/71acf551-f256-47ab-b95e-116b2fefcdaa">
