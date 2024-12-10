@@ -706,11 +706,14 @@ void setupBoards(bool disable_u8g2)
     beginPower();
 
     bool sdReady;
+
+#ifndef DISABLE_SDCARD
     for (int i = 0; i < 5 && !(sdReady = beginSDCard()); i++)
     {
         Serial.println("SD card failed or not found");
         delay(1000);
     }
+#endif
 
     if (sdReady)
     {
