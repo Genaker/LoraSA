@@ -328,3 +328,15 @@ Uncomment this lines
 //  #define WIFI_SCANNING_ENABLED true
 //  #define BT_SCANNING_ENABLED true
 ```
+
+# Communication via Serial USB
+You can receive RAW frequency data from the ESP32 by sending serial command **Scan -1 -1**
+Also, you can use ASCI_SA.py to read data from serial and represent as an ASCI character chart on your device. </br>
+Run:
+```
+python3 ASCI_SA.py    
+```
+Output:
+
+<img width="861" alt="image" src="https://github.com/user-attachments/assets/131842e6-2216-4da1-adb3-accb0fb80427">
+
