@@ -1,3 +1,4 @@
+import argparse
 import serial
 import serial.tools.list_ports
 import time
@@ -273,12 +274,40 @@ if __name__ == "__main__":
     print("Serial Communication Script: Grouped Histogram with Adjustable Threshold")
     selected_port = select_serial_port()
 
+    parser = argparse.ArgumentParser(
+        description="Serial Communication Script with Adjustable Threshold and Histogram."
+    )
+
+    # Command-line arguments
+    parser.add_argument("--baudrate", type=int, default=115200, help="Baud rate for the serial connection (default: 115200)")
+    parser.add_argument("--resolution", type=int, default=None, help="Frequency resolution in MHz (default: 1 MHz)")
+    parser.add_argument("--threshold", type=int, default=None, help="Minimum RSSI value to start bars (default: -110)")
+    parser.add_argument("--db-per-hash", type=int, default=None, help="dB per '#' in the histogram (default: 5)")
+    parser.add_argument("--no-color", action="store_true", help="Disable colored output")
+    parser.add_argument("--no-debug", action="store_true", help="Disable debug information")
+    args = parser.parse_args()
+
     if selected_port:
-        baudrate = 115200
-        resolution_mhz = int(input("Enter frequency resolution in MHz (default: 1 MHz): ") or 1)
-        db_threshold = int(input("Enter minimum RSSI value to start bars (default: -110): ") or -110)
-        db_per_hash = int(input("Enter dB per #: (default: 5): ") or 5)
-        show_debug = input("Show debug information? (yes/no, default: yes): ").strip().lower() not in ["no", "n"]
-        use_color = input("Use colored output? (yes/no, default: yes): ").strip().lower() not in ["no", "n"]
+        baudrate = args.baudrate
+        if args.resolution is None:
+            resolution_mhz = int(input("Enter frequency resolution in MHz (default: 1 MHz): ") or 1)
+        else: 
+            resolution_mhz = args.resolution
+        if args.threshold is None:
+            db_threshold = int(input("Enter minimum RSSI value to start bars (default: -110): ") or -110)
+        else: 
+            db_threshold = args.threshold
+        if args.db_per_hash is None:
+            db_per_hash = int(input("Enter dB per #: (default: 5): ") or 5)
+        else: 
+            db_per_hash = args.db_per_hash
+        if args.no_debug is False:
+            show_debug = input("Show debug information? (yes/no, default: yes): ").strip().lower() not in ["no", "n"]
+        else: 
+            show_debug = args.no_debug
+        if args.no_color is False:
+            use_color = input("Use colored output? (yes/no, default: yes): ").strip().lower() not in ["no", "n"]
+        else: 
+            use_color = args.no_color
         curses.wrapper(read_serial_data, selected_port, baudrate, resolution_mhz, db_threshold, db_per_hash, use_color, show_debug)
 
