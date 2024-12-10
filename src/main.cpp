@@ -25,7 +25,9 @@
 
 #include "FS.h"
 #include <Arduino.h>
+#ifdef LOG_DATA_JSON
 #include <ArduinoJson.h>
+#endif
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include <File.h>
@@ -594,6 +596,7 @@ void dumpToCommsTask(void *parameter)
     }
 }
 
+#ifdef LOG_DATA_JSON
 void logToSerialTask(void *parameter)
 {
     JsonDocument doc;
@@ -624,6 +627,7 @@ void logToSerialTask(void *parameter)
         }
     }
 }
+#endif
 
 void drone_sound_alarm(void *arg, Event &e);
 
