@@ -341,6 +341,10 @@ Run:
 ```
 python3 ASCII_SA.py    
 ```
+or with parameters to set input 
+```
+python3 ASCII_SA.py --resolution 1 --threshold -110 --db-per-hash 5 --no-color --no-debug
+```
 Output:
 
 <img width="861" alt="image" src="https://github.com/user-attachments/assets/131842e6-2216-4da1-adb3-accb0fb80427">
