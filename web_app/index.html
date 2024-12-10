@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Histogram with Negative Values</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            background-color: black;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+
+        #dataDisplay {
+            font-family: monospace;
+            white-space: pre;
+            overflow-y: auto;
+            max-height: 150px;
+            background-color: #222;
+            color: #ddd;
+            padding: 10px;
+            border: 1px solid #444;
+        }
+
+        button {
+            background-color: #444;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 10px 5px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #666;
+        }
+
+        button:disabled {
+            background-color: #333;
+            color: #777;
+            cursor: not-allowed;
+        }
+    </style>
+    <link rel="manifest"
+        href='data:application/json,%7B%22name%22%3A%20%22Histogram%20App%22%2C%20%22short_name%22%3A%20%22Histogram%22%2C%20%22start_url%22%3A%20%22https%3A//lora-sa.pages.dev/%22%2C%20%22display%22%3A%20%22standalone%22%2C%20%22background_color%22%3A%20%22%23000000%22%2C%20%22theme_color%22%3A%20%22%23000000%22%2C%20%22scope%22%3A%20%22https%3A//lora-sa.pages.dev/%22%2C%20%22icons%22%3A%20%5B%7B%22src%22%3A%20%22https%3A//via.placeholder.com/192%22%2C%20%22sizes%22%3A%20%22192x192%22%2C%20%22type%22%3A%20%22image/png%22%7D%2C%20%7B%22src%22%3A%20%22https%3A//via.placeholder.com/512%22%2C%20%22sizes%22%3A%20%22512x512%22%2C%20%22type%22%3A%20%22image/png%22%7D%5D%7D' />
+
+</head>
+
+<body>
+    <button id="connect">Connect to Serial</button>
+    <button id="pause" disabled>Pause</button>
+    <button id="refresh" disabled>Refresh</button>
+    <canvas id="histogram" width="800" height="400"></canvas>
+    <div id="dataDisplay"></div>
+
+    <script>
+        const connectButton = document.getElementById('connect');
+        const pauseButton = document.getElementById('pause');
+        const refreshButton = document.getElementById('refresh');
+        const ctx = document.getElementById('histogram').getContext('2d');
+        const dataDisplay = document.getElementById('dataDisplay');
+
+        let isPaused = false; // Pause state
+        let reader; // Serial reader object
+        let port; // Serial port reference
+        let stopReading = false; // To stop the serial reading process
+        const maxDataCount = 1000; // Maximum number of data points to display
+        let displayedData = []; // Store all displayed frequency and RSSI values
+        let initialized = false; // Track if the chart has been initialized
+
+        // Initialize an empty Chart.js histogram
+        const chart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: [], // Frequency labels
+                datasets: [{
+                    label: 'RSSI (dB)',
+                    data: [], // RSSI values
+                    backgroundColor: [], // Colors for bars
+                    borderColor: 'rgba(75, 192, 192, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                animation: false, // Disable animation
+                scales: {
+                    y: {
+                        min: 0, // 0 corresponds to -120 dB
+                        max: 70, // Max corresponds to -50 dB (-50 - (-120))
+                        title: {
+                            display: true,
+                            text: 'RSSI (dB)',
+                            color: 'white'
+                        },
+                        ticks: {
+                            color: 'white',
+                            callback: function (value) {
+                                return `${-120 + value} dB`; // Map ticks to negative RSSI values
+                            }
+                        },
+                        grid: {
+                            color: '#444' // Dark grid lines
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Frequency (MHz)',
+                            color: 'white'
+                        },
+                        grid: {
+                            display: true, // Show vertical grid lines
+                            color: '#444' // Grid line color
+                        },
+                        ticks: {
+                            color: 'white',
+                            autoSkip: false // Ensure all labels are shown
+                        }
+                    }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function (tooltipItem) {
+                                const normalizedValue = tooltipItem.raw; // Get normalized RSSI value
+                                const actualDb = -120 + normalizedValue; // Convert back to dB
+                                return `RSSI: ${actualDb} dB`; // Tooltip format
+                            }
+                        },
+                        backgroundColor: '#333', // Tooltip background
+                        titleColor: 'white',
+                        bodyColor: 'white'
+                    },
+                    legend: {
+                        labels: {
+                            color: 'white' // Legend text color
+                        }
+                    }
+                },
+                elements: {
+                    bar: {
+                        barThickness: 'flex', // Ensure bars fill the available space
+                        categoryPercentage: 1.0, // No gaps between bars
+                        barPercentage: 1.0 // Full-width bars
+                    }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function (tooltipItem) {
+                                const normalizedValue = tooltipItem.raw; // Get normalized RSSI value
+                                const actualDb = -120 + normalizedValue; // Convert back to dB
+                                return `RSSI: ${actualDb} dB`; // Tooltip format
+                            }
+                        }
+                    },
+                    legend: {
+                        display: false // Remove default legend
+                    },
+                    datalabels: {
+                        display: function (context) {
+                            // Only display labels for bars above a certain value
+                            return context.raw > 75;
+                        },
+                        align: 'top',
+                        anchor: 'end',
+                        formatter: function (value, context) {
+                            const freq = context.chart.data.labels[context.dataIndex];
+                            const db = -120 + value; // Convert back to dB
+                            return `${freq}\n${db} dB`; // Show both MHz and dB
+                        },
+                        color: 'white'
+                    }
+                }
+            }
+        });
+
+        let minMHz = Infinity; // Initialize with a large value
+        let maxMHz = -Infinity; // Initialize with a small value
+        let packetCounter = 0; // Track the number of processed packets
+        const maxPacketsToInitialize = 500; // Number of packets to determine frequency range
+
+        function initializeFrequencySlots(startMHz, endMHz) {
+            const labels = [];
+            const data = [];
+            for (let freq = startMHz; freq <= endMHz; freq++) {
+                labels.push(`${freq} MHz`);
+                data.push(0); // Start with baseline values
+            }
+            return { labels, data };
+        }
+
+        function updateChart(frequencies, rssiValues, threshold = -120) {
+            if (!initialized) return; // Ensure the chart is initialized
+
+            console.log('Updating chart with grouped data.');
+
+            // Calculate min and max MHz dynamically, ignoring 0 MHz
+            const freqMHz = frequencies.map(freq => Math.floor(freq / 1e3)).filter(mhz => mhz !== 0);
+            if (packetCounter < maxPacketsToInitialize) {
+                minMHz = Math.min(minMHz, ...freqMHz);
+                maxMHz = Math.max(maxMHz, ...freqMHz);
+                packetCounter++;
+
+                // Initialize the chart once we have enough packets
+                if (packetCounter === maxPacketsToInitialize) {
+                    const { labels, data } = initializeFrequencySlots(minMHz, maxMHz);
+                    chart.data.labels = labels;
+                    chart.data.datasets[0].data = data;
+                    initialized = true; // Mark the chart as initialized
+                }
+            }
+
+            // If the chart is not initialized, return early
+            if (chart.data.labels.length === 0) return;
+
+            // Update RSSI values for each frequency
+            freqMHz.forEach((mhz, index) => {
+                const chartIndex = mhz - minMHz; // Find the index in the chart
+                if (chartIndex >= 0 && chartIndex < chart.data.labels.length) {
+                    const adjustedValue = Math.max(0, rssiValues[index] - threshold); // Normalize to start at 0
+                    chart.data.datasets[0].data[chartIndex] = adjustedValue;
+                    displayedData.push({ frequency: mhz, rssi: rssiValues[index] });
+
+                    // Remove old data if the limit is exceeded
+                    if (displayedData.length > maxDataCount) {
+                        displayedData.shift();
+                    }
+                }
+            });
+
+            // Assign colors dynamically based on RSSI
+            chart.data.datasets[0].backgroundColor = chart.data.datasets[0].data.map(value => {
+                if (value === 0) return 'rgba(200, 200, 200, 0.6)'; // Grey for unmeasured
+                if (value > 50) return 'rgba(255, 99, 132, 0.6)'; // Red
+                if (value > 30) return 'rgba(255, 205, 86, 0.6)'; // Yellow
+                return 'rgba(75, 192, 192, 0.6)'; // Green
+            });
+
+            // Update the chart visually
+            chart.update();
+
+            // Update the displayed data
+            updateDataDisplay();
+        }
+
+        function updateDataDisplay() {
+            const formattedData = displayedData.map(data => `MHz: ${data.frequency}, dB: ${data.rssi}`);
+            dataDisplay.textContent = formattedData.slice(-100).join('\n'); // Show the last 100 values
+        }
+
+        function parseSerialData(serialText) {
+            const pattern = /\((\d+),\s*(-\d+)\)/g; // Match (frequency, RSSI)
+            const matches = Array.from(serialText.matchAll(pattern));
+            const frequencies = [];
+            const rssiValues = [];
+
+            for (const match of matches) {
+                frequencies.push(Number(match[1])); // Frequency in kHz
+                rssiValues.push(Number(match[2]));  // RSSI in dB
+            }
+
+            console.log('Parsed Data:', { frequencies, rssiValues });
+            return { frequencies, rssiValues };
+        }
+
+        // Add these event listeners for pausing and resuming on mouse actions
+        document.body.addEventListener('mousedown', () => {
+            isPaused = true;
+            console.log('Paused due to mouse down.');
+        });
+
+        document.body.addEventListener('mouseup', () => {
+            isPaused = false;
+            console.log('Resumed due to mouse up.');
+        });
+        // Connect to serial port
+        connectButton.addEventListener('click', async () => {
+            try {
+                port = await navigator.serial.requestPort();
+                await port.open({ baudRate: 9600 });
+                connectButton.textContent = 'Connected';
+                pauseButton.disabled = false;
+                refreshButton.disabled = false;
+
+                const writer = port.writable.getWriter();
+                await writer.write(new TextEncoder().encode('scan -1 -1\n'));
+                writer.releaseLock();
+
+                const textDecoder = new TextDecoderStream();
+                const readableStreamClosed = port.readable.pipeTo(textDecoder.writable);
+                reader = textDecoder.readable.getReader();
+
+                stopReading = false;
+                initialized = true;
+
+                while (!stopReading) {
+                    if (isPaused) {
+                        await new Promise(resolve => setTimeout(resolve, 100)); // Wait briefly if paused
+                        continue;
+                    }
+
+                    const { value, done } = await reader.read();
+                    if (done) {
+                        console.log('[Serial] Disconnected');
+                        break;
+                    }
+                    if (value) {
+                        const { frequencies, rssiValues } = parseSerialData(value.trim());
+                        updateChart(frequencies, rssiValues, -120); // Threshold -120 dB
+                    }
+                }
+
+                reader.releaseLock();
+                port.close();
+                console.log('[Serial] Port closed');
+            } catch (err) {
+                console.error('Error connecting to serial:', err);
+                alert('Failed to connect to serial. Check your browser and permissions.');
+            }
+        });
+
+        pauseButton.addEventListener('click', () => {
+            isPaused = !isPaused;
+            pauseButton.textContent = isPaused ? 'Resume' : 'Pause';
+        });
+
+        refreshButton.addEventListener('click', () => {
+            console.log('Chart data refreshed.');
+            window.location.reload();
+
+        });
+    </script>
+</body>
+
+</html>
