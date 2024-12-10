@@ -16,6 +16,7 @@
 // #include "global_config.h"
 #include "images.h"
 // #include "ui.h"
+#include "comms.h"
 #include <Adafruit_GFX.h>
 #include <Arduino.h>
 #include <vector>
@@ -254,50 +255,126 @@ void setBrightness()
     ledcWrite(st7789_brightness_channel, current_brightness);
 }
 
+struct frequency_scan_result
+{
+    uint64_t begin;
+    uint64_t end;
+    uint64_t last_epoch;
+    int16_t rssi; // deliberately not a float; floats can pin task to wrong core forever
+
+    ScanTaskResult dump;
+    size_t readings_sz;
+} frequency_scan_result;
+
+ScanTask report_scans = ScanTask{
+    count : 0, // 0 => report none; < 0 => report forever; > 0 => report that many
+    delay : 0  // 0 => as and when it happens; > 0 => at least once that many ms
+};
+
+void checkComms()
+{
+    while (Comms0->available() > 0)
+    {
+        Message *m = Comms0->receive();
+        if (m == NULL)
+            continue;
+
+        switch (m->type)
+        {
+        case MessageType::SCAN:
+            report_scans = m->payload.scan;
+            break;
+        }
+        delete m;
+    }
+}
+
+void dumpToCommsTask()
+{
+    if (report_scans.count == 0)
+    {
+        return;
+    }
+
+    if (report_scans.count > 0)
+    {
+        report_scans.count--;
+    }
+
+    Message m;
+    m.type = MessageType::SCAN_RESULT;
+    m.payload.dump = frequency_scan_result.dump;
+    Comms0->send(m);
+}
+
 #define battery_w 13
 #define battery_h 13
-#define BATTERY_PIN 7
+#define battery_x 310
 
+#define BATTERY_PIN 6         // Adjust to the correct ADC pin
+#define REFERENCE_VOLTAGE 3.3 // ADC reference voltage
+#define DIVIDER_RATIO 2.0     // Example divider ratio (confirm actual ratio)
+
+// Voltage range for a 3.7V lithium battery
+#define BATTERY_FULL 4.2
+#define BATTERY_EMPTY 3.0
+
+#define Resolution 0.000244140625
+#define battary_in 3.3
+#define coefficient 5
+#define RUN_INTERVAL 600000    // 10 minutes in milliseconds
+unsigned long lastRunTime = 0; // Store the last execution time
+float battery_levl;
 void battery()
 {
-    analogReadResolution(12);
-    int battery_levl = analogRead(BATTERY_PIN) / 238.7; // battary/4096*3.3* coefficient
     float battery_one = 0.4125;
-#ifdef PRINT_DEBUG
-    Serial.printf("ADC analog value = %.2f\n", battery_levl);
-#endif
-    // TODO: battery voltage doesn't work
+    unsigned long currentTime = millis();
+    // Check if 10 minutes have passed
+    if (currentTime - lastRunTime >= RUN_INTERVAL || lastRunTime == 0)
+    {
+        lastRunTime = currentTime; // Update the last run time
+
+        analogReadResolution(12);
+        pinMode(BATTERY_PIN, INPUT);
+        // int battery_levl = analogRead(BATTERY_PIN) / 238.7; // battary/4096*3.3*
+        // coefficient
+        battery_levl = analogRead(BATTERY_PIN) * Resolution * battary_in * coefficient;
+        // battary/4096*3.3* coefficient
+
+        Serial.printf("ADC analog value = %.2f\n", battery_levl);
+    }
+    // #endif // TODO: battery voltage doesn't work
     if (battery_levl < battery_one)
     {
-        // display.drawXbm(275, 0, battery_w, battery_h, battery0);
+        st7789->drawBitmap(battery_x, 0, battery0, battery_w, battery_h, ST7789_WHITE);
     }
-    else if (battery_levl < 2 * battery_one && battery_levl > battery_one)
+    else if (battery_levl < 2 * battery_one)
     {
-        // display.drawXbm(285, 0, battery_w, battery_h, battery1);
+        st7789->drawBitmap(battery_x, 0, battery1, battery_w, battery_h, ST7789_WHITE);
     }
-    else if (battery_levl < 3 * battery_one && battery_levl > 2 * battery_one)
+    else if (battery_levl < 3 * battery_one)
     {
-        // display.drawXbm(285, 0, battery_w, battery_h, battery2);
+        st7789->drawBitmap(battery_x, 0, battery2, battery_w, battery_h, ST7789_WHITE);
     }
-    else if (battery_levl < 4 * battery_one && battery_levl > 3 * battery_one)
+    else if (battery_levl < 4 * battery_one)
     {
-        //  display.drawXbm(285, 0, battery_w, battery_h, battery3);
+        st7789->drawBitmap(battery_x, 0, battery3, battery_w, battery_h, ST7789_WHITE);
     }
-    else if (battery_levl < 5 * battery_one && battery_levl > 4 * battery_one)
+    else if (battery_levl < 5 * battery_one)
     {
-        //  display.drawXbm(285, 0, battery_w, battery_h, battery4);
+        st7789->drawBitmap(battery_x, 0, battery4, battery_w, battery_h, ST7789_WHITE);
     }
-    else if (battery_levl < 6 * battery_one && battery_levl > 5 * battery_one)
+    else if (battery_levl < 6 * battery_one)
     {
-        //  display.drawXbm(285, 0, battery_w, battery_h, battery5);
+        st7789->drawBitmap(battery_x, 0, battery5, battery_w, battery_h, ST7789_WHITE);
     }
-    else if (battery_levl < 7 * battery_one && battery_levl > 6 * battery_one)
+    else if (battery_levl < 7 * battery_one)
     {
-        //  display.drawXbm(285, 0, battery_w, battery_h, battery6);
+        st7789->drawBitmap(battery_x, 0, battery6, battery_w, battery_h, ST7789_WHITE);
     }
-    else if (battery_levl < 7 * battery_one && battery_levl > 6 * battery_one)
+    else
     {
-        //  display.drawXbm(285, 0, battery_w, battery_h, batteryfull);
+        st7789->drawBitmap(battery_x, 0, batteryfull, battery_w, battery_h, ST7789_WHITE);
     }
 }
 
@@ -403,6 +480,7 @@ constexpr unsigned int STATUS_BAR_HEIGHT = 5;
 
 void loop()
 {
+    checkComms();
     // Serial.println("Loop");
     if (screen_update_loop_counter == 0)
     {
@@ -451,10 +529,9 @@ void loop()
 
         bool calibrate = true;
         float freq = (float)fr + (float)(rssi_mhz_step * u);
-        if ((int)freq % 10 == 0)
-        {
-            calibrate = true;
-        }
+
+        calibrate = true;
+
         radio.setFrequency(freq,
                            /*false*/ calibrate); // false = no calibration need here
         // Serial.println((float)fr + (float)(rssi_mhz_step * u));
@@ -496,6 +573,16 @@ void loop()
         st7789->drawPixel(x1, rssiToPix(rssi2) - 2, rssiToColor(abs(rssi2)));
         st7789->drawPixel(x1, rssiToPix(rssi2) - 3, rssiToColor(abs(rssi2)));
         st7789->drawPixel(x1, rssiToPix(rssi2) - 4, rssiToColor(abs(rssi2)));
+
+        frequency_scan_result.dump.freqs_khz[frequency_scan_result.dump.sz] =
+            (int)freq * 1000;
+
+        frequency_scan_result.dump.rssis[frequency_scan_result.dump.sz] = rssi2;
+        frequency_scan_result.dump.sz++;
+        if (frequency_scan_result.dump.sz > 10000)
+        {
+            Serial.println("frequency_scan_result overflow 10000");
+        }
 
         if (true /*draw full line*/)
         {
@@ -661,7 +748,7 @@ void loop()
                          " L:" + String(drone_detection_level) + "dB",
                      ST7789_BLUE);
 
-            /// battery();
+            battery();
             // iteration full scan / samples pixel step / numbers of scan per display
             drawText(DISPLAY_WIDTH - ((DISPLAY_WIDTH / 6) * 2) + 20, 0,
                      "i:" + String(scan_iterations) + "/" + String(SAMPLES_RSSI) + "/" +
@@ -710,7 +797,11 @@ void loop()
             scan_iterations = 0;
             display_scan_i_end = 0;
         }
+
+        // Dump to Serial
+        dumpToCommsTask();
         fr = FREQ_BEGIN;
+        frequency_scan_result.dump.sz = 0;
         rssi_single_start = 0;
         rssi_single_end = 0;
         x1 = 0;
@@ -732,8 +823,16 @@ void loop()
 #endif
 }
 
+Config config;
+
 void setup()
 {
+    uint32_t *f = new uint32_t[10000];
+    int16_t *r = new int16_t[10000];
+
+    frequency_scan_result.dump.freqs_khz = f;
+    frequency_scan_result.dump.rssis = r;
+
     for (int i = 0; i < MAX_MHZ_INTERVAL; i++)
     {
         detailed_scan_candidate[i] = 0;
@@ -780,6 +879,16 @@ void setup()
         Serial.println(state);
     }
     heltec_setup();
-    delay(2500);
+    config = Config::init();
+    bool comms_initialized = Comms::initComms(config);
+    if (comms_initialized)
+    {
+        Serial.println("Comms initialized fine");
+    }
+    else
+    {
+        Serial.println("Comms did not initialize");
+    }
+    delay(2000);
     st7789->fillScreen(ST7789_BLACK);
 }
