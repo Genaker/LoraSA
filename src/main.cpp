@@ -219,7 +219,17 @@ uint64_t scan_start_time = 0;
 #endif
 
 // log data via serial console, JSON format:
-// #define LOG_DATA_JSON true
+#define LOG_DATA_JSON true
+
+// Define which UART port to use (0, 1, or 2)
+#define SERIAL_PORT 1
+
+// Define which pins to use
+#define TX_PIN 12
+#define RX_PIN 16 // not used
+
+// Create HardwareSerial instance (UART 1 or 2)
+HardwareSerial SerialPort(SERIAL_PORT);
 
 // #define WEB_SERVER true
 
@@ -623,7 +633,7 @@ void logToSerialTask(void *parameter)
             doc["value"] = String(highest_value_scanned);
 
             serializeJson(doc, jsonOutput);
-            Serial.println(jsonOutput);
+            SerialPort.println(jsonOutput);
         }
     }
 }
@@ -680,6 +690,14 @@ void readConfigFile()
 
 void setup(void)
 {
+
+#ifdef LOG_DATA_JSON
+    Serial.begin(115200);
+
+    // Initialize custom Serial port
+    // Parameters: baud rate, serial config, RX pin, TX pin
+    SerialPort.begin(115200, SERIAL_8N1, RX_PIN, TX_PIN);
+#endif
 
 #ifdef LILYGO
     setupBoards(); // true for disable U8g2 display library
