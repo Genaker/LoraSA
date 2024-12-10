@@ -330,11 +330,11 @@ Uncomment this lines
 ```
 
 # Communication via Serial USB
-You can receive RAW frequency data from the ESP32 by sending serial command **Scan -1 -1**
-Also, you can use ASCI_SA.py to read data from serial and represent as an ASCI character chart on your device. </br>
+You can receive RAW frequency data from the ESP32 by sending the serial command **Scan -1 -1**. Other parameters are also available. 
+Also, you can use ASCII_SA.py to read data from serial and represent as an ASCII character chart on your device. </br>
 Run:
 ```
-python3 ASCI_SA.py    
+python3 ASCII_SA.py    
 ```
 Output:
 
