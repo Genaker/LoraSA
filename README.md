@@ -332,6 +332,11 @@ Uncomment this lines
 # Communication via Serial USB
 You can receive RAW frequency data from the ESP32 by sending the serial command **Scan -1 -1**. Other parameters are also available. 
 Also, you can use ASCII_SA.py to read data from serial and represent as an ASCII character chart on your device. </br>
+Install **pyserial**:
+```
+pip3 install pyserial
+```
+
 Run:
 ```
 python3 ASCII_SA.py    
