@@ -235,13 +235,11 @@ uint64_t scan_start_time = 0;
 // platformio config flag -DLOG_DATA_JSON
 // #define LOG_DATA_JSON true
 
+#ifdef SEEK_ON_X
 #define SERIAL_PORT 1
 
-#define TX_PIN 12
-#define RX_PIN 16 // not used
-
-// Create HardwareSerial instance (UART 1 or 2)
 HardwareSerial SerialPort(SERIAL_PORT);
+#endif
 
 // #define WEB_SERVER true
 
@@ -795,11 +793,19 @@ void logToSerialTask(void *parameter)
                 continue;
             }
 
+#ifdef SEEK_ON_X
             SerialPort.printf("{\"low_range_freq\": %" PRIu64
                               ", \"high_range_freq\": %" PRIu64 ", "
                               "\"value\": \"%" PRIi16 "\"}\n",
                               frequency_scan_result.begin, frequency_scan_result.end,
                               highest_value_scanned);
+#else
+            Serial.printf("{\"low_range_freq\": %" PRIu64
+                          ", \"high_range_freq\": %" PRIu64 ", "
+                          "\"value\": \"%" PRIi16 "\"}\n",
+                          frequency_scan_result.begin, frequency_scan_result.end,
+                          highest_value_scanned);
+#endif
         }
     }
 }
@@ -969,9 +975,11 @@ void setup(void)
 #ifdef LOG_DATA_JSON
     Serial.begin(115200);
 
-    // Initialize custom Serial port
+#ifdef SEEK_ON_X
+    // Initialize custom Serial port on the hardware using pins
     // Parameters: baud rate, serial config, RX pin, TX pin
     SerialPort.begin(115200, SERIAL_8N1, RX_PIN, TX_PIN);
+#endif
 #endif
 
 #ifdef LILYGO
