@@ -39,6 +39,8 @@
 
 #define FORMAT_LITTLEFS_IF_FAILED true
 
+// HardwareSerial Serial0(0);
+
 // #define OSD_ENABLED true
 // #define WIFI_SCANNING_ENABLED true
 // #define BT_SCANNING_ENABLED true
@@ -52,8 +54,10 @@
 #define RADIOLIB_CHECK_PARAMS (0)
 
 #include <charts.h>
+#ifdef SERIAL_OUT
 #include <comms.h>
 #include <config.h>
+#endif
 #include <events.h>
 #include <scan.h>
 #include <stdlib.h>
@@ -92,7 +96,8 @@ uint64_t bt_start = 0;
 #define MAX_POWER_LEVELS 33
 #ifdef OSD_ENABLED
 #include "DFRobot_OSD.h"
-#define OSD_SIDE_BAR true
+#define SIDEBAR_START_COL 2
+#define SIDEBAR_DB_LEVEL 80 // Absolute value without minus
 
 // SPI pins
 #define OSD_CS 47
@@ -218,9 +223,6 @@ uint64_t scan_time = 0;
 uint64_t scan_start_time = 0;
 #endif
 
-// log data via serial console, JSON format:
-#define LOG_DATA_JSON true
-
 // Define which UART port to use (0, 1, or 2)
 #define SERIAL_PORT 1
 
@@ -312,6 +314,9 @@ void osdPrintSignalLevelChart(int col, int signal_value)
     }
 }
 
+// Start Sidebar
+int sideBarCol = SIDEBAR_START_COL;
+
 void osdProcess()
 { // OSD enabled
 
@@ -355,9 +360,24 @@ void osdProcess()
         // OSD SIDE BAR with frequency log
 #ifdef OSD_SIDE_BAR
         {
-            osd.displayString(col, OSD_WIDTH - 7,
-                              String(CONF_FREQ_BEGIN + (col * osd_mhz_in_bin)) + "-" +
-                                  String(max_step_range) + " ");
+#ifndef METHOD_RSSI
+            if (max_step_range < 16)
+            {
+                osd.displayString(sideBarCol++, OSD_WIDTH - 7,
+                                  String(CONF_FREQ_BEGIN + (col * osd_mhz_in_bin)) + "-" +
+                                      String(max_step_range) + " ");
+            }
+#endif
+
+#ifdef METHOD_RSSI
+            if (max_bins_array_value[col] < SIDEBAR_DB_LEVEL &&
+                max_bins_array_value[col] > 0)
+            {
+                osd.displayString(sideBarCol++, OSD_WIDTH - 6,
+                                  String(CONF_FREQ_BEGIN + (col * osd_mhz_in_bin)) + "-" +
+                                      String(max_bins_array_value[col]) + " ");
+            }
+#endif
         }
 #endif
         // Test with Random Result...
@@ -377,7 +397,9 @@ void osdProcess()
 }
 #endif
 
+#ifdef SERIAL_OUT
 Config config;
+#endif
 
 struct RadioScan : Scan
 {
@@ -495,6 +517,7 @@ void init_radio()
     delay(50);
 }
 
+#ifdef SERIAL_OUT
 struct frequency_scan_result
 {
     uint64_t begin;
@@ -505,10 +528,12 @@ struct frequency_scan_result
     ScanTaskResult dump;
     size_t readings_sz;
 } frequency_scan_result;
+#endif
 
 TaskHandle_t logToSerial = NULL;
 TaskHandle_t dumpToComms = NULL;
 
+#ifdef SERIAL_OUT
 void eventListenerForReport(void *arg, Event &e)
 {
     if (e.type == EventType::DETECTED)
@@ -605,6 +630,7 @@ void dumpToCommsTask(void *parameter)
         Comms0->send(m);
     }
 }
+#endif
 
 #ifdef LOG_DATA_JSON
 void logToSerialTask(void *parameter)
@@ -643,7 +669,8 @@ void drone_sound_alarm(void *arg, Event &e);
 
 void readConfigFile()
 {
-    // writeFile(LittleFS, "/text.txt", "{WIFI:{name:\"sdfsdf\", Password:\"sdfsdf\"}");
+    // writeFile(LittleFS, "/text.txt", "{WIFI:{name:\"sdfsdf\",
+    // Password:\"sdfsdf\"}");
     ssid = readParameterFromParameterFile(SSID);
     Serial.println("SSID: " + ssid);
 
@@ -703,6 +730,9 @@ void setup(void)
     setupBoards(); // true for disable U8g2 display library
     delay(500);
     Serial.println("Setup LiLybeginSDCardGO board is done");
+#else
+    // Serial0.begin(115200); // Initialize UART0
+    // Serial0.println("Hello, Serial0 (UART0)!");
 #endif
 
     // LED brightness
@@ -727,6 +757,7 @@ void setup(void)
     bt_start = millis();
     wf_start = millis();
 
+#ifdef SERIAL_OUT
     config = Config::init();
     r.comms_initialized = Comms::initComms(config);
     if (r.comms_initialized)
@@ -737,6 +768,7 @@ void setup(void)
     {
         Serial.println("Comms did not initialize");
     }
+#endif
 
     pinMode(LED, OUTPUT);
     pinMode(BUZZER_PIN, OUTPUT);
@@ -919,7 +951,9 @@ void setup(void)
 #ifdef LOG_DATA_JSON
     xTaskCreate(logToSerialTask, "LOG_DATA_JSON", 2048, NULL, 1, &logToSerial);
 #endif
+#ifdef SERIAL_OUT
     xTaskCreate(dumpToCommsTask, "DUMP_RESPONSE_PROCESS", 2048, NULL, 1, &dumpToComms);
+#endif
 
     r.trigger_level = TRIGGER_LEVEL;
     stacked.reset(0, 0, display.width(), display.height());
@@ -957,9 +991,12 @@ void setup(void)
     r.addEventListener(DETECTED, drone_sound_alarm, &r);
     r.addEventListener(SCAN_TASK_COMPLETE, stacked);
 
+#ifdef SERIAL_OUT
     frequency_scan_result.readings_sz = 0;
     frequency_scan_result.dump.sz = 0;
+
     r.addEventListener(ALL_EVENTS, eventListenerForReport, NULL);
+#endif
 
 #ifdef UPTIME_CLOCK
     uptime = new UptimeClock(display, millis());
@@ -1149,6 +1186,7 @@ void check_ranges()
     }
 }
 
+#ifdef SERIAL_OUT
 void checkComms()
 {
     while (Comms0->available() > 0)
@@ -1166,6 +1204,7 @@ void checkComms()
         delete m;
     }
 }
+#endif
 
 // MAX Frequency RSSI BIN value of the samples
 int max_rssi_x = 999;
@@ -1178,6 +1217,7 @@ void loop(void)
     drone_detected_frequency_start = 0;
     ranges_count = 0;
 
+#ifdef SERIAL_OUT
     checkComms();
 
     // reset scan time
@@ -1187,6 +1227,7 @@ void loop(void)
         loop_start = millis();
     }
     r.epoch++;
+#endif
 
     if (!ANIMATED_RELOAD || !single_page_scan)
     {
@@ -1580,13 +1621,18 @@ void loop(void)
 
     joy_btn_clicked = false;
 
+#ifdef SERIAL_OUT
     if (config.print_profile_time)
     {
+#endif
 #ifdef PRINT_PROFILE_TIME
         loop_time = millis() - loop_start;
         Serial.printf("LOOP: %lld ms; SCAN: %lld ms;\n  ", loop_time, scan_time);
 #endif
+#ifdef SERIAL_OUT
     }
+#endif
+
 // No WiFi and BT Scan Without OSD
 #ifdef OSD_ENABLED
 #ifdef WIFI_SCANNING_ENABLED
@@ -1606,5 +1652,14 @@ void loop(void)
         bt_start = millis();
     }
 #endif
+#endif
+#ifdef OSD_ENABLED
+    // Clear sidebar
+    for (int i = sideBarCol; i < 20; i++)
+    {
+        osd.displayString(sideBarCol++, OSD_WIDTH - 7, String("       "));
+    }
+    sideBarCol = SIDEBAR_START_COL;
+
 #endif
 }
