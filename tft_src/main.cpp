@@ -852,7 +852,7 @@ void setup()
     /// st7789->setSPISpeed(3000000); /// default ~ 1000000
 
     Serial.printf("Ready!\r\n");
-    st7789->setRotation(1);
+    st7789->setRotation(ROTATION);
     st7789->fillScreen(ST7789_BLACK);
     drawText(0, 0, "init >>> ", ST7789_WHITE);
 
