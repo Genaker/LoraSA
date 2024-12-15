@@ -151,8 +151,8 @@ typedef enum
 // constexpr int RSSI_OUTPUT_FORMULA = 2;
 
 // Feature to scan diapasones. Other frequency settings will be ignored.
-// int SCAN_RANGES[] = {850890, 920950};
-int SCAN_RANGES[] = {};
+// String SCAN_RANGES = String("850..890,920..950");
+String SCAN_RANGES = "";
 
 // MHZ per page
 // to put everything into one page set RANGE_PER_PAGE = FREQ_END - 800
@@ -759,6 +759,42 @@ void logToSerialTask(void *parameter)
 
 void drone_sound_alarm(void *arg, Event &e);
 
+void configureDetection()
+{
+    if (config.scan_ranges_sz == 0)
+    {
+        config.scan_ranges_sz = 1;
+        config.scan_ranges = new ScanRange[1];
+        config.scan_ranges[0].start_khz = FREQ_BEGIN * 1000;
+        config.scan_ranges[0].end_khz = FREQ_END * 1000;
+        config.scan_ranges[0].step_khz =
+            (float)(FREQ_END - FREQ_BEGIN) * 1000 / (STEPS * SCAN_RBW_FACTOR);
+    }
+
+    if (config.samples <= 0)
+    {
+        config.samples = SAMPLES_RSSI;
+    }
+
+    CONF_SAMPLES = config.samples;
+
+    CONF_FREQ_BEGIN = config.scan_ranges[0].start_khz / 1000;
+    CONF_FREQ_END = config.scan_ranges[0].end_khz / 1000;
+    for (int i = 0; i < config.scan_ranges_sz; i++)
+    {
+        CONF_FREQ_BEGIN = min(CONF_FREQ_BEGIN, config.scan_ranges[i].start_khz / 1000);
+        CONF_FREQ_END = max(CONF_FREQ_END, config.scan_ranges[i].end_khz / 1000);
+    }
+
+    median_frequency = (CONF_FREQ_BEGIN + CONF_FREQ_END) / 2;
+
+    samples = CONF_SAMPLES;
+
+    RANGE_PER_PAGE = CONF_FREQ_END - CONF_FREQ_BEGIN; // FREQ_END - CONF_FREQ_BEGIN
+    RANGE = (int)(CONF_FREQ_END - CONF_FREQ_BEGIN);
+    range = RANGE;
+}
+
 void readConfigFile()
 {
     // writeFile(LittleFS, "/text.txt", "{WIFI:{name:\"sdfsdf\",
@@ -784,27 +820,22 @@ void readConfigFile()
     smpls = readParameterFromParameterFile("samples");
     Serial.println("SAMPLES: " + smpls);
 
-    CONF_SAMPLES = (smpls == "") ? samples : atoi(smpls.c_str());
-    samples = CONF_SAMPLES;
-    CONF_FREQ_BEGIN = (fstart == "") ? FREQ_BEGIN : atoi(fstart.c_str());
-    CONF_FREQ_END = (fend == "") ? FREQ_END : atoi(fend.c_str());
+    String detection = String("RSSI");
+    if (smpls.length() > 0)
+        detection += "," + smpls;
+    if (fstart.length() == 0)
+        fstart = String(FREQ_BEGIN * 1000);
+    if (fend.length() == 0)
+        fend = String(FREQ_END * 1000);
+
+    detection += ":" + fstart + ".." + fend + "/" + String(STEPS * SCAN_RBW_FACTOR);
+
+    config.configureDetectionStrategy(detection);
+    configureDetection();
 
     both.println("C FREQ BEGIN:" + String(CONF_FREQ_BEGIN));
     both.println("C FREQ END:" + String(CONF_FREQ_END));
     both.println("C SAMPLES:" + String(CONF_SAMPLES));
-
-    RANGE_PER_PAGE = CONF_FREQ_END - CONF_FREQ_BEGIN; // FREQ_END - CONF_FREQ_BEGIN
-
-    RANGE = (int)(CONF_FREQ_END - CONF_FREQ_BEGIN);
-
-    SINGLE_STEP = (float)(RANGE / (STEPS * SCAN_RBW_FACTOR));
-
-    range = (int)(CONF_FREQ_END - CONF_FREQ_BEGIN);
-
-    iterations = RANGE / RANGE_PER_PAGE;
-
-    // uint64_t range_frequency = FREQ_END - CONF_FREQ_BEGIN;
-    median_frequency = (CONF_FREQ_BEGIN + CONF_FREQ_END) / 2;
 }
 
 void setup(void)
@@ -918,24 +949,19 @@ void setup(void)
     initLittleFS();
 
     readConfigFile();
-
 #endif
 
 #ifndef WEB_SERVER
-    CONF_SAMPLES = samples;
-    CONF_FREQ_BEGIN = FREQ_BEGIN;
-    CONF_FREQ_END = FREQ_END;
+    if (config.scan_ranges_sz == 0 && SCAN_RANGES.length() > 0)
+    {
+        config.configureDetectionStrategy(config.detection_strategy + ":" + SCAN_RANGES);
+    }
+
+    configureDetection();
 
     both.println("FREQ BEGIN:" + String(CONF_FREQ_BEGIN));
     both.println("FREQ END:" + String(CONF_FREQ_END));
     both.println("SAMPLES:" + String(CONF_SAMPLES));
-
-    RANGE_PER_PAGE = CONF_FREQ_END - CONF_FREQ_BEGIN; // FREQ_END - CONF_FREQ_BEGIN
-    RANGE = (int)(CONF_FREQ_END - CONF_FREQ_BEGIN);
-    SINGLE_STEP = (float)(RANGE / (STEPS * SCAN_RBW_FACTOR));
-    range = (int)(CONF_FREQ_END - CONF_FREQ_BEGIN);
-    iterations = RANGE / RANGE_PER_PAGE;
-    median_frequency = (CONF_FREQ_BEGIN + CONF_FREQ_END) / 2;
 #endif
     init_radio();
 
@@ -1249,29 +1275,6 @@ bool is_new_x_pixel(int x)
         return false;
 }
 
-void check_ranges()
-{
-    if (RANGE_PER_PAGE == range)
-    {
-        single_page_scan = true;
-    }
-    else
-    {
-        single_page_scan = false;
-    }
-
-    for (int range : SCAN_RANGES)
-    {
-        ranges_count++;
-    }
-
-    if (ranges_count > 0)
-    {
-        iterations = ranges_count;
-        single_page_scan = false;
-    }
-}
-
 void checkComms()
 {
     while (HostComms->available() > 0)
@@ -1374,35 +1377,11 @@ void loop(void)
     r.fr_begin = CONF_FREQ_BEGIN;
     r.fr_end = r.fr_begin;
 
-    // 50 is a single-screen range
-    // TODO: Make 50 a variable with the option to show the full range
-    iterations = range / RANGE_PER_PAGE;
-
-#if 0 // disabled code
-    if (range % RANGE_PER_PAGE != 0)
+    for (range_item = 0; range_item < config.scan_ranges_sz; range_item++)
     {
-        // add more scan
-        //++;
-    }
-#endif
-
-    check_ranges();
-
-    // Iterating by small ranges by 50 Mhz each pixel is 0.4 Mhz
-    for (range_item = 0; range_item < iterations; range_item++)
-    {
-        range = RANGE_PER_PAGE;
-        if (ranges_count == 0)
-        {
-            r.fr_begin = (range_item == 0) ? r.fr_begin : r.fr_begin + range;
-            r.fr_end = r.fr_begin + RANGE_PER_PAGE;
-        }
-        else
-        {
-            r.fr_begin = SCAN_RANGES[range_item] / 1000;
-            r.fr_end = SCAN_RANGES[range_item] % 1000;
-            range = r.fr_end - r.fr_begin;
-        }
+        r.fr_begin = config.scan_ranges[range_item].start_khz / 1000;
+        r.fr_end = config.scan_ranges[range_item].end_khz / 1000;
+        range = r.fr_end - r.fr_begin;
 
 #ifdef DISABLED_CODE
         if (!ANIMATED_RELOAD || !single_page_scan)
@@ -1422,8 +1401,16 @@ void loop(void)
 
         // horizontal (x axis) Frequency loop
         osd_x = 1, osd_y = 2, col = 0, max_bin = 0;
+
+        ScanRange scan_range = config.scan_ranges[range_item];
+        int steps = 1;
+        if (scan_range.step_khz > 0)
+            steps = 1 + (scan_range.end_khz - scan_range.start_khz) / scan_range.step_khz;
+        if (steps == 0)
+            steps = 1;
+
         // x loop
-        for (x = 0; x < STEPS * SCAN_RBW_FACTOR; x++)
+        for (x = 0; x < steps; x++)
         {
             new_pixel = is_new_x_pixel(x);
             if (ANIMATED_RELOAD && SCAN_RBW_FACTOR == 1)
@@ -1442,7 +1429,7 @@ void loop(void)
             // Because of the SCAN_RBW_FACTOR x is not a display coordinate anymore
             // x > STEPS on SCAN_RBW_FACTOR
             int display_x = x / SCAN_RBW_FACTOR;
-            float step = (range * ((float)x / (STEPS * SCAN_RBW_FACTOR)));
+            float step = (float)x * scan_range.step_khz / 1000.0;
 
             r.current_frequency = r.fr_begin + step;
             LOG("setFrequency:%f\n", r.current_frequency);

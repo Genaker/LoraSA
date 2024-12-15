@@ -124,11 +124,184 @@ Config Config::init()
             continue;
         }
 
+        if (r.key.equalsIgnoreCase("detection_strategy"))
+        {
+            c.configureDetectionStrategy(r.value);
+            continue;
+        }
+
         Serial.printf("Unknown key '%s' will be ignored\n", r.key);
     }
 
     f.close();
     return c;
+}
+
+String detectionStrategyToStr(Config &c)
+{
+    String res = c.detection_strategy;
+    if (c.scan_ranges_sz > 0)
+    {
+        res += ":";
+        for (int i = 0; i < c.scan_ranges_sz; i++)
+        {
+            if (i > 0)
+            {
+                res += ",";
+            }
+
+            res += String(c.scan_ranges[i].start_khz);
+            int s = c.scan_ranges[i].end_khz - c.scan_ranges[i].start_khz;
+            if (s > 0)
+            {
+                res += ".." + String(c.scan_ranges[i].end_khz);
+                if (c.scan_ranges[i].step_khz < s)
+                {
+                    res += ":" + String(c.scan_ranges[i].step_khz);
+                }
+            }
+        }
+    }
+    return res;
+}
+
+// findSepa looks for a sepa in s from position begin, and does two things:
+// updates end with the index of the end of the string between begin and
+// separator or end of string, and returns index of the next search position
+// or -1 to stop the search.
+//
+// So you can do something like this:
+// for (int i = 0, j = 0, k = 0; (i = findSepa(s, sepa, j, k)) >= 0; j = i)
+// ...s.substring(j, k)
+int findSepa(String s, String sepa, int begin, int &end)
+{
+    int i = s.indexOf(sepa, begin);
+    if (i < 0)
+    {
+        end = s.length();
+        return begin == end ? -1 : end;
+    }
+
+    end = i;
+    return i + sepa.length();
+}
+
+uint64_t toUint64(String s)
+{
+    String v = s.substring(0, s.length() % 15);
+    s = s.substring(v.length());
+    uint64_t r = v.toInt();
+
+    while (s.length() > 0)
+    {
+        r = r * ((uint64_t)1000000000000000ll) + s.substring(0, 15).toInt();
+        s = s.substring(15);
+    }
+    return r;
+}
+
+ScanRange parseScanRange(String &cfg, int &begin)
+{
+    ScanRange res;
+    int end;
+    int i = findSepa(cfg, ",", begin, end);
+
+    String r = cfg.substring(begin, end);
+    begin = i;
+
+    if (i < 0)
+    {
+        res.start_khz = -1;
+        res.end_khz = -1;
+        res.step_khz = -1;
+        return res;
+    }
+
+    i = r.indexOf("..");
+    if (i < 0)
+    {
+        i = r.length();
+    }
+
+    res.start_khz = toUint64(r.substring(0, i));
+    if (i == r.length())
+    {
+        res.end_khz = res.start_khz;
+        res.step_khz = 0;
+        return res;
+    }
+
+    r = r.substring(i + 2);
+    i = r.indexOf("+");
+    if (i < 0)
+    {
+        i = r.indexOf("/");
+        if (i < 0)
+            i = r.length();
+    }
+
+    res.end_khz = toUint64(r.substring(0, i));
+    if (i == r.length())
+    {
+        res.step_khz = res.end_khz - res.start_khz;
+    }
+    else
+    {
+        res.step_khz = toUint64(r.substring(i + 1));
+        if (r.charAt(i) == '/')
+        {
+            // then it is not a literal increment, it is the number of steps
+            if (res.step_khz == 0)
+                res.step_khz = 1;
+            res.step_khz = round(((double)(res.end_khz - res.start_khz)) / res.step_khz);
+        }
+    }
+
+    return res;
+}
+
+void Config::configureDetectionStrategy(String cfg)
+{
+    if (scan_ranges_sz > 0)
+        delete[] scan_ranges;
+    scan_ranges = NULL;
+
+    String method = cfg;
+    int i = cfg.indexOf(":");
+    if (i >= 0)
+    {
+        method = cfg.substring(0, i);
+        cfg = cfg.substring(i + 1);
+    }
+    else
+    {
+        cfg = "";
+    }
+
+    samples = 0;
+    i = method.indexOf(",");
+    if (i >= 0)
+    {
+        samples = method.substring(i + 1).toInt();
+        method = method.substring(0, i);
+    }
+    detection_strategy = method;
+
+    scan_ranges_sz = 0;
+    for (int i = 0, k = 0; (i = findSepa(cfg, ",", i, k)) >= 0; scan_ranges_sz++)
+        ;
+
+    if (scan_ranges_sz == 0)
+    {
+        return;
+    }
+
+    scan_ranges = new ScanRange[scan_ranges_sz];
+
+    for (int i = 0, j = 0; i < scan_ranges_sz; i++)
+    {
+        scan_ranges[i] = parseScanRange(cfg, j);
+    }
 }
 
 bool Config::write_config(const char *path)
@@ -144,6 +317,8 @@ bool Config::write_config(const char *path)
     f.println("listen_on_serial0 = " + listen_on_serial0);
     f.println("listen_on_serial1 = " + listen_on_serial1);
     f.println("listen_on_usb = " + listen_on_usb);
+
+    f.println("detection_strategy = " + detectionStrategyToStr(*this));
 
     f.close();
     return true;
