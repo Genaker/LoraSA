@@ -17,7 +17,6 @@
 // 4.8, 5.8, 7.3, 9.7, 11.7, 14.6, 19.5, 23.4, 29.3, 39.0, 46.9, 58.6,
 // 78.2, 93.8, 117.3, 156.2, 187.2, 234.3, 312.0, 373.6 and 467.0
 #define BANDWIDTH 467.0
-#define BANDWIDTH_SX1280 406.
 
 // Detection level from the 33 levels. The higher number is more sensitive
 #define DEFAULT_DRONE_DETECTION_LEVEL 18
