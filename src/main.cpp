@@ -34,6 +34,7 @@
 #include <LittleFS.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <unordered_map>
 
 #include "WIFI_SERVER.h"
 
@@ -94,10 +95,15 @@ uint64_t wf_start = 0;
 uint64_t bt_start = 0;
 
 #define MAX_POWER_LEVELS 33
+unsigned int osdCyclesCount = 0;
+#define OSD_MAX_CLEAR_CYCLES 10
 #ifdef OSD_ENABLED
 #include "DFRobot_OSD.h"
 #define SIDEBAR_START_COL 2
+#define SIDEBAR_END_COL 10
+// #define SIDEBAR_ACCENT_ONLY 1
 #define SIDEBAR_DB_LEVEL 80 // Absolute value without minus
+#define SIDEBAR_DB_DELTA 2  // detect changes <> threshold
 
 // SPI pins
 #define OSD_CS 47
@@ -197,6 +203,8 @@ uint16_t result[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
 bool filtered_result[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
 
 int max_bins_array_value[MAX_POWER_LEVELS];
+
+std::unordered_map<int, int> prevDBvalue;
 int max_step_range = 32;
 
 bool detected_y[STEPS]; // 20 - ??? steps
@@ -317,9 +325,11 @@ void osdPrintSignalLevelChart(int col, int signal_value)
 // Start Sidebar
 int sideBarCol = SIDEBAR_START_COL;
 
+std::unordered_map<int, bool> accentFreq = {{950, true}, {915, true}};
+
 void osdProcess()
 { // OSD enabled
-
+    osdCyclesCount++;
     // memset(max_step_range, 33, 30);
     max_bin = 32;
 
@@ -351,7 +361,7 @@ void osdProcess()
         max_step_range = max_bin;
 // Store RSSI value for RSSI Method
 #ifdef METHOD_RSSI
-        max_bins_array_value[col] = result[max_bin];
+        max_step_range = result[max_bin];
 #endif
     }
     // Going to the next OSD step
@@ -370,13 +380,84 @@ void osdProcess()
 #endif
 
 #ifdef METHOD_RSSI
-            if (max_bins_array_value[col] < SIDEBAR_DB_LEVEL &&
-                max_bins_array_value[col] > 0)
+            String noChangeChar = "=";
+            String upChar = ">";
+            String downChar = "<";
+            String printChar = "-";
+
+            int freqOSD = CONF_FREQ_BEGIN + (col * osd_mhz_in_bin);
+            String freqOSDString = "";
+
+            if ((
+// Show defined freq only
+#ifndef SIDEBAR_ACCENT_ONLY
+                    max_step_range <= SIDEBAR_DB_LEVEL
+#else
+                    false
+#endif
+                    || accentFreq[freqOSD] == true) &&
+                max_step_range > 0)
             {
-                osd.displayString(sideBarCol++, OSD_WIDTH - 6,
-                                  String(CONF_FREQ_BEGIN + (col * osd_mhz_in_bin)) + "-" +
-                                      String(max_bins_array_value[col]) + " ");
+                if (prevDBvalue[freqOSD] != 0 &&
+                    // 80 - 90
+                    prevDBvalue[freqOSD] - max_step_range < -SIDEBAR_DB_DELTA)
+                {
+                    printChar = upChar;
+                }
+                else if (prevDBvalue[freqOSD] != 0 &&
+                         // 90 - 80
+                         prevDBvalue[freqOSD] - max_step_range > SIDEBAR_DB_DELTA)
+                {
+                    printChar = downChar;
+                }
+                else if (prevDBvalue[freqOSD] != 0 &&
+                         // 90 - 92 && 90 - 88
+                         abs(prevDBvalue[freqOSD] - max_step_range) < SIDEBAR_DB_DELTA)
+                {
+                    printChar = noChangeChar;
+                }
+                else
+                {
+                    printChar = printChar;
+                }
+
+                if (true || sideBarCol == SIDEBAR_START_COL || freqOSD % 100 == 0)
+                {
+                    freqOSDString = String(freqOSD);
+                }
+                else
+                {
+                    freqOSDString = String(" ") + String(freqOSD).substring(1);
+                }
+
+                long int osd_start = millis();
+                osd.displayString(sideBarCol++, OSD_WIDTH - 7,
+                                  freqOSDString + printChar + String(max_step_range) +
+                                      " ");
+                long int osd_end = millis();
+                // Serial.println("Time of EXecution: " + String((osd_end - osd_start)));
+                prevDBvalue[freqOSD] = max_step_range;
             }
+            else
+            {
+                // erase values without previous every N of the OSD cycle
+                if (osdCyclesCount >= OSD_MAX_CLEAR_CYCLES)
+                {
+                    prevDBvalue[freqOSD] = 0;
+                    // Clear sidebar 3 first values always on screen
+                    for (int i = sideBarCol + 3; i <= SIDEBAR_END_COL; i++)
+                    {
+                        osd.displayString(i++, OSD_WIDTH - 7, String("       "));
+                    }
+                    osdCyclesCount = 0;
+                }
+            }
+            // MAx down sidebar
+            if (sideBarCol >= SIDEBAR_END_COL)
+            {
+                sideBarCol = SIDEBAR_START_COL;
+            }
+
 #endif
         }
 #endif
@@ -393,6 +474,10 @@ void osdProcess()
 #endif
         max_step_range = 32;
         col++;
+    }
+    if (osdCyclesCount >= OSD_MAX_CLEAR_CYCLES)
+    {
+        osdCyclesCount = 0;
     }
 }
 #endif
@@ -1653,13 +1738,5 @@ void loop(void)
     }
 #endif
 #endif
-#ifdef OSD_ENABLED
-    // Clear sidebar
-    for (int i = sideBarCol; i < 20; i++)
-    {
-        osd.displayString(sideBarCol++, OSD_WIDTH - 7, String("       "));
-    }
     sideBarCol = SIDEBAR_START_COL;
-
-#endif
 }
