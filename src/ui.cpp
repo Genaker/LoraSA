@@ -15,17 +15,14 @@
 #define SCALE_TEXT_TOP (HEIGHT + X_AXIS_WEIGHT + MAJOR_TICK_LENGTH)
 
 // temporary dirty import ... to be solved durring upcoming refactoring
-extern unsigned int RANGE_PER_PAGE;
 extern uint64_t CONF_FREQ_BEGIN;
 extern uint64_t CONF_FREQ_END;
 extern unsigned int median_frequency;
 extern unsigned int drone_detected_frequency_start;
 extern unsigned int drone_detected_frequency_end;
-extern unsigned int ranges_count;
-extern int SCAN_RANGES[];
-extern unsigned int ranges_count;
-extern unsigned int iterations;
-extern unsigned int range_item;
+extern size_t scan_pages_sz;
+extern ScanPage *scan_pages;
+extern size_t scan_page;
 
 extern uint64_t loop_time;
 
@@ -166,7 +163,7 @@ void StatusBar::draw()
         digitalWrite(LED, LOW);
     }
 
-    if (ranges_count == 0)
+    if (scan_pages_sz == 1)
     {
 #ifdef DEBUG
         display.setTextAlignment(TEXT_ALIGN_LEFT);
@@ -179,18 +176,18 @@ void StatusBar::draw()
         display.setTextAlignment(TEXT_ALIGN_RIGHT);
         display.drawString(pos_x + width, text_y, String(CONF_FREQ_END));
     }
-    else if (ranges_count > 0)
+    else if (scan_pages_sz > 1)
     {
         display.setTextAlignment(TEXT_ALIGN_LEFT);
         display.drawString(pos_x, text_y,
-                           String(SCAN_RANGES[range_item] / 1000) + "-" +
-                               String(SCAN_RANGES[range_item] % 1000));
-        if (range_item + 1 < iterations)
+                           String(scan_pages[scan_page].start_mhz) + "-" +
+                               String(scan_pages[scan_page].end_mhz));
+        if (scan_page + 1 < scan_pages_sz)
         {
             display.setTextAlignment(TEXT_ALIGN_RIGHT);
             display.drawString(pos_x + width, text_y,
-                               String(SCAN_RANGES[range_item + 1] / 1000) + "-" +
-                                   String(SCAN_RANGES[range_item + 1] % 1000));
+                               String(scan_pages[scan_page + 1].start_mhz) + "-" +
+                                   String(scan_pages[scan_page + 1].end_mhz));
         }
     }
     ui_initialized = true;

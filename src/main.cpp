@@ -154,6 +154,10 @@ typedef enum
 // String SCAN_RANGES = String("850..890,920..950");
 String SCAN_RANGES = "";
 
+size_t scan_pages_sz = 0;
+ScanPage *scan_pages;
+size_t scan_page = 0;
+
 // MHZ per page
 // to put everything into one page set RANGE_PER_PAGE = FREQ_END - 800
 uint64_t RANGE_PER_PAGE; // FREQ_END - CONF_FREQ_BEGIN
@@ -211,8 +215,6 @@ bool detected_y[STEPS]; // 20 - ??? steps
 
 // Used as a Led Light and Buzzer/count trigger
 bool first_run, new_pixel, detected_x = false;
-// drone detection flag
-bool detected = false;
 uint64_t drone_detection_level = DEFAULT_DRONE_DETECTION_LEVEL;
 #define TRIGGER_LEVEL -80.0
 uint64_t drone_detected_frequency_start = 0;
@@ -241,9 +243,8 @@ HardwareSerial SerialPort(SERIAL_PORT);
 
 // #define WEB_SERVER true
 
-uint64_t x, y, range_item, w = WATERFALL_START, i = 0;
+uint64_t x, y, w = WATERFALL_START, i = 0;
 int osd_x = 1, osd_y = 2, col = 0, max_bin = 32;
-uint64_t ranges_count = 0;
 
 int rssi = 0;
 int state = 0;
@@ -482,13 +483,9 @@ void osdProcess()
 
 Config config;
 
-struct RadioScan : Scan
+float getRSSI(void *param)
 {
-    float getRSSI() override;
-};
-
-float RadioScan::getRSSI()
-{
+    Scan *r = (Scan *)param;
 #if defined(USING_SX1280PA)
     // radio.startReceive();
     // get instantaneous RSSI value
@@ -508,7 +505,7 @@ float RadioScan::getRSSI()
 #endif
 }
 
-RadioScan r;
+Scan r;
 
 #define WATERFALL_SENSITIVITY 0.05
 DecoratedBarChart *bar;
@@ -759,6 +756,81 @@ void logToSerialTask(void *parameter)
 
 void drone_sound_alarm(void *arg, Event &e);
 
+void configurePages()
+{
+    if (scan_pages_sz > 0)
+        delete[] scan_pages;
+
+    if (single_page_scan)
+    {
+        scan_pages_sz = 1;
+        ScanPage scan_page = {
+            start_mhz : CONF_FREQ_BEGIN,
+            end_mhz : CONF_FREQ_END,
+            page_sz : config.scan_ranges_sz
+        };
+        if (scan_page.page_sz > 0)
+        {
+            scan_page.scan_ranges = new ScanRange[scan_page.page_sz];
+        }
+        for (int i = 0; i < scan_page.page_sz; i++)
+        {
+            scan_page.scan_ranges[i] = config.scan_ranges[i];
+        }
+        scan_pages = new ScanPage[1]{scan_page};
+        scan_page.page_sz =
+            0; // make sure it doesn't free up the Scanranges that were just constructed
+    }
+    else
+    {
+        scan_pages_sz =
+            (CONF_FREQ_END - CONF_FREQ_BEGIN + RANGE_PER_PAGE - 1) / RANGE_PER_PAGE;
+        scan_pages = new ScanPage[scan_pages_sz];
+        for (int j = 0; j < scan_pages_sz; j++)
+        {
+            ScanPage scan_page = {
+                start_mhz : CONF_FREQ_BEGIN + j * RANGE_PER_PAGE,
+                end_mhz : CONF_FREQ_BEGIN + (j + 1) * RANGE_PER_PAGE,
+                page_sz : 0
+            };
+            for (int i = 0; i < config.scan_ranges_sz; i++)
+            {
+                if (config.scan_ranges[i].start_khz > scan_page.end_mhz * 1000 ||
+                    config.scan_ranges[i].end_khz < scan_page.start_mhz * 1000)
+                {
+                    continue;
+                }
+                scan_page.page_sz++;
+            }
+
+            if (scan_page.page_sz > 0)
+            {
+                scan_page.scan_ranges = new ScanRange[scan_page.page_sz];
+                for (int i = 0, r = 0; i < config.scan_ranges_sz; i++)
+                {
+                    if (config.scan_ranges[i].start_khz > scan_page.end_mhz * 1000 ||
+                        config.scan_ranges[i].end_khz < scan_page.start_mhz * 1000)
+                    {
+                        continue;
+                    }
+
+                    scan_page.scan_ranges[r] = {
+                        start_khz : max(config.scan_ranges[i].start_khz,
+                                        scan_page.start_mhz * 1000),
+                        end_khz :
+                            min(config.scan_ranges[i].end_khz, scan_page.end_mhz * 1000),
+                        step_khz : config.scan_ranges[i].step_khz
+                    };
+                    r++;
+                }
+            }
+            scan_pages[j] = scan_page;
+            scan_page.page_sz =
+                0; // we copied over the values, make sure the array doesn't get freed
+        }
+    }
+}
+
 void configureDetection()
 {
     if (config.scan_ranges_sz == 0)
@@ -793,6 +865,8 @@ void configureDetection()
     RANGE_PER_PAGE = CONF_FREQ_END - CONF_FREQ_BEGIN; // FREQ_END - CONF_FREQ_BEGIN
     RANGE = (int)(CONF_FREQ_END - CONF_FREQ_BEGIN);
     range = RANGE;
+
+    configurePages();
 }
 
 void readConfigFile()
@@ -1038,6 +1112,8 @@ void setup(void)
             }
         }
     }
+
+    configurePages();
     display.clear();
     Serial.println();
 
@@ -1348,7 +1424,6 @@ void loop(void)
 
     r.detection_count = 0;
     drone_detected_frequency_start = 0;
-    ranges_count = 0;
 
     checkComms();
 
@@ -1377,11 +1452,13 @@ void loop(void)
     r.fr_begin = CONF_FREQ_BEGIN;
     r.fr_end = r.fr_begin;
 
-    for (range_item = 0; range_item < config.scan_ranges_sz; range_item++)
+    for (scan_page = 0; scan_page < scan_pages_sz; scan_page++)
     {
-        r.fr_begin = config.scan_ranges[range_item].start_khz / 1000;
-        r.fr_end = config.scan_ranges[range_item].end_khz / 1000;
+        ScanPage &page = scan_pages[scan_page];
+        r.fr_begin = page.start_mhz;
+        r.fr_end = page.end_mhz;
         range = r.fr_end - r.fr_begin;
+        median_frequency = (page.start_mhz + page.end_mhz) / 2;
 
 #ifdef DISABLED_CODE
         if (!ANIMATED_RELOAD || !single_page_scan)
@@ -1402,17 +1479,37 @@ void loop(void)
         // horizontal (x axis) Frequency loop
         osd_x = 1, osd_y = 2, col = 0, max_bin = 0;
 
-        ScanRange scan_range = config.scan_ranges[range_item];
-        int steps = 1;
-        if (scan_range.step_khz > 0)
-            steps = 1 + (scan_range.end_khz - scan_range.start_khz) / scan_range.step_khz;
-        if (steps == 0)
-            steps = 1;
-
         // x loop
-        for (x = 0; x < steps; x++)
+        for (int range = 0, step = 0; range < page.page_sz; range += (step == 0))
         {
-            new_pixel = is_new_x_pixel(x);
+            // the logic is:
+            // 1. go through each scan_range in the order that they are declared
+            //    in the page
+            // 2. start with scan_range.start and always end with scan_range.end
+            //    if adding step lands us a little short of end, there will be
+            //    extra iteration to scan actual end frequency
+            // 3. the next iteration after scanning end frequency will be next range
+            // 4. x is derived from the frequency we are going to scan with respect to
+            //    the page size
+            ScanRange scan_range = page.scan_ranges[range];
+            uint64_t curr_freq = scan_range.start_khz + scan_range.step_khz * step;
+            if (curr_freq > scan_range.end_khz)
+                curr_freq = scan_range.end_khz;
+
+            // for now support legacy calculation of x that relies on SCAN_RBW_FACTOR
+            x = (curr_freq - page.start_mhz * 1000) * STEPS * SCAN_RBW_FACTOR /
+                ((page.end_mhz - page.start_mhz) * 1000);
+
+            new_pixel = step == 0 || is_new_x_pixel(x);
+            if (curr_freq == scan_range.end_khz)
+            {
+                step = 0; // trigger switch to the next range on the next iteration
+            }
+            else
+            {
+                step++;
+            }
+
             if (ANIMATED_RELOAD && SCAN_RBW_FACTOR == 1)
             {
                 UI_drawCursor(x);
@@ -1429,9 +1526,8 @@ void loop(void)
             // Because of the SCAN_RBW_FACTOR x is not a display coordinate anymore
             // x > STEPS on SCAN_RBW_FACTOR
             int display_x = x / SCAN_RBW_FACTOR;
-            float step = (float)x * scan_range.step_khz / 1000.0;
 
-            r.current_frequency = r.fr_begin + step;
+            r.current_frequency = (float)curr_freq / 1000.0;
             LOG("setFrequency:%f\n", r.current_frequency);
 
 #ifdef USING_SX1280PA
@@ -1494,7 +1590,16 @@ void loop(void)
             // Spectrum analyzer using getRSSI
             {
                 LOG("METHOD RSSI");
-                uint16_t max_rssi = r.rssiMethod(CONF_SAMPLES, result,
+
+                float (*g)(void *);
+                samples = CONF_SAMPLES;
+
+                if (config.detection_strategy.equalsIgnoreCase("RSSI"))
+                    g = &getRSSI;
+                else
+                    g = &getRSSI;
+
+                uint16_t max_rssi = r.rssiMethod(g, &r, samples, result,
                                                  RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE);
 
                 if (max_x_rssi[display_x] > max_rssi)
@@ -1532,10 +1637,8 @@ void loop(void)
                 max_rssi_x = detected_at;
             }
 
-            detected = event.detected.detected;
             detected_y[display_x] = false;
 
-            float rr = event.detected.rssi;
             r.drone_detection_level = drone_detection_level;
 
             if (event.detected.trigger)

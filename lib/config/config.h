@@ -17,7 +17,7 @@ struct Config
     bool print_profile_time;
     String detection_strategy;
     int samples;
-    int scan_ranges_sz;
+    size_t scan_ranges_sz;
     ScanRange *scan_ranges;
     int log_data_json_interval;
     String listen_on_serial0;

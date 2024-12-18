@@ -7,21 +7,21 @@ struct TestScan : Scan
 {
     TestScan(float *ctx, int sz) : ctx(ctx), sz(sz), idx(0) {}
 
-    float getRSSI() override;
-
     float *ctx;
     int sz;
     int idx;
 };
 
-float TestScan::getRSSI()
+float getRSSI(void *param)
 {
-    if (idx >= sz)
+    TestScan *r = (TestScan *)param;
+
+    if (r->idx >= r->sz)
     {
         return -1000000;
     }
 
-    return ctx[idx++];
+    return r->ctx[r->idx++];
 }
 
 constexpr int test_sz = 13;
@@ -35,7 +35,7 @@ void test_rssi(void)
 
     TestScan t = TestScan(inputs, inputs_sz);
 
-    uint16_t r = t.rssiMethod(inputs_sz, samples, test_sz);
+    uint16_t r = t.rssiMethod(getRSSI, &t, inputs_sz, samples, test_sz);
 
     uint16_t expect[test_sz] = {20, 50, 55, 60, 0, 70, 75, 80, 0, 90, 0, 100, 110};
 
