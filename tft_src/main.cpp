@@ -926,14 +926,15 @@ void setup()
 
     st7789->fillScreen(ST7789_BLACK);
 
-    st7789->drawXBitmap(100, 50, epd_bitmap_ucog, 128, 64, ST7789_WHITE);
-
-    st7789->fillScreen(ST7789_BLACK);
+    st7789->drawXBitmap(120, 70, epd_bitmap_ucog, 128, 64, ST7789_WHITE);
 
     // Setup variables like Bandwidth:
     drawText(10, 10, "Setup T190", ST7789_WHITE);
     st7789->drawLine(10, 30, DISPLAY_WIDTH, 30, ST7789_CYAN);
     drawText(10, 40, "BW: " + String(bandwidth), ST7789_GREEN);
+
+    drawText(10, 50, "FREQ BEGIN: " + String(FREQ_BEGIN) + " MHz", ST7789_YELLOW);
+    drawText(10, 60, "FREQ END: " + String(FREQ_END) + " MHz", ST7789_YELLOW);
 
     for (int i = 0; i < 800; i++)
     {
