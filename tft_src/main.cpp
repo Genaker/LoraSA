@@ -101,6 +101,7 @@ constexpr bool DRAW_DETECTION_TICKS = true;
 
 #define FREQ_BEGIN 150
 #define FREQ_END 950
+#define BANDWIDTH 467.0
 #define MHZ_PX (float)((float)(FREQ_END - FREQ_BEGIN) / DISPLAY_WIDTH)
 #define DEFAULT_DRONE_DETECTION_LEVEL -90
 #define DRONE_LEGEND 1;
