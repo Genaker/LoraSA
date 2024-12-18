@@ -505,6 +505,25 @@ float getRSSI(void *param)
 #endif
 }
 
+float getCAD(void *param)
+{
+    Scan *r = (Scan *)param;
+
+    int16_t err = radio.scanChannel();
+    if (err != RADIOLIB_ERR_NONE)
+    {
+        return -999;
+    }
+
+#ifdef USING_LR1121
+    // LR1121 doesn't implement getRSSI(bool), getRSSI always
+    // returns RSSI of the last packet
+    return radio.getRSSI();
+#else
+    return radio.getRSSI(true);
+#endif
+}
+
 Scan r;
 
 #define WATERFALL_SENSITIVITY 0.05
@@ -1596,6 +1615,13 @@ void loop(void)
 
                 if (config.detection_strategy.equalsIgnoreCase("RSSI"))
                     g = &getRSSI;
+                else if (config.detection_strategy.equalsIgnoreCase("CAD"))
+                {
+                    g = &getCAD;
+                    samples = min(
+                        1,
+                        CONF_SAMPLES); // TODO: do we need to support values other than 1
+                }
                 else
                     g = &getRSSI;
 
