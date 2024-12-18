@@ -1737,6 +1737,6 @@ void loop(void)
         bt_start = millis();
     }
 #endif
-#endif
     sideBarCol = SIDEBAR_START_COL;
+#endif
 }

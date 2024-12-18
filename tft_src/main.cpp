@@ -16,9 +16,14 @@
 // #include "global_config.h"
 #include "images.h"
 // #include "ui.h"
-#include "comms.h"
 #include <Adafruit_GFX.h>
 #include <Arduino.h>
+
+#ifdef SERIAL_OUT
+#include <comms.h>
+#include <config.h>
+#endif
+
 #include <vector>
 
 struct Entry
@@ -255,6 +260,7 @@ void setBrightness()
     ledcWrite(st7789_brightness_channel, current_brightness);
 }
 
+#ifdef SERIAL_OUT
 struct frequency_scan_result
 {
     uint64_t begin;
@@ -306,6 +312,7 @@ void dumpToCommsTask()
     m.payload.dump = frequency_scan_result.dump;
     Comms0->send(m);
 }
+#endif
 
 #define battery_w 13
 #define battery_h 13
@@ -480,7 +487,10 @@ constexpr unsigned int STATUS_BAR_HEIGHT = 5;
 
 void loop()
 {
+#ifdef SERIAL_OUT
     checkComms();
+#endif
+
     // Serial.println("Loop");
     if (screen_update_loop_counter == 0)
     {
@@ -574,6 +584,7 @@ void loop()
         st7789->drawPixel(x1, rssiToPix(rssi2) - 3, rssiToColor(abs(rssi2)));
         st7789->drawPixel(x1, rssiToPix(rssi2) - 4, rssiToColor(abs(rssi2)));
 
+#ifdef SERIAL_OUT
         frequency_scan_result.dump.freqs_khz[frequency_scan_result.dump.sz] =
             (int)freq * 1000;
 
@@ -584,6 +595,7 @@ void loop()
             Serial.println("frequency_scan_result overflow 10000");
         }
 
+#endif
         if (true /*draw full line*/)
         {
             st7789->drawFastVLine(x1, rssiToPix(rssi2), lower_level - rssiToPix(rssi2),
@@ -798,10 +810,13 @@ void loop()
             display_scan_i_end = 0;
         }
 
+#ifdef SERIAL_OUT
+
         // Dump to Serial
         dumpToCommsTask();
-        fr = FREQ_BEGIN;
         frequency_scan_result.dump.sz = 0;
+#endif
+        fr = FREQ_BEGIN;
         rssi_single_start = 0;
         rssi_single_end = 0;
         x1 = 0;
@@ -823,15 +838,19 @@ void loop()
 #endif
 }
 
+#ifdef SERIAL_OUT
 Config config;
+#endif
 
 void setup()
 {
     uint32_t *f = new uint32_t[10000];
     int16_t *r = new int16_t[10000];
 
+#ifdef SERIAL_OUT
     frequency_scan_result.dump.freqs_khz = f;
     frequency_scan_result.dump.rssis = r;
+#endif
 
     for (int i = 0; i < MAX_MHZ_INTERVAL; i++)
     {
@@ -879,6 +898,9 @@ void setup()
         Serial.println(state);
     }
     heltec_setup();
+
+#ifdef SERIAL_OUT
+
     config = Config::init();
     bool comms_initialized = Comms::initComms(config);
     if (comms_initialized)
@@ -889,6 +911,8 @@ void setup()
     {
         Serial.println("Comms did not initialize");
     }
+#endif
+
     delay(2000);
     st7789->fillScreen(ST7789_BLACK);
 }
