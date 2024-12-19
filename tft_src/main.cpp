@@ -101,7 +101,10 @@ constexpr bool DRAW_DETECTION_TICKS = true;
 
 #define FREQ_BEGIN 150
 #define FREQ_END 950
+
 #define BANDWIDTH 467.0
+float bandwidth = BANDWIDTH;
+
 #define MHZ_PX (float)((float)(FREQ_END - FREQ_BEGIN) / DISPLAY_WIDTH)
 #define DEFAULT_DRONE_DETECTION_LEVEL -90
 #define DRONE_LEGEND 1;
@@ -226,7 +229,7 @@ void init_radio()
     // configure scan bandwidth and disable the data shaping
 
     Serial.println("Setting up radio");
-    RADIOLIB_OR_HALT(radio.setRxBandwidth(BANDWIDTH));
+    RADIOLIB_OR_HALT(radio.setRxBandwidth(bandwidth));
 
     // and disable the data shaping
     RADIOLIB_OR_HALT(radio.setDataShaping(RADIOLIB_SHAPING_NONE));
@@ -842,6 +845,40 @@ void loop()
 Config config;
 #endif
 
+void downgradeBandwidth()
+{
+    // Downgrade Bandwidth for SX1262 chip (inside T190)
+    // list of possible bandwidths:
+    // 4.8, 5.8, 7.3, 9.7, 11.7, 14.6, 19.5, 23.4, 29.3, 39.0, 46.9, 58.6,
+    // 78.2, 93.8, 117.3, 156.2, 187.2, 234.3, 312.0, 373.6 and 467.0
+
+    // Choose between:
+    switch (int(bandwidth))
+    {
+    case 467:
+        bandwidth = 234.3;
+        break;
+    case 234:
+        bandwidth = 156.2;
+        break;
+    case 156:
+        bandwidth = 78.2;
+        break;
+    case 78:
+        bandwidth = 14.6;
+        break;
+    case 14:
+        bandwidth = 4.8;
+        break;
+    case 4:
+        // do nothing at lowest bandwidth
+        break;
+    default:
+        bandwidth = 467.0;
+        break;
+    }
+}
+
 void setup()
 {
     uint32_t *f = new uint32_t[10000];
@@ -889,7 +926,33 @@ void setup()
 
     st7789->fillScreen(ST7789_BLACK);
 
-    st7789->drawXBitmap(100, 50, epd_bitmap_ucog, 128, 64, ST7789_WHITE);
+    st7789->drawXBitmap(120, 70, epd_bitmap_ucog, 128, 64, ST7789_WHITE);
+
+    // Setup variables like Bandwidth:
+    drawText(10, 10, "Setup T190", ST7789_WHITE);
+    st7789->drawLine(10, 30, DISPLAY_WIDTH, 30, ST7789_CYAN);
+    drawText(10, 40, "BW: " + String(bandwidth), ST7789_GREEN);
+
+    drawText(10, 50, "FREQ BEGIN: " + String(FREQ_BEGIN) + " MHz", ST7789_YELLOW);
+    drawText(10, 60, "FREQ END: " + String(FREQ_END) + " MHz", ST7789_YELLOW);
+
+    for (int i = 0; i < 800; i++)
+    {
+        button.update();
+        delay(5);
+        if (i % 25 == 0)
+        {                                         // Print a dot every 25 iterations
+            drawText(10 + (i / 25) * 6, 20, "|"); // Move 6 pixels right for each dot
+        }
+        if (button.pressed())
+        {
+            downgradeBandwidth();
+            st7789->fillScreen(ST7789_BLACK);
+            drawText(10, 40, "BW: " + String(bandwidth), ST7789_GREEN);
+        }
+    }
+    // End of setup, before init_radio()...
+
     init_radio();
     state = radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_NONE);
     if (state != RADIOLIB_ERR_NONE)
