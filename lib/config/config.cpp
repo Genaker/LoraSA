@@ -88,6 +88,18 @@ Config Config::init()
             continue;
         }
 
+        if (r.key.equalsIgnoreCase("rx_lora"))
+        {
+            c.rx_lora = configureLora(r.value);
+            continue;
+        }
+
+        if (r.key.equalsIgnoreCase("tx_lora"))
+        {
+            c.tx_lora = configureLora(r.value);
+            continue;
+        }
+
         Serial.printf("Unknown key '%s' will be ignored\n", r.key);
     }
 
@@ -143,7 +155,50 @@ bool Config::updateConfig(String key, String value)
         return true;
     }
 
+    if (key.equalsIgnoreCase("rx_lora"))
+    {
+        rx_lora = configureLora(value);
+        return true;
+    }
+
+    if (key.equalsIgnoreCase("tx_lora"))
+    {
+        tx_lora = configureLora(value);
+        return true;
+    }
+
+    if (key.equalsIgnoreCase("is_host"))
+    {
+        String v = value;
+        bool p = v.equalsIgnoreCase("true");
+        if (!p && !v.equalsIgnoreCase("false"))
+        {
+            Serial.printf("Expected bool for '%s', found '%s' - ignoring\n", key.c_str(),
+                          value.c_str());
+        }
+        else
+        {
+            is_host = p;
+        }
+        return true;
+    }
+
     return false;
+}
+
+String loraConfigToStr(LoRaConfig *cfg)
+{
+    if (cfg == NULL)
+    {
+        return String("none");
+    }
+
+    return String("freq:") + String(cfg->freq) + String(",bw:") + String(cfg->bw) +
+           String(",sf:") + String(cfg->sf) + String(",cr:") + String(cfg->cr) +
+           String(",tx_power:") + String(cfg->tx_power) + String(",preamble_len:") +
+           String(cfg->preamble_len) + String(",sync_word:") +
+           String(cfg->sync_word, 16) + String(",crc:") + String(cfg->crc ? "1" : "0") +
+           String(",implicit_header:") + String(cfg->implicit_header);
 }
 
 String detectionStrategyToStr(Config &c)
@@ -193,6 +248,31 @@ int findSepa(String s, String sepa, int begin, int &end)
 
     end = i;
     return i + sepa.length();
+}
+
+uint64_t fromHex(String s)
+{
+    uint64_t r = 0;
+    for (char c : s)
+    {
+        uint64_t v;
+        if (c >= 'A' && c <= 'F')
+        {
+            v = c - 'A' + 10;
+        }
+        else if (c >= 'a' && c <= 'f')
+        {
+            v = c - 'a' + 10;
+        }
+        else
+        {
+            v = c - '0';
+        }
+
+        r = (r << 4) + v;
+    }
+
+    return r;
 }
 
 uint64_t toUint64(String s)
@@ -269,6 +349,94 @@ ScanRange parseScanRange(String &cfg, int &begin)
     return res;
 }
 
+LoRaConfig *configureLora(String cfg)
+{
+    if (cfg.equalsIgnoreCase("none"))
+    {
+        return NULL;
+    }
+
+    LoRaConfig *lora = new LoRaConfig();
+
+    int begin = 0;
+    int end, i;
+
+    while ((i = findSepa(cfg, ",", begin, end)) >= 0)
+    {
+        String param = cfg.substring(begin, end);
+        begin = i;
+        int j = param.indexOf(":");
+        if (j < 0)
+        {
+            Serial.printf("Expected ':' to be present in '%s' - ignoring config\n",
+                          param);
+            continue;
+        }
+
+        String k = param.substring(0, j);
+
+        if (k.equalsIgnoreCase("sync_word"))
+        {
+            lora->sync_word = (uint8_t)fromHex(param.substring(j + 1));
+            continue;
+        }
+
+        int v = param.substring(j + 1).toInt();
+
+        if (k.equalsIgnoreCase("freq"))
+        {
+            lora->freq = (uint16_t)v;
+            continue;
+        }
+
+        if (k.equalsIgnoreCase("bw"))
+        {
+            lora->bw = (uint16_t)v;
+            continue;
+        }
+
+        if (k.equalsIgnoreCase("sf"))
+        {
+            lora->sf = (uint8_t)v;
+            continue;
+        }
+
+        if (k.equalsIgnoreCase("cr"))
+        {
+            lora->cr = (uint8_t)v;
+            continue;
+        }
+
+        if (k.equalsIgnoreCase("tx_power"))
+        {
+            lora->tx_power = (uint8_t)v;
+            continue;
+        }
+
+        if (k.equalsIgnoreCase("preamble_len"))
+        {
+            lora->preamble_len = (uint8_t)v;
+            continue;
+        }
+
+        if (k.equalsIgnoreCase("crc"))
+        {
+            lora->crc = v != 0;
+            continue;
+        }
+
+        if (k.equalsIgnoreCase("implicit_header"))
+        {
+            lora->implicit_header = (uint8_t)v;
+            continue;
+        }
+
+        Serial.printf("Unknown key '%s' will be ignored\n", k);
+    }
+
+    return lora;
+}
+
 void Config::configureDetectionStrategy(String cfg)
 {
     if (scan_ranges_sz > 0)
@@ -329,6 +497,10 @@ bool Config::write_config(const char *path)
 
     f.println("detection_strategy = " + getConfig("detection_strategy"));
 
+    f.println("rx_lora = " + getConfig("rx_lora"));
+    f.println("tx_lora = " + getConfig("tx_lora"));
+    f.println("is_host = " + getConfig("is_host"));
+
     f.close();
     return true;
 }
@@ -363,6 +535,21 @@ String Config::getConfig(String key)
     if (key.equalsIgnoreCase("detection_strategy"))
     {
         return detectionStrategyToStr(*this);
+    }
+
+    if (key.equalsIgnoreCase("rx_lora"))
+    {
+        return loraConfigToStr(rx_lora);
+    }
+
+    if (key.equalsIgnoreCase("tx_lora"))
+    {
+        return loraConfigToStr(tx_lora);
+    }
+
+    if (key.equalsIgnoreCase("is_host"))
+    {
+        return String(is_host ? "true" : "false");
     }
 
     return "";

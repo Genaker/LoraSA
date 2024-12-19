@@ -10,6 +10,9 @@ Comms *HostComms;
 Comms *Comms0 = NULL;
 Comms *Comms1 = NULL;
 
+RadioComms *RxComms = NULL;
+RadioComms *TxComms = NULL;
+
 void _onReceiveUsb(size_t len)
 {
     if (HostComms == NULL)
@@ -100,6 +103,16 @@ bool Comms::initComms(Config &c)
         Comms1 = new NoopComms();
 
         Serial.println("Configured none - Initialized no communications on Serial1");
+    }
+
+    if (c.rx_lora != NULL)
+    {
+        RxComms = new RadioComms("RxComms", radio, *c.rx_lora);
+    }
+
+    if (c.tx_lora != NULL)
+    {
+        TxComms = new RadioComms("TxComms", radio, *c.tx_lora);
     }
 
     if (!fine)

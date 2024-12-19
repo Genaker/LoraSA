@@ -2,6 +2,9 @@
 #define __COMMS_H
 
 #include <HardwareSerial.h>
+#include <LoRaBoards.h>
+
+#include <LiLyGo.h>
 #include <config.h>
 
 #ifdef HELTEC
@@ -108,5 +111,26 @@ extern Comms *HostComms;
 extern Comms *Comms0;
 
 extern Comms *Comms1;
+
+struct RadioComms
+{
+    String name;
+    RADIO_TYPE &radio;
+    LoRaConfig &loraCfg;
+
+    RadioComms(String name, RADIO_TYPE &radio, LoRaConfig &cfg)
+        : name(name), radio(radio), loraCfg(cfg)
+    {
+    }
+
+    Message **received;
+
+    int16_t configureRadio();
+    int16_t send(Message &);
+    Message *receive(uint16_t timeout_ms);
+};
+
+extern RadioComms *RxComms;
+extern RadioComms *TxComms;
 
 #endif

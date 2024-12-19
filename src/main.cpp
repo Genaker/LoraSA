@@ -86,6 +86,8 @@ long noDevicesMillis = 0, cycleCnt = 0;
 bool present = false;
 bool scanFinished = true;
 
+bool radioIsScan = false;
+
 // time to scan BT
 #define BT_SCAN_TIME 10
 
@@ -533,19 +535,71 @@ StackedChart stacked(display, 0, 0, 0, 0);
 
 UptimeClock *uptime;
 
+int16_t initForScan(float freq)
+{
+    int16_t state;
+
+#if defined(USING_SX1280PA)
+    state = radio.beginGFSK(freq);
+#elif defined(USING_LR1121)
+    state = radio.beginGFSK(freq, 4.8F, 5.0F, 156.2F, 10, 16U, 1.7F);
+#else
+    state = radio.beginFSK(freq);
+#endif
+
+    return state;
+}
+
+bool setFrequency(float curr_freq)
+{
+    r.current_frequency = curr_freq;
+    LOG("setFrequency:%f\n", r.current_frequency);
+
+    int16_t state;
+#ifdef USING_SX1280PA
+    int16_t state1 =
+        radio.setFrequency(r.current_frequency); // 1280 doesn't have calibration
+
+    state = radio.startReceive(RADIOLIB_SX128X_RX_TIMEOUT_INF);
+    if (state != RADIOLIB_ERR_NONE)
+    {
+        Serial.println("Error:startReceive:" + String(state));
+    }
+
+    state = state1;
+#elif USING_SX1276
+    state = radio.setFrequency(freq);
+#elif defined(USING_LR1121)
+    state = radio.setFrequency(r.current_frequency,
+                               true); // true = no calibration need here
+#else
+    state = radio.setFrequency(r.current_frequency,
+                               false); // false = calibration is needed here
+#endif
+    if (state != RADIOLIB_ERR_NONE)
+    {
+        display.drawString(0, 64 - 10,
+                           "E(" + String(state) +
+                               "):setFrequency:" + String(r.current_frequency));
+        Serial.println("E(" + String(state) +
+                       "):setFrequency:" + String(r.current_frequency));
+        display.display();
+        delay(2);
+        return false;
+    }
+
+    return true;
+}
+
 void init_radio()
 {
     // initialize SX1262 FSK modem at the initial frequency
     both.println("Init radio");
-#if defined(USING_SX1280PA)
-    state = radio.beginGFSK(CONF_FREQ_BEGIN);
-#elif defined(USING_LR1121)
-    state = radio.beginGFSK(CONF_FREQ_BEGIN, 4.8F, 5.0F, 156.2F, 10, 16U, 1.7F);
-#else
-    state = radio.beginFSK(CONF_FREQ_BEGIN);
-#endif
+    state = initForScan(CONF_FREQ_BEGIN);
+
     if (state == RADIOLIB_ERR_NONE)
     {
+        radioIsScan = true;
         Serial.println(F("success!"));
     }
     else
@@ -591,25 +645,9 @@ void init_radio()
     }
     both.println("Starting scanning...");
 
-// calibrate only once ,,, at startup
-// TODO: check documentation (9.2.1) if we must calibrate in certain ranges
-#ifdef USING_SX1280PA
-    state = radio.setFrequency(CONF_FREQ_BEGIN);
-    if (state != RADIOLIB_ERR_NONE)
-    {
-        Serial.println("Error:setFrequency:" + String(state));
-    }
-    state = radio.startReceive();
-    if (state != RADIOLIB_ERR_NONE)
-    {
-        Serial.println("Error:startReceive:" + String(state));
-    }
-#elif USING_SX1276
-    // Sets carrier frequency. Allowed values range from 137.0 MHz to 1020.0 MHz.
-    radio.setFrequency(CONF_FREQ_BEGIN);
-#else
-    radio.setFrequency(CONF_FREQ_BEGIN, true);
-#endif
+    // calibrate only once ,,, at startup
+    // TODO: check documentation (9.2.1) if we must calibrate in certain ranges
+    setFrequency(CONF_FREQ_BEGIN);
 
     delay(50);
 }
@@ -1453,6 +1491,12 @@ void checkComms()
 // MAX Frequency RSSI BIN value of the samples
 int max_rssi_x = 999;
 
+void doScan();
+
+void reportScan(RadioComms &c);
+
+int16_t checkRadio(RadioComms &c);
+
 void loop(void)
 {
     r.led_flag = false;
@@ -1461,6 +1505,38 @@ void loop(void)
     drone_detected_frequency_start = 0;
 
     checkComms();
+
+    if (config.is_host)
+    {
+        if (TxComms != NULL)
+        {
+            // NB: swapping the use of Tx and Rx comms, so a pair of modules
+            //     with identical rx/tx_lora config can talk
+            int16_t status = checkRadio(*TxComms);
+            if (status != RADIOLIB_ERR_NONE)
+            {
+                Serial.printf("Error getting a message: %d\n", status);
+            }
+        }
+    }
+    else
+    {
+        doScan();
+        if (TxComms != NULL)
+            reportScan(*TxComms);
+        if (RxComms != NULL)
+            checkRadio(*RxComms);
+    }
+}
+
+void doScan()
+{
+    if (!radioIsScan)
+    {
+        radioIsScan = true;
+        initForScan(CONF_FREQ_BEGIN);
+        state = radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_NONE);
+    }
 
     // reset scan time
     if (config.print_profile_time)
@@ -1562,36 +1638,7 @@ void loop(void)
             // x > STEPS on SCAN_RBW_FACTOR
             int display_x = x / SCAN_RBW_FACTOR;
 
-            r.current_frequency = (float)curr_freq / 1000.0;
-            LOG("setFrequency:%f\n", r.current_frequency);
-
-#ifdef USING_SX1280PA
-            state =
-                radio.setFrequency(r.current_frequency); // 1280 doesn't have calibration
-            radio.startReceive(RADIOLIB_SX128X_RX_TIMEOUT_INF);
-#elif USING_SX1276
-            state = radio.setFrequency(freq);
-#elif defined(USING_LR1121)
-            state = radio.setFrequency(r.current_frequency,
-                                       true); // true = no calibration need here
-#else
-            state = radio.setFrequency(r.current_frequency,
-                                       false); // false = calibration is needed here
-#endif
-            int radio_error_count = 0;
-            if (state != RADIOLIB_ERR_NONE)
-            {
-                display.drawString(0, 64 - 10,
-                                   "E(" + String(state) +
-                                       "):setFrequency:" + String(r.current_frequency));
-                Serial.println("E(" + String(state) +
-                               "):setFrequency:" + String(r.current_frequency));
-                display.display();
-                delay(2);
-                radio_error_count++;
-                if (radio_error_count > 10)
-                    continue;
-            }
+            setFrequency(curr_freq / 1000.0);
 
             LOG("Step:%d Freq: %f\n", x, r.current_frequency);
             // SpectralScan Method
@@ -1913,4 +1960,58 @@ void loop(void)
 #endif
     sideBarCol = SIDEBAR_START_COL;
 #endif
+}
+
+int16_t checkRadio(RadioComms &comms)
+{
+    radioIsScan = false;
+    int16_t status = comms.configureRadio();
+    if (status != RADIOLIB_ERR_NONE)
+        return status;
+
+    Message *msg = comms.receive(
+        config.is_host
+            ? 2000
+            : 200); // 200ms should be enough to receive 500 bytes at SF 7 and BW 500
+    if (msg == NULL)
+    {
+        return status;
+    }
+
+    if (msg->type == SCAN_RESULT)
+    {
+        HostComms->send(*msg);
+    }
+    else
+    {
+        Serial.printf("Received a message of unsupported type: %d\n", msg->type);
+    }
+
+    delete msg;
+
+    return status;
+}
+
+void reportScan(RadioComms &comms)
+{
+    radioIsScan = false;
+    int16_t status = comms.configureRadio();
+    if (status != RADIOLIB_ERR_NONE)
+    {
+        Serial.printf("Failed to configure Radio: %d\n", status);
+        return;
+    }
+
+    Message m;
+    m.type = SCAN_RESULT;
+    m.payload.dump = frequency_scan_result.dump;
+    status = comms.send(m);
+
+    m.payload.dump.sz = 0; // dump is shared, so should not delete underlying arrays
+
+    if (status != RADIOLIB_ERR_NONE)
+    {
+        Serial.printf("Failed to send scan result: %d\n", status);
+        return;
+    }
 }
