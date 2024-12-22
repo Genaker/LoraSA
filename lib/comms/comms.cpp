@@ -1,4 +1,3 @@
-#ifdef SERIAL_OUT
 #include "comms.h"
 #include <config.h>
 
@@ -340,4 +339,18 @@ String _wrap_str(String v)
     String r = String(v.length()) + "\n" + v;
     return "WRAP " + String(crc16(r, 0), 16) + " " + r;
 }
-#endif
+
+Message::~Message()
+{
+    if (type == SCAN_RESULT)
+    {
+        if (payload.dump.sz > 0)
+        {
+            delete[] payload.dump.freqs_khz;
+            delete[] payload.dump.rssis;
+            payload.dump.sz = 0;
+        }
+
+        return;
+    }
+}

@@ -55,10 +55,8 @@
 #define RADIOLIB_CHECK_PARAMS (0)
 
 #include <charts.h>
-#ifdef SERIAL_OUT
 #include <comms.h>
 #include <config.h>
-#endif
 #include <events.h>
 #include <scan.h>
 #include <stdlib.h>
@@ -482,9 +480,7 @@ void osdProcess()
 }
 #endif
 
-#ifdef SERIAL_OUT
 Config config;
-#endif
 
 struct RadioScan : Scan
 {
@@ -602,7 +598,6 @@ void init_radio()
     delay(50);
 }
 
-#ifdef SERIAL_OUT
 struct frequency_scan_result
 {
     uint64_t begin;
@@ -613,12 +608,10 @@ struct frequency_scan_result
     ScanTaskResult dump;
     size_t readings_sz;
 } frequency_scan_result;
-#endif
 
 TaskHandle_t logToSerial = NULL;
 TaskHandle_t dumpToComms = NULL;
 
-#ifdef SERIAL_OUT
 void eventListenerForReport(void *arg, Event &e)
 {
     if (e.type == EventType::DETECTED)
@@ -725,9 +718,11 @@ void dumpToCommsTask(void *parameter)
             if (Comms1 != NULL)
                 Comms1->send(m);
         }
+
+        m.payload.dump.sz =
+            0; // dump is shared, so should not delete arrays in destructor
     }
 }
-#endif
 
 #ifdef LOG_DATA_JSON
 void logToSerialTask(void *parameter)
@@ -854,7 +849,6 @@ void setup(void)
     bt_start = millis();
     wf_start = millis();
 
-#ifdef SERIAL_OUT
     config = Config::init();
     r.comms_initialized = Comms::initComms(config);
     if (r.comms_initialized)
@@ -865,7 +859,6 @@ void setup(void)
     {
         Serial.println("Comms did not initialize");
     }
-#endif
 
     pinMode(LED, OUTPUT);
     pinMode(BUZZER_PIN, OUTPUT);
@@ -1048,9 +1041,7 @@ void setup(void)
 #ifdef LOG_DATA_JSON
     xTaskCreate(logToSerialTask, "LOG_DATA_JSON", 2048, NULL, 1, &logToSerial);
 #endif
-#ifdef SERIAL_OUT
     xTaskCreate(dumpToCommsTask, "DUMP_RESPONSE_PROCESS", 2048, NULL, 1, &dumpToComms);
-#endif
 
     r.trigger_level = TRIGGER_LEVEL;
     stacked.reset(0, 0, display.width(), display.height());
@@ -1088,12 +1079,10 @@ void setup(void)
     r.addEventListener(DETECTED, drone_sound_alarm, &r);
     r.addEventListener(SCAN_TASK_COMPLETE, stacked);
 
-#ifdef SERIAL_OUT
     frequency_scan_result.readings_sz = 0;
     frequency_scan_result.dump.sz = 0;
 
     r.addEventListener(ALL_EVENTS, eventListenerForReport, NULL);
-#endif
 
 #ifdef UPTIME_CLOCK
     uptime = new UptimeClock(display, millis());
@@ -1283,7 +1272,6 @@ void check_ranges()
     }
 }
 
-#ifdef SERIAL_OUT
 void checkComms()
 {
     while (HostComms->available() > 0)
@@ -1347,7 +1335,6 @@ void checkComms()
         delete m;
     }
 }
-#endif
 
 // MAX Frequency RSSI BIN value of the samples
 int max_rssi_x = 999;
@@ -1360,7 +1347,6 @@ void loop(void)
     drone_detected_frequency_start = 0;
     ranges_count = 0;
 
-#ifdef SERIAL_OUT
     checkComms();
 
     // reset scan time
@@ -1370,7 +1356,6 @@ void loop(void)
         loop_start = millis();
     }
     r.epoch++;
-#endif
 
     if (!ANIMATED_RELOAD || !single_page_scan)
     {
@@ -1767,17 +1752,13 @@ void loop(void)
 
     joy_btn_clicked = false;
 
-#ifdef SERIAL_OUT
     if (config.print_profile_time)
     {
-#endif
 #ifdef PRINT_PROFILE_TIME
         loop_time = millis() - loop_start;
         Serial.printf("LOOP: %lld ms; SCAN: %lld ms;\n  ", loop_time, scan_time);
 #endif
-#ifdef SERIAL_OUT
     }
-#endif
 
 // No WiFi and BT Scan Without OSD
 #ifdef OSD_ENABLED

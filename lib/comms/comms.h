@@ -1,7 +1,6 @@
 #ifndef __COMMS_H
 #define __COMMS_H
 
-#ifdef SERIAL_OUT
 #include <HardwareSerial.h>
 #include <config.h>
 
@@ -47,6 +46,8 @@ struct Message
         ScanTask scan;
         ScanTaskResult dump;
     } payload;
+
+    ~Message();
 };
 
 struct Comms
@@ -99,5 +100,4 @@ extern Comms *Comms0;
 
 extern Comms *Comms1;
 
-#endif
 #endif
