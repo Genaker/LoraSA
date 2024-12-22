@@ -32,6 +32,8 @@ struct Config
     bool write_config(const char *path);
 
     static Config init();
+    bool updateConfig(String key, String value);
+    String getConfig(String key);
 
     void configureDetectionStrategy(String cfg);
 };

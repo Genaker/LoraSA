@@ -83,50 +83,8 @@ Config Config::init()
         }
 
         // do something with known keys and values
-
-        if (r.key.equalsIgnoreCase("print_profile_time"))
+        if (c.updateConfig(r.key, r.value))
         {
-            String v = r.value;
-            bool p = v.equalsIgnoreCase("true");
-            if (!p && !v.equalsIgnoreCase("false"))
-            {
-                Serial.printf("Expected bool for '%s', found '%s' - ignoring\n",
-                              r.key.c_str(), r.value.c_str());
-            }
-            else
-            {
-                c.print_profile_time = p;
-            }
-            continue;
-        }
-
-        if (r.key.equalsIgnoreCase("log_data_json_interval"))
-        {
-            c.log_data_json_interval = r.value.toInt();
-            continue;
-        }
-
-        if (r.key.equalsIgnoreCase("listen_on_serial0"))
-        {
-            c.listen_on_serial0 = r.value;
-            continue;
-        }
-
-        if (r.key.equalsIgnoreCase("listen_on_serial1"))
-        {
-            c.listen_on_serial1 = r.value;
-            continue;
-        }
-
-        if (r.key.equalsIgnoreCase("listen_on_usb"))
-        {
-            c.listen_on_serial0 = r.value;
-            continue;
-        }
-
-        if (r.key.equalsIgnoreCase("detection_strategy"))
-        {
-            c.configureDetectionStrategy(r.value);
             continue;
         }
 
@@ -135,6 +93,57 @@ Config Config::init()
 
     f.close();
     return c;
+}
+
+bool Config::updateConfig(String key, String value)
+{
+    if (key.equalsIgnoreCase("print_profile_time"))
+    {
+        String v = value;
+        bool p = v.equalsIgnoreCase("true");
+        if (!p && !v.equalsIgnoreCase("false"))
+        {
+            Serial.printf("Expected bool for '%s', found '%s' - ignoring\n", key.c_str(),
+                          value.c_str());
+        }
+        else
+        {
+            print_profile_time = p;
+        }
+        return true;
+    }
+
+    if (key.equalsIgnoreCase("log_data_json_interval"))
+    {
+        log_data_json_interval = value.toInt();
+        return true;
+    }
+
+    if (key.equalsIgnoreCase("listen_on_serial0"))
+    {
+        listen_on_serial0 = value;
+        return true;
+    }
+
+    if (key.equalsIgnoreCase("listen_on_serial1"))
+    {
+        listen_on_serial1 = value;
+        return true;
+    }
+
+    if (key.equalsIgnoreCase("listen_on_usb"))
+    {
+        listen_on_serial0 = value;
+        return true;
+    }
+
+    if (key.equalsIgnoreCase("detection_strategy"))
+    {
+        configureDetectionStrategy(value);
+        return true;
+    }
+
+    return false;
 }
 
 String detectionStrategyToStr(Config &c)
@@ -312,16 +321,51 @@ bool Config::write_config(const char *path)
         return false;
     }
 
-    f.println("print_profile_time = " + String(print_profile_time ? "true" : "false"));
-    f.println("log_data_json_interval = " + String(log_data_json_interval));
-    f.println("listen_on_serial0 = " + listen_on_serial0);
-    f.println("listen_on_serial1 = " + listen_on_serial1);
-    f.println("listen_on_usb = " + listen_on_usb);
+    f.println("print_profile_time = " + getConfig("print_profile_time"));
+    f.println("log_data_json_interval = " + getConfig("log_data_json_interval"));
+    f.println("listen_on_serial0 = " + getConfig("listen_on_serial0"));
+    f.println("listen_on_serial1 = " + getConfig("listen_on_serial1"));
+    f.println("listen_on_usb = " + getConfig("listen_on_usb"));
 
-    f.println("detection_strategy = " + detectionStrategyToStr(*this));
+    f.println("detection_strategy = " + getConfig("detection_strategy"));
 
     f.close();
     return true;
+}
+
+String Config::getConfig(String key)
+{
+    if (key.equalsIgnoreCase("print_profile_time"))
+    {
+        return String(print_profile_time ? "true" : "false");
+    }
+
+    if (key.equalsIgnoreCase("log_data_json_interval"))
+    {
+        return String(log_data_json_interval);
+    }
+
+    if (key.equalsIgnoreCase("listen_on_serial0"))
+    {
+        return listen_on_serial0;
+    }
+
+    if (key.equalsIgnoreCase("listen_on_serial1"))
+    {
+        return listen_on_serial1;
+    }
+
+    if (key.equalsIgnoreCase("listen_on_usb"))
+    {
+        return listen_on_usb;
+    }
+
+    if (key.equalsIgnoreCase("detection_strategy"))
+    {
+        return detectionStrategyToStr(*this);
+    }
+
+    return "";
 }
 
 ParseResult parse_config_line(String ln)

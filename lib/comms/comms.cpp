@@ -241,10 +241,37 @@ bool ReadlineComms::send(Message &m)
     case MessageType::SCAN_RESULT:
         p = _scan_result_str(m.payload.dump);
         break;
+    case MessageType::CONFIG_TASK:
+        p = m.payload.config.is_set ? "SET " : "GET ";
+        p += *m.payload.config.key;
+        if (m.payload.config.is_set)
+        {
+            p += " " + *m.payload.config.value;
+        }
+        break;
     }
 
     serial.print(_wrap_str(p));
     return true;
+}
+
+String _stringParam(String &p, String default_v)
+{
+    p.trim();
+    int i = p.indexOf(' ');
+    if (i < 0)
+    {
+        i = p.length();
+    }
+
+    String v = p.substring(0, i);
+    p = p.substring(i + 1);
+
+    if (i == 0)
+    {
+        v = default_v;
+    }
+    return v;
 }
 
 int64_t _intParam(String &p, int64_t default_v)
@@ -313,6 +340,28 @@ Message *_parsePacket(String p)
         m->payload.scan.delay = _intParam(p, -1);
         return m;
     }
+
+    if (cmd.equalsIgnoreCase("get"))
+    {
+        Message *m = new Message();
+        m->type = MessageType::CONFIG_TASK;
+        m->payload.config.is_set = false;
+        m->payload.config.key = new String(_stringParam(p, ""));
+        m->payload.config.value = NULL;
+        return m;
+    }
+
+    if (cmd.equalsIgnoreCase("set"))
+    {
+        Message *m = new Message();
+        m->type = MessageType::CONFIG_TASK;
+        m->payload.config.is_set = true;
+        m->payload.config.key = new String(_stringParam(p, ""));
+        m->payload.config.value = new String(_stringParam(p, ""));
+
+        return m;
+    }
+
     return NULL;
 }
 
@@ -349,6 +398,18 @@ Message::~Message()
             delete[] payload.dump.freqs_khz;
             delete[] payload.dump.rssis;
             payload.dump.sz = 0;
+        }
+
+        return;
+    }
+
+    if (type == CONFIG_TASK)
+    {
+        delete payload.config.key;
+
+        if (payload.config.is_set)
+        {
+            delete payload.config.value;
         }
 
         return;

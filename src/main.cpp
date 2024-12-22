@@ -1387,6 +1387,22 @@ void checkComms()
             Comms0->send(*m); // forward to peer
             Comms1->send(*m); // forward to peer
             break;
+        case MessageType::CONFIG_TASK:
+            if (m->payload.config.is_set)
+            {
+                String v = config.getConfig(*m->payload.config.key);
+                bool r =
+                    config.updateConfig(*m->payload.config.key, *m->payload.config.value);
+                Serial.printf("SET config (%s): %s = %s (was: %s)\n", r ? "OK" : "failed",
+                              m->payload.config.key->c_str(),
+                              m->payload.config.value->c_str(), v.c_str());
+            }
+            else
+            {
+                Serial.printf("GET config: %s = %s\n", m->payload.config.key->c_str(),
+                              config.getConfig(*m->payload.config.key).c_str());
+            }
+            break;
         }
         delete m;
     }

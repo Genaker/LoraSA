@@ -15,7 +15,8 @@ enum MessageType
     WRAP = 0,
     SCAN,
     SCAN_RESULT,
-    _MAX_MESSAGE_TYPE = SCAN_RESULT
+    CONFIG_TASK,
+    _MAX_MESSAGE_TYPE = CONFIG_TASK
 };
 
 struct Wrapper
@@ -37,12 +38,20 @@ struct ScanTaskResult
     int16_t *rssis;
 };
 
+struct ConfigTask
+{
+    String *key;
+    String *value;
+    bool is_set;
+};
+
 struct Message
 {
     MessageType type;
     union
     {
         Wrapper wrap;
+        ConfigTask config;
         ScanTask scan;
         ScanTaskResult dump;
     } payload;
