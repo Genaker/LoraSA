@@ -1468,9 +1468,12 @@ void loop(void)
             radio.startReceive(RADIOLIB_SX128X_RX_TIMEOUT_INF);
 #elif USING_SX1276
             state = radio.setFrequency(freq);
-#else
+#elif defined(USING_LR1121)
             state = radio.setFrequency(r.current_frequency,
                                        true); // true = no calibration need here
+#else
+            state = radio.setFrequency(r.current_frequency,
+                                       false); // false = calibration is needed here
 #endif
             int radio_error_count = 0;
             if (state != RADIOLIB_ERR_NONE)
