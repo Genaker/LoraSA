@@ -356,7 +356,17 @@ LoRaConfig *configureLora(String cfg)
         return NULL;
     }
 
-    LoRaConfig *lora = new LoRaConfig();
+    LoRaConfig *lora = new LoRaConfig({
+        freq : 0,
+        bw : 500,
+        sf : 7,
+        cr : 5,
+        tx_power : 1,
+        preamble_len : 8,
+        sync_word : 0x1e,
+        crc : false,
+        implicit_header : 0
+    });
 
     int begin = 0;
     int end, i;
