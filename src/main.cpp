@@ -79,7 +79,7 @@
 
 // #include "utilities.h"
 //  Our Code
-#include "LiLyGo.h"
+#include <LiLyGo.h>
 #endif // end LILYGO
 
 #define BT_SCAN_DELAY 60 * 1 * 1000

@@ -5,6 +5,12 @@
 #include <HardwareSerial.h>
 #include <config.h>
 
+#ifdef HELTEC
+#define SERIAL0 Serial
+#else
+#define SERIAL0 Serial0
+#endif
+
 enum MessageType
 {
     WRAP = 0,
@@ -69,7 +75,7 @@ struct Comms
 
 struct NoopComms : Comms
 {
-    NoopComms() : Comms("no-op", Serial0) {};
+    NoopComms() : Comms("no-op", SERIAL0) {};
 
     virtual bool send(Message &) { return true; };
     virtual void _onReceive() {};

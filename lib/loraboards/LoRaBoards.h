@@ -7,6 +7,7 @@
  * @last-update 2024-08-07
  */
 
+#ifdef LILYGO
 #pragma once
 
 #include "utilities.h"
@@ -94,4 +95,5 @@ extern SPIClass SDCardSPI;
 #define SerialGPS Serial1
 #elif defined(ARDUINO_ARCH_STM32)
 extern HardwareSerial SerialGPS;
+#endif
 #endif

@@ -57,6 +57,7 @@ void _onUsbEvent0(void *arg, esp_event_base_t event_base, int32_t event_id,
 bool Comms::initComms(Config &c)
 {
     bool fine = false;
+#ifndef HELTEC
     if (c.listen_on_usb.equalsIgnoreCase("readline"))
     {
         // comms using readline plaintext protocol
@@ -68,13 +69,14 @@ bool Comms::initComms(Config &c)
 
         fine = true;
     }
+#endif
 
     if (c.listen_on_serial0.equalsIgnoreCase("readline"))
     {
         // comms using readline plaintext protocol
-        Comms0 = new ReadlineComms("UART0", Serial0);
-        Serial0.onReceive(_onReceive0, false);
-        Serial0.begin(115200);
+        Comms0 = new ReadlineComms("UART0", SERIAL0);
+        SERIAL0.onReceive(_onReceive0, false);
+        SERIAL0.begin(115200);
 
         Serial.println("Initialized communications on Serial0 using readline protocol");
     }
