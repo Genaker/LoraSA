@@ -75,8 +75,10 @@ void heltec_setup()
     SPI.begin();
 #endif
 
+#ifdef HELTEC
 #ifndef ARDUINO_heltec_wifi_32_lora_V3
     hspi->begin(SCK, MISO, MOSI, SS);
+#endif
 #endif
 #ifndef HELTEC_NO_DISPLAY_INSTANCE
     heltec_display_power(true);
@@ -86,8 +88,10 @@ void heltec_setup()
 #endif
 }
 
+#ifdef HELTEC
 #ifndef ARDUINO_heltec_wifi_32_lora_V3
 SPIClass hspi = new SPIClass(2);
+#endif
 #endif
 
 RADIO_TYPE radio = RADIO_MODULE_INIT();
