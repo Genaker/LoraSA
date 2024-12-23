@@ -125,6 +125,10 @@ Message *RadioComms::receive(uint16_t timeout_ms)
 {
     uint8_t msg[MAX_MSG];
 
+#ifdef USING_LR1121
+    Message *message = NULL;
+#warning Radio Comms not fully supported for LR1121
+#else
     // because of this, receive is single-threaded, single-device
     _received = false;
     radio.setDio1Action(_rcv);
@@ -229,6 +233,6 @@ Message *RadioComms::receive(uint16_t timeout_ms)
     {
         delete[] packet;
     }
-
+#endif
     return message;
 }
