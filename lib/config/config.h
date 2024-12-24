@@ -12,7 +12,7 @@ struct ScanRange
 
 struct LoRaConfig
 {
-    uint16_t freq;
+    float freq;
     uint16_t bw;
     uint8_t sf;
     uint8_t cr;

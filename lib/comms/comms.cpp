@@ -43,28 +43,38 @@ void _onReceive1()
     Comms1->_onReceive();
 }
 
+#if ARDUINO_USB_MODE
+#define IF_CDC_EVENT(e, data)                                                            \
+    arduino_hw_cdc_event_data_t *data = (arduino_hw_cdc_event_data_t *)event_data;       \
+    if (event_base == ARDUINO_HW_CDC_EVENTS && event_id == ARDUINO_HW_CDC_##e)
+#else
+#define IF_CDC_EVENT(e, data)                                                            \
+    arduino_usb_cdc_event_data_t *data = (arduino_usb_cdc_event_data_t *)event_data;     \
+    if (event_base == ARDUINO_USB_CDC_EVENTS && event_id == ARDUINO_USB_CDC_##e)
+#endif
+
 void _onUsbEvent0(void *arg, esp_event_base_t event_base, int32_t event_id,
                   void *event_data)
 {
-    if (event_base == ARDUINO_HW_CDC_EVENTS)
-    {
-        arduino_hw_cdc_event_data_t *data = (arduino_hw_cdc_event_data_t *)event_data;
-        if (event_id == ARDUINO_HW_CDC_RX_EVENT)
-        {
-            _onReceiveUsb(data->rx.len);
-        }
-    }
+    IF_CDC_EVENT(RX_EVENT, data) { _onReceiveUsb(data->rx.len); }
 }
 
 bool Comms::initComms(Config &c)
 {
     bool fine = false;
-#ifndef HELTEC
+
+#ifdef ARDUINO_USB_CDC_ON_BOOT
     if (c.listen_on_usb.equalsIgnoreCase("readline"))
     {
         // comms using readline plaintext protocol
         HostComms = new ReadlineComms("Host", Serial);
+#if ARDUINO_USB_MODE
+        // if Serial is HWCDC...
         Serial.onEvent(ARDUINO_HW_CDC_RX_EVENT, _onUsbEvent0);
+#else
+        // if Serial is USBCDC...
+        Serial.onEvent(ARDUINO_USB_CDC_RX_EVENT, _onUsbEvent0);
+#endif
         Serial.begin();
 
         Serial.println("Initialized communications on Serial using readline protocol");
