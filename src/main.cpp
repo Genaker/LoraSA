@@ -574,7 +574,7 @@ bool setFrequency(float curr_freq)
                                true); // true = no calibration need here
 #else
     state = radio.setFrequency(r.current_frequency,
-                               false); // false = calibration is needed here
+                               true); // false = calibration is needed here
 #endif
     if (state != RADIOLIB_ERR_NONE)
     {
