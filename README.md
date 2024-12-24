@@ -352,6 +352,7 @@ Output:
 # Web app 
 We also have a web app interface to output ESP Lora data via USB/Serial </br>
 Go to the website (https://lora-sa.pages.dev/), click connect and select a device: </br>
+Known issue: doesn't work on mobile ;(</br>
 https://lora-sa.pages.dev/
 
 ![image](https://github.com/user-attachments/assets/71b7d2aa-bb70-4c55-899b-0edfbeb73ed3)
@@ -368,7 +369,7 @@ listen_on_usb(String("readline")), rx_lora(NULL), tx_lora(NULL),
 // rx_lora(configureLora("freq:920")),tx_lora(configureLora("freq:916"))
 is_host(false)
 ```
-is_host(false) - for host receiver or can be set via Serial command ***SET is_host true*** <\br>
+is_host(false) - for host receiver or can be set via Serial command ***SET is_host true*** <br>
 The Host automatically outputs data to serial that can be read by our Python Serail app<br>
 Example of the serial out:
 ```
