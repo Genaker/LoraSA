@@ -384,20 +384,21 @@ LoRaConfig *configureLora(String cfg)
         }
 
         String k = param.substring(0, j);
+        param = param.substring(j + 1);
 
         if (k.equalsIgnoreCase("sync_word"))
         {
-            lora->sync_word = (uint8_t)fromHex(param.substring(j + 1));
+            lora->sync_word = (uint8_t)fromHex(param);
             continue;
         }
-
-        int v = param.substring(j + 1).toInt();
 
         if (k.equalsIgnoreCase("freq"))
         {
-            lora->freq = (uint16_t)v;
+            lora->freq = param.toFloat();
             continue;
         }
+
+        int v = param.toInt();
 
         if (k.equalsIgnoreCase("bw"))
         {

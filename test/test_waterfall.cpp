@@ -50,8 +50,11 @@ void test_push()
 
     m.reset(0, 1);
     uint64_t i = 0;
+    size_t update_to = 0;
     for (; i < 10; i++)
-        m.updateModel(i, 0, 1);
+        update_to = max(update_to, m.updateModel(i, 0, 1));
+
+    TEST_ASSERT_EQUAL_INT(6, update_to);
 
     r = m.toString();
     TEST_ASSERT_EQUAL_STRING("w:1 b:34 "
@@ -92,8 +95,11 @@ void test_push()
                              r);
     delete r;
 
+    update_to = 0;
     for (; i < 100; i += 10)
-        m.updateModel(i, 0, 1);
+        update_to = max(update_to, m.updateModel(i, 0, 1));
+
+    TEST_ASSERT_EQUAL_INT(13, update_to);
 
     r = m.toString();
     TEST_ASSERT_EQUAL_STRING("w:1 b:34 "
@@ -134,8 +140,11 @@ void test_push()
                              r);
     delete r;
 
+    update_to = 0;
     for (; i < 10000; i++)
-        m.updateModel(i, 0, 1);
+        update_to = max(update_to, m.updateModel(i, 0, 1));
+
+    TEST_ASSERT_EQUAL_INT(34, update_to);
 
     r = m.toString();
     TEST_ASSERT_EQUAL_STRING("w:1 b:34 "
@@ -176,45 +185,48 @@ void test_push()
                              r);
     delete r;
 
-    for (; i < 5000; i++)
-        m.updateModel(i, 0, 1);
+    update_to = 0;
+    for (; i < 15000; i++)
+        update_to = max(update_to, m.updateModel(i, 0, 1));
+
+    TEST_ASSERT_EQUAL_INT(34, update_to);
 
     r = m.toString();
     TEST_ASSERT_EQUAL_STRING("w:1 b:34 "
-                             "[dt:1 t:9999 [ c:1 e:1 ]"
-                             "dt:1 t:9998 [ c:1 e:1 ]"
-                             "dt:1 t:9997 [ c:1 e:1 ]"
-                             "dt:1 t:9996 [ c:1 e:1 ]"
-                             "dt:1 t:9995 [ c:1 e:1 ]"
-                             "dt:5 t:9995 [ c:4 e:4 ]"
-                             "dt:5 t:9990 [ c:5 e:5 ]"
-                             "dt:5 t:9985 [ c:5 e:5 ]"
-                             "dt:15 t:9990 [ c:5 e:5 ]"
-                             "dt:15 t:9975 [ c:15 e:15 ]"
-                             "dt:15 t:9960 [ c:15 e:15 ]"
-                             "dt:15 t:9945 [ c:15 e:15 ]"
-                             "dt:60 t:9960 [ c:30 e:30 ]"
-                             "dt:60 t:9900 [ c:60 e:60 ]"
-                             "dt:60 t:9840 [ c:60 e:60 ]"
-                             "dt:60 t:9780 [ c:60 e:60 ]"
-                             "dt:60 t:9720 [ c:60 e:60 ]"
-                             "dt:60 t:9660 [ c:60 e:60 ]"
-                             "dt:60 t:9600 [ c:60 e:60 ]"
-                             "dt:60 t:9540 [ c:60 e:60 ]"
-                             "dt:60 t:9480 [ c:60 e:60 ]"
-                             "dt:60 t:9420 [ c:60 e:60 ]"
-                             "dt:60 t:9360 [ c:60 e:60 ]"
-                             "dt:60 t:9300 [ c:60 e:60 ]"
-                             "dt:60 t:9240 [ c:60 e:60 ]"
-                             "dt:60 t:9180 [ c:60 e:60 ]"
-                             "dt:60 t:9120 [ c:60 e:60 ]"
-                             "dt:900 t:9900 [ c:60 e:60 ]"
-                             "dt:900 t:9000 [ c:900 e:900 ]"
-                             "dt:900 t:8100 [ c:900 e:900 ]"
-                             "dt:900 t:7200 [ c:900 e:900 ]"
-                             "dt:3600 t:7200 [ c:2700 e:2700 ]"
-                             "dt:3600 t:3600 [ c:3520 e:3520 ]"
-                             "dt:3600 t:3600 [ c:0 e:0 ] ]",
+                             "[dt:1 t:14999 [ c:1 e:1 ]"
+                             "dt:1 t:14998 [ c:1 e:1 ]"
+                             "dt:1 t:14997 [ c:1 e:1 ]"
+                             "dt:1 t:14996 [ c:1 e:1 ]"
+                             "dt:1 t:14995 [ c:1 e:1 ]"
+                             "dt:5 t:14995 [ c:4 e:4 ]"
+                             "dt:5 t:14990 [ c:5 e:5 ]"
+                             "dt:5 t:14985 [ c:5 e:5 ]"
+                             "dt:15 t:14985 [ c:10 e:10 ]"
+                             "dt:15 t:14970 [ c:15 e:15 ]"
+                             "dt:15 t:14955 [ c:15 e:15 ]"
+                             "dt:15 t:14940 [ c:15 e:15 ]"
+                             "dt:60 t:14940 [ c:45 e:45 ]"
+                             "dt:60 t:14880 [ c:60 e:60 ]"
+                             "dt:60 t:14820 [ c:60 e:60 ]"
+                             "dt:60 t:14760 [ c:60 e:60 ]"
+                             "dt:60 t:14700 [ c:60 e:60 ]"
+                             "dt:60 t:14640 [ c:60 e:60 ]"
+                             "dt:60 t:14580 [ c:60 e:60 ]"
+                             "dt:60 t:14520 [ c:60 e:60 ]"
+                             "dt:60 t:14460 [ c:60 e:60 ]"
+                             "dt:60 t:14400 [ c:60 e:60 ]"
+                             "dt:60 t:14340 [ c:60 e:60 ]"
+                             "dt:60 t:14280 [ c:60 e:60 ]"
+                             "dt:60 t:14220 [ c:60 e:60 ]"
+                             "dt:60 t:14160 [ c:60 e:60 ]"
+                             "dt:60 t:14100 [ c:60 e:60 ]"
+                             "dt:900 t:14400 [ c:540 e:540 ]"
+                             "dt:900 t:13500 [ c:900 e:900 ]"
+                             "dt:900 t:12600 [ c:900 e:900 ]"
+                             "dt:900 t:11700 [ c:900 e:900 ]"
+                             "dt:3600 t:10800 [ c:3600 e:3600 ]"
+                             "dt:3600 t:7200 [ c:3600 e:3600 ]"
+                             "dt:3600 t:3600 [ c:3520 e:3520 ] ]",
                              r);
     delete r;
 }

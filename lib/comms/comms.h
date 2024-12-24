@@ -7,7 +7,7 @@
 #include <LiLyGo.h>
 #include <config.h>
 
-#ifdef HELTEC
+#ifndef ARDUINO_USB_CDC_ON_BOOT
 #define SERIAL0 Serial
 #else
 #define SERIAL0 Serial0

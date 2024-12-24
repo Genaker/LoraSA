@@ -12,7 +12,7 @@ struct ScanRange
 
 struct LoRaConfig
 {
-    uint16_t freq;
+    float freq;
     uint16_t bw;
     uint8_t sf;
     uint8_t cr;
@@ -49,6 +49,8 @@ struct Config
           scan_ranges(NULL), log_data_json_interval(1000),
           listen_on_serial0(String("none")), listen_on_serial1(String("readline")),
           listen_on_usb(String("readline")), rx_lora(NULL), tx_lora(NULL),
+          // Enable Lora Send:
+          // rx_lora(configureLora("freq:920")),tx_lora(configureLora("freq:916"))
           is_host(false) {};
 
     bool write_config(const char *path);
