@@ -569,12 +569,9 @@ bool setFrequency(float curr_freq)
     state = state1;
 #elif USING_SX1276
     state = radio.setFrequency(freq);
-#elif defined(USING_LR1121)
-    state = radio.setFrequency(r.current_frequency,
-                               true); // true = no calibration need here
 #else
     state = radio.setFrequency(r.current_frequency,
-                               false); // false = calibration is needed here
+                               true); // true = no calibration need here
 #endif
     if (state != RADIOLIB_ERR_NONE)
     {
