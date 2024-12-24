@@ -83,38 +83,20 @@ Config Config::init()
         }
 
         // do something with known keys and values
-
-        if (r.key.equalsIgnoreCase("print_profile_time"))
+        if (c.updateConfig(r.key, r.value))
         {
-            String v = r.value;
-            bool p = v.equalsIgnoreCase("true");
-            if (!p && !v.equalsIgnoreCase("false"))
-            {
-                Serial.printf("Expected bool for '%s', found '%s' - ignoring\n",
-                              r.key.c_str(), r.value.c_str());
-            }
-            else
-            {
-                c.print_profile_time = p;
-            }
             continue;
         }
 
-        if (r.key.equalsIgnoreCase("log_data_json_interval"))
+        if (r.key.equalsIgnoreCase("rx_lora"))
         {
-            c.log_data_json_interval = r.value.toInt();
+            c.rx_lora = configureLora(r.value);
             continue;
         }
 
-        if (r.key.equalsIgnoreCase("listen_on_serial0"))
+        if (r.key.equalsIgnoreCase("tx_lora"))
         {
-            c.listen_on_serial0 = r.value;
-            continue;
-        }
-
-        if (r.key.equalsIgnoreCase("listen_on_usb"))
-        {
-            c.listen_on_serial0 = r.value;
+            c.tx_lora = configureLora(r.value);
             continue;
         }
 
@@ -125,6 +107,391 @@ Config Config::init()
     return c;
 }
 
+bool Config::updateConfig(String key, String value)
+{
+    if (key.equalsIgnoreCase("print_profile_time"))
+    {
+        String v = value;
+        bool p = v.equalsIgnoreCase("true");
+        if (!p && !v.equalsIgnoreCase("false"))
+        {
+            Serial.printf("Expected bool for '%s', found '%s' - ignoring\n", key.c_str(),
+                          value.c_str());
+        }
+        else
+        {
+            print_profile_time = p;
+        }
+        return true;
+    }
+
+    if (key.equalsIgnoreCase("log_data_json_interval"))
+    {
+        log_data_json_interval = value.toInt();
+        return true;
+    }
+
+    if (key.equalsIgnoreCase("listen_on_serial0"))
+    {
+        listen_on_serial0 = value;
+        return true;
+    }
+
+    if (key.equalsIgnoreCase("listen_on_serial1"))
+    {
+        listen_on_serial1 = value;
+        return true;
+    }
+
+    if (key.equalsIgnoreCase("listen_on_usb"))
+    {
+        listen_on_serial0 = value;
+        return true;
+    }
+
+    if (key.equalsIgnoreCase("detection_strategy"))
+    {
+        configureDetectionStrategy(value);
+        return true;
+    }
+
+    if (key.equalsIgnoreCase("rx_lora"))
+    {
+        rx_lora = configureLora(value);
+        return true;
+    }
+
+    if (key.equalsIgnoreCase("tx_lora"))
+    {
+        tx_lora = configureLora(value);
+        return true;
+    }
+
+    if (key.equalsIgnoreCase("is_host"))
+    {
+        String v = value;
+        bool p = v.equalsIgnoreCase("true");
+        if (!p && !v.equalsIgnoreCase("false"))
+        {
+            Serial.printf("Expected bool for '%s', found '%s' - ignoring\n", key.c_str(),
+                          value.c_str());
+        }
+        else
+        {
+            is_host = p;
+        }
+        return true;
+    }
+
+    return false;
+}
+
+String loraConfigToStr(LoRaConfig *cfg)
+{
+    if (cfg == NULL)
+    {
+        return String("none");
+    }
+
+    return String("freq:") + String(cfg->freq) + String(",bw:") + String(cfg->bw) +
+           String(",sf:") + String(cfg->sf) + String(",cr:") + String(cfg->cr) +
+           String(",tx_power:") + String(cfg->tx_power) + String(",preamble_len:") +
+           String(cfg->preamble_len) + String(",sync_word:") +
+           String(cfg->sync_word, 16) + String(",crc:") + String(cfg->crc ? "1" : "0") +
+           String(",implicit_header:") + String(cfg->implicit_header);
+}
+
+String detectionStrategyToStr(Config &c)
+{
+    String res = c.detection_strategy;
+    if (c.scan_ranges_sz > 0)
+    {
+        res += ":";
+        for (int i = 0; i < c.scan_ranges_sz; i++)
+        {
+            if (i > 0)
+            {
+                res += ",";
+            }
+
+            res += String(c.scan_ranges[i].start_khz);
+            int s = c.scan_ranges[i].end_khz - c.scan_ranges[i].start_khz;
+            if (s > 0)
+            {
+                res += ".." + String(c.scan_ranges[i].end_khz);
+                if (c.scan_ranges[i].step_khz < s)
+                {
+                    res += ":" + String(c.scan_ranges[i].step_khz);
+                }
+            }
+        }
+    }
+    return res;
+}
+
+// findSepa looks for a sepa in s from position begin, and does two things:
+// updates end with the index of the end of the string between begin and
+// separator or end of string, and returns index of the next search position
+// or -1 to stop the search.
+//
+// So you can do something like this:
+// for (int i = 0, j = 0, k = 0; (i = findSepa(s, sepa, j, k)) >= 0; j = i)
+// ...s.substring(j, k)
+int findSepa(String s, String sepa, int begin, int &end)
+{
+    int i = s.indexOf(sepa, begin);
+    if (i < 0)
+    {
+        end = s.length();
+        return begin == end ? -1 : end;
+    }
+
+    end = i;
+    return i + sepa.length();
+}
+
+uint64_t fromHex(String s)
+{
+    uint64_t r = 0;
+    for (char c : s)
+    {
+        uint64_t v;
+        if (c >= 'A' && c <= 'F')
+        {
+            v = c - 'A' + 10;
+        }
+        else if (c >= 'a' && c <= 'f')
+        {
+            v = c - 'a' + 10;
+        }
+        else
+        {
+            v = c - '0';
+        }
+
+        r = (r << 4) + v;
+    }
+
+    return r;
+}
+
+uint64_t toUint64(String s)
+{
+    String v = s.substring(0, s.length() % 15);
+    s = s.substring(v.length());
+    uint64_t r = v.toInt();
+
+    while (s.length() > 0)
+    {
+        r = r * ((uint64_t)1000000000000000ll) + s.substring(0, 15).toInt();
+        s = s.substring(15);
+    }
+    return r;
+}
+
+ScanRange parseScanRange(String &cfg, int &begin)
+{
+    ScanRange res;
+    int end;
+    int i = findSepa(cfg, ",", begin, end);
+
+    String r = cfg.substring(begin, end);
+    begin = i;
+
+    if (i < 0)
+    {
+        res.start_khz = -1;
+        res.end_khz = -1;
+        res.step_khz = -1;
+        return res;
+    }
+
+    i = r.indexOf("..");
+    if (i < 0)
+    {
+        i = r.length();
+    }
+
+    res.start_khz = toUint64(r.substring(0, i));
+    if (i == r.length())
+    {
+        res.end_khz = res.start_khz;
+        res.step_khz = 0;
+        return res;
+    }
+
+    r = r.substring(i + 2);
+    i = r.indexOf("+");
+    if (i < 0)
+    {
+        i = r.indexOf("/");
+        if (i < 0)
+            i = r.length();
+    }
+
+    res.end_khz = toUint64(r.substring(0, i));
+    if (i == r.length())
+    {
+        res.step_khz = res.end_khz - res.start_khz;
+    }
+    else
+    {
+        res.step_khz = toUint64(r.substring(i + 1));
+        if (r.charAt(i) == '/')
+        {
+            // then it is not a literal increment, it is the number of steps
+            if (res.step_khz == 0)
+                res.step_khz = 1;
+            res.step_khz = round(((double)(res.end_khz - res.start_khz)) / res.step_khz);
+        }
+    }
+
+    return res;
+}
+
+LoRaConfig *configureLora(String cfg)
+{
+    if (cfg.equalsIgnoreCase("none"))
+    {
+        return NULL;
+    }
+
+    LoRaConfig *lora = new LoRaConfig({
+        freq : 0,
+        bw : 500,
+        sf : 7,
+        cr : 5,
+        tx_power : 1,
+        preamble_len : 8,
+        sync_word : 0x1e,
+        crc : false,
+        implicit_header : 0
+    });
+
+    int begin = 0;
+    int end, i;
+
+    while ((i = findSepa(cfg, ",", begin, end)) >= 0)
+    {
+        String param = cfg.substring(begin, end);
+        begin = i;
+        int j = param.indexOf(":");
+        if (j < 0)
+        {
+            Serial.printf("Expected ':' to be present in '%s' - ignoring config\n",
+                          param);
+            continue;
+        }
+
+        String k = param.substring(0, j);
+        param = param.substring(j + 1);
+
+        if (k.equalsIgnoreCase("sync_word"))
+        {
+            lora->sync_word = (uint8_t)fromHex(param);
+            continue;
+        }
+
+        if (k.equalsIgnoreCase("freq"))
+        {
+            lora->freq = param.toFloat();
+            continue;
+        }
+
+        int v = param.toInt();
+
+        if (k.equalsIgnoreCase("bw"))
+        {
+            lora->bw = (uint16_t)v;
+            continue;
+        }
+
+        if (k.equalsIgnoreCase("sf"))
+        {
+            lora->sf = (uint8_t)v;
+            continue;
+        }
+
+        if (k.equalsIgnoreCase("cr"))
+        {
+            lora->cr = (uint8_t)v;
+            continue;
+        }
+
+        if (k.equalsIgnoreCase("tx_power"))
+        {
+            lora->tx_power = (uint8_t)v;
+            continue;
+        }
+
+        if (k.equalsIgnoreCase("preamble_len"))
+        {
+            lora->preamble_len = (uint8_t)v;
+            continue;
+        }
+
+        if (k.equalsIgnoreCase("crc"))
+        {
+            lora->crc = v != 0;
+            continue;
+        }
+
+        if (k.equalsIgnoreCase("implicit_header"))
+        {
+            lora->implicit_header = (uint8_t)v;
+            continue;
+        }
+
+        Serial.printf("Unknown key '%s' will be ignored\n", k);
+    }
+
+    return lora;
+}
+
+void Config::configureDetectionStrategy(String cfg)
+{
+    if (scan_ranges_sz > 0)
+        delete[] scan_ranges;
+    scan_ranges = NULL;
+
+    String method = cfg;
+    int i = cfg.indexOf(":");
+    if (i >= 0)
+    {
+        method = cfg.substring(0, i);
+        cfg = cfg.substring(i + 1);
+    }
+    else
+    {
+        cfg = "";
+    }
+
+    samples = 0;
+    i = method.indexOf(",");
+    if (i >= 0)
+    {
+        samples = method.substring(i + 1).toInt();
+        method = method.substring(0, i);
+    }
+    detection_strategy = method;
+
+    scan_ranges_sz = 0;
+    for (int i = 0, k = 0; (i = findSepa(cfg, ",", i, k)) >= 0; scan_ranges_sz++)
+        ;
+
+    if (scan_ranges_sz == 0)
+    {
+        return;
+    }
+
+    scan_ranges = new ScanRange[scan_ranges_sz];
+
+    for (int i = 0, j = 0; i < scan_ranges_sz; i++)
+    {
+        scan_ranges[i] = parseScanRange(cfg, j);
+    }
+}
+
 bool Config::write_config(const char *path)
 {
     File f = SD.open(path, FILE_WRITE, /*create = */ true);
@@ -133,13 +500,70 @@ bool Config::write_config(const char *path)
         return false;
     }
 
-    f.println("print_profile_time = " + String(print_profile_time ? "true" : "false"));
-    f.println("log_data_json_interval = " + String(log_data_json_interval));
-    f.println("listen_on_serial0 = " + listen_on_serial0);
-    f.println("listen_on_usb = " + listen_on_usb);
+    f.println("print_profile_time = " + getConfig("print_profile_time"));
+    f.println("log_data_json_interval = " + getConfig("log_data_json_interval"));
+    f.println("listen_on_serial0 = " + getConfig("listen_on_serial0"));
+    f.println("listen_on_serial1 = " + getConfig("listen_on_serial1"));
+    f.println("listen_on_usb = " + getConfig("listen_on_usb"));
+
+    f.println("detection_strategy = " + getConfig("detection_strategy"));
+
+    f.println("rx_lora = " + getConfig("rx_lora"));
+    f.println("tx_lora = " + getConfig("tx_lora"));
+    f.println("is_host = " + getConfig("is_host"));
 
     f.close();
     return true;
+}
+
+String Config::getConfig(String key)
+{
+    if (key.equalsIgnoreCase("print_profile_time"))
+    {
+        return String(print_profile_time ? "true" : "false");
+    }
+
+    if (key.equalsIgnoreCase("log_data_json_interval"))
+    {
+        return String(log_data_json_interval);
+    }
+
+    if (key.equalsIgnoreCase("listen_on_serial0"))
+    {
+        return listen_on_serial0;
+    }
+
+    if (key.equalsIgnoreCase("listen_on_serial1"))
+    {
+        return listen_on_serial1;
+    }
+
+    if (key.equalsIgnoreCase("listen_on_usb"))
+    {
+        return listen_on_usb;
+    }
+
+    if (key.equalsIgnoreCase("detection_strategy"))
+    {
+        return detectionStrategyToStr(*this);
+    }
+
+    if (key.equalsIgnoreCase("rx_lora"))
+    {
+        return loraConfigToStr(rx_lora);
+    }
+
+    if (key.equalsIgnoreCase("tx_lora"))
+    {
+        return loraConfigToStr(tx_lora);
+    }
+
+    if (key.equalsIgnoreCase("is_host"))
+    {
+        return String(is_host ? "true" : "false");
+    }
+
+    return "";
 }
 
 ParseResult parse_config_line(String ln)

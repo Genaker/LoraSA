@@ -12,6 +12,90 @@
 
 #include "LoRaBoards.h"
 
+#include "LiLyGo.h"
+
+// Implement stubs for functions that exist on Heltec, but not on LilyGo
+void heltec_led(int led) {}
+
+void heltec_deep_sleep(int sleep_seconds) {}
+
+void heltec_delay(int millisec) { delay(millisec); }
+
+DISPLAY_TYPE display = DISPLAY_INIT();
+BOTH_TYPE both = BOTH_INIT();
+
+HotButton button(BUTTON);
+
+void heltec_loop()
+{
+#ifndef DT3_V1_6_SX1276
+    button.update();
+#endif
+}
+
+void heltec_display_power(bool on)
+{
+#ifndef HELTEC_NO_DISPLAY_INSTANCE
+    if (on)
+    {
+#ifdef HELTEC_WIRELESS_STICK
+        // They hooked the display to "external" power, and didn't tell anyone
+        heltec_ve(true);
+        delay(5);
+#endif
+        pinMode(RST_OLED, OUTPUT);
+        digitalWrite(RST_OLED, HIGH);
+        delay(1);
+        digitalWrite(RST_OLED, LOW);
+        delay(20);
+        digitalWrite(RST_OLED, HIGH);
+    }
+    else
+    {
+#ifdef HELTEC_WIRELESS_STICK
+        heltec_ve(false);
+#else
+        display.displayOff();
+#endif
+    }
+#endif
+}
+
+void heltec_setup()
+{
+    Serial.begin(115200);
+    Serial.println("LILYGO BOARD");
+
+#if defined(ARDUINO_ARCH_ESP32)
+    SPI.begin(RADIO_SCLK_PIN, RADIO_MISO_PIN, RADIO_MOSI_PIN);
+#elif defined(ARDUINO_ARCH_STM32)
+    SPI.setMISO(RADIO_MISO_PIN);
+    SPI.setMOSI(RADIO_MOSI_PIN);
+    SPI.setSCLK(RADIO_SCLK_PIN);
+    SPI.begin();
+#endif
+
+#ifdef HELTEC
+#ifndef ARDUINO_heltec_wifi_32_lora_V3
+    hspi->begin(SCK, MISO, MOSI, SS);
+#endif
+#endif
+#ifndef HELTEC_NO_DISPLAY_INSTANCE
+    heltec_display_power(true);
+    display.init();
+    // display.setContrast(200);
+    display.flipScreenVertically();
+#endif
+}
+
+#ifdef HELTEC
+#ifndef ARDUINO_heltec_wifi_32_lora_V3
+SPIClass hspi = new SPIClass(2);
+#endif
+#endif
+
+RADIO_TYPE radio = RADIO_MODULE_INIT();
+
 #if defined(HAS_SDCARD)
 SPIClass SDCardSPI(HSPI);
 #endif

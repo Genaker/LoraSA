@@ -1,10 +1,10 @@
+#ifndef LORASA_SCAN_H
+#define LORASA_SCAN_H
+
+#include <config.h>
 #include <cstdint>
-#include <events.h>
+#include <event_types.h>
 #include <stdlib.h>
-
-#ifndef LORASA_CORE_H
-
-#define LORASA_CORE_H
 
 #ifdef PRINT_DEBUG
 #define LOG(args...) Serial.printf(args...)
@@ -34,6 +34,22 @@ constexpr float LO_RSSI_THRESHOLD = HI_RSSI_THRESHOLD - 66;
 #define SAMPLES_RSSI 20
 #endif
 
+struct ScanPage
+{
+    uint64_t start_mhz;
+    uint64_t end_mhz;
+    size_t page_sz;
+    ScanRange *scan_ranges;
+
+    ~ScanPage()
+    {
+        if (page_sz > 0)
+        {
+            delete[] scan_ranges;
+        }
+    }
+};
+
 struct Scan
 {
     uint64_t epoch;
@@ -61,11 +77,10 @@ struct Scan
           },
           comms_initialized(false) {};
 
-    virtual float getRSSI() = 0;
-
     // rssiMethod gets the data similar to the scan method,
     // but uses getRSSI directly.
-    uint16_t rssiMethod(size_t samples, uint16_t *result, size_t res_size);
+    uint16_t rssiMethod(float (*getRSSI)(void *), void *param, size_t samples,
+                        uint16_t *result, size_t res_size);
 
     // detect method analyses result, and produces filtered_result, marking
     // those values that represent a detection event.

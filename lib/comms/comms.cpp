@@ -1,4 +1,3 @@
-#ifdef SERIAL_OUT
 #include "comms.h"
 #include <config.h>
 
@@ -7,7 +6,22 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
-Comms *Comms0;
+Comms *HostComms;
+Comms *Comms0 = NULL;
+Comms *Comms1 = NULL;
+
+RadioComms *RxComms = NULL;
+RadioComms *TxComms = NULL;
+
+void _onReceiveUsb(size_t len)
+{
+    if (HostComms == NULL)
+    {
+        return;
+    }
+
+    HostComms->_onReceive();
+}
 
 void _onReceive0()
 {
@@ -19,54 +33,104 @@ void _onReceive0()
     Comms0->_onReceive();
 }
 
+void _onReceive1()
+{
+    if (Comms1 == NULL)
+    {
+        return;
+    }
+
+    Comms1->_onReceive();
+}
+
+#if ARDUINO_USB_MODE
+#define IF_CDC_EVENT(e, data)                                                            \
+    arduino_hw_cdc_event_data_t *data = (arduino_hw_cdc_event_data_t *)event_data;       \
+    if (event_base == ARDUINO_HW_CDC_EVENTS && event_id == ARDUINO_HW_CDC_##e)
+#else
+#define IF_CDC_EVENT(e, data)                                                            \
+    arduino_usb_cdc_event_data_t *data = (arduino_usb_cdc_event_data_t *)event_data;     \
+    if (event_base == ARDUINO_USB_CDC_EVENTS && event_id == ARDUINO_USB_CDC_##e)
+#endif
+
 void _onUsbEvent0(void *arg, esp_event_base_t event_base, int32_t event_id,
                   void *event_data)
 {
-    if (event_base == ARDUINO_HW_CDC_EVENTS)
-    {
-        // arduino_hw_cdc_event_data_t *data = (arduino_hw_cdc_event_data_t *)event_data;
-        if (event_id == ARDUINO_HW_CDC_RX_EVENT)
-        {
-            _onReceive0(/*data->rx.len*/);
-        }
-    }
+    IF_CDC_EVENT(RX_EVENT, data) { _onReceiveUsb(data->rx.len); }
 }
 
 bool Comms::initComms(Config &c)
 {
+    bool fine = false;
+
+#ifdef ARDUINO_USB_CDC_ON_BOOT
     if (c.listen_on_usb.equalsIgnoreCase("readline"))
     {
         // comms using readline plaintext protocol
-        Comms0 = new ReadlineComms(Serial);
+        HostComms = new ReadlineComms("Host", Serial);
+#if ARDUINO_USB_MODE
+        // if Serial is HWCDC...
         Serial.onEvent(ARDUINO_HW_CDC_RX_EVENT, _onUsbEvent0);
+#else
+        // if Serial is USBCDC...
+        Serial.onEvent(ARDUINO_USB_CDC_RX_EVENT, _onUsbEvent0);
+#endif
         Serial.begin();
 
         Serial.println("Initialized communications on Serial using readline protocol");
 
-        return true;
+        fine = true;
     }
-    else if (c.listen_on_serial0.equalsIgnoreCase("readline"))
+#endif
+
+    if (c.listen_on_serial0.equalsIgnoreCase("readline"))
     {
         // comms using readline plaintext protocol
-        Comms0 = new ReadlineComms(Serial0);
-        Serial0.onReceive(_onReceive0, false);
+        Comms0 = new ReadlineComms("UART0", SERIAL0);
+        SERIAL0.onReceive(_onReceive0, false);
+        SERIAL0.begin(115200);
 
         Serial.println("Initialized communications on Serial0 using readline protocol");
-
-        return true;
     }
-
-    if (c.listen_on_serial0.equalsIgnoreCase("none"))
+    else
     {
         Comms0 = new NoopComms();
 
-        Serial.println("Configured none - Initialized no communications");
-        return false;
+        Serial.println("Configured none - Initialized no communications on Serial0");
     }
 
-    Comms0 = new NoopComms();
-    Serial.println("Nothing is configured - initialized no communications");
-    return false;
+    if (c.listen_on_serial1.equalsIgnoreCase("readline"))
+    {
+        // comms using readline plaintext protocol
+        Comms1 = new ReadlineComms("UART1", Serial1);
+        Serial1.onReceive(_onReceive1, false);
+        Serial1.begin(115200);
+
+        Serial.println("Initialized communications on Serial1 using readline protocol");
+    }
+    else
+    {
+        Comms1 = new NoopComms();
+
+        Serial.println("Configured none - Initialized no communications on Serial1");
+    }
+
+    if (c.rx_lora != NULL)
+    {
+        RxComms = new RadioComms("RxComms", radio, *c.rx_lora);
+    }
+
+    if (c.tx_lora != NULL)
+    {
+        TxComms = new RadioComms("TxComms", radio, *c.tx_lora);
+    }
+
+    if (!fine)
+    {
+        HostComms = new NoopComms();
+        Serial.println("Nothing is configured - initialized no communications");
+    }
+    return fine;
 }
 
 size_t Comms::available() { return received_pos; }
@@ -123,6 +187,7 @@ String _wrap_str(String);
 #define POLY 0x1021
 uint16_t crc16(String v, uint16_t c)
 {
+    c ^= 0xffff;
     for (int i = 0; i < v.length(); i++)
     {
         uint16_t ch = v.charAt(i);
@@ -140,7 +205,7 @@ uint16_t crc16(String v, uint16_t c)
         }
     }
 
-    return c;
+    return c ^ 0xffff;
 }
 
 void ReadlineComms::_onReceive()
@@ -176,6 +241,10 @@ void ReadlineComms::_onReceive()
                     delete m;
                 }
             }
+            else
+            {
+                Serial.println(name + ": discarding > " + pack);
+            }
             partialPacket = partialPacket.substring(i + 1);
             i = partialPacket.indexOf('\n');
         }
@@ -190,14 +259,42 @@ bool ReadlineComms::send(Message &m)
     {
     case MessageType::SCAN:
         p = _scan_str(m.payload.scan);
+        Serial.println(name + ": the message is: " + p);
         break;
     case MessageType::SCAN_RESULT:
         p = _scan_result_str(m.payload.dump);
+        break;
+    case MessageType::CONFIG_TASK:
+        p = m.payload.config.is_set ? "SET " : "GET ";
+        p += *m.payload.config.key;
+        if (m.payload.config.is_set)
+        {
+            p += " " + *m.payload.config.value;
+        }
         break;
     }
 
     serial.print(_wrap_str(p));
     return true;
+}
+
+String _stringParam(String &p, String default_v)
+{
+    p.trim();
+    int i = p.indexOf(' ');
+    if (i < 0)
+    {
+        i = p.length();
+    }
+
+    String v = p.substring(0, i);
+    p = p.substring(i + 1);
+
+    if (i == 0)
+    {
+        v = default_v;
+    }
+    return v;
 }
 
 int64_t _intParam(String &p, int64_t default_v)
@@ -267,7 +364,27 @@ Message *_parsePacket(String p)
         return m;
     }
 
-    Serial.println("ignoring unknown message " + p);
+    if (cmd.equalsIgnoreCase("get"))
+    {
+        Message *m = new Message();
+        m->type = MessageType::CONFIG_TASK;
+        m->payload.config.is_set = false;
+        m->payload.config.key = new String(_stringParam(p, ""));
+        m->payload.config.value = NULL;
+        return m;
+    }
+
+    if (cmd.equalsIgnoreCase("set"))
+    {
+        Message *m = new Message();
+        m->type = MessageType::CONFIG_TASK;
+        m->payload.config.is_set = true;
+        m->payload.config.key = new String(_stringParam(p, ""));
+        m->payload.config.value = new String(_stringParam(p, ""));
+
+        return m;
+    }
+
     return NULL;
 }
 
@@ -294,4 +411,30 @@ String _wrap_str(String v)
     String r = String(v.length()) + "\n" + v;
     return "WRAP " + String(crc16(r, 0), 16) + " " + r;
 }
-#endif
+
+Message::~Message()
+{
+    if (type == SCAN_RESULT)
+    {
+        if (payload.dump.sz > 0)
+        {
+            delete[] payload.dump.freqs_khz;
+            delete[] payload.dump.rssis;
+            payload.dump.sz = 0;
+        }
+
+        return;
+    }
+
+    if (type == CONFIG_TASK)
+    {
+        delete payload.config.key;
+
+        if (payload.config.is_set)
+        {
+            delete payload.config.value;
+        }
+
+        return;
+    }
+}

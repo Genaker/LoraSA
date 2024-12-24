@@ -4,9 +4,11 @@
 #include "scan.h"
 #include <cstdint>
 #include <cstring>
+#include <events.h>
 #include <stdlib.h>
 
-uint16_t Scan::rssiMethod(size_t samples, uint16_t *result, size_t res_size)
+uint16_t Scan::rssiMethod(float (*getRSSI)(void *), void *param, size_t samples,
+                          uint16_t *result, size_t res_size)
 {
     float scale((float)res_size / (HI_RSSI_THRESHOLD - LO_RSSI_THRESHOLD + 0.1));
 
@@ -18,7 +20,7 @@ uint16_t Scan::rssiMethod(size_t samples, uint16_t *result, size_t res_size)
     // N of samples
     for (int r = 0; r < samples; r++)
     {
-        float rssi = getRSSI();
+        float rssi = getRSSI(param);
         if (rssi < -65535)
             rssi = -65535;
 

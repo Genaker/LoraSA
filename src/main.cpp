@@ -55,10 +55,8 @@
 #define RADIOLIB_CHECK_PARAMS (0)
 
 #include <charts.h>
-#ifdef SERIAL_OUT
 #include <comms.h>
 #include <config.h>
-#endif
 #include <events.h>
 #include <scan.h>
 #include <stdlib.h>
@@ -79,7 +77,7 @@
 
 // #include "utilities.h"
 //  Our Code
-#include "LiLyGo.h"
+#include <LiLyGo.h>
 #endif // end LILYGO
 
 #define BT_SCAN_DELAY 60 * 1 * 1000
@@ -87,6 +85,8 @@
 long noDevicesMillis = 0, cycleCnt = 0;
 bool present = false;
 bool scanFinished = true;
+
+bool radioIsScan = false;
 
 // time to scan BT
 #define BT_SCAN_TIME 10
@@ -153,8 +153,12 @@ typedef enum
 // constexpr int RSSI_OUTPUT_FORMULA = 2;
 
 // Feature to scan diapasones. Other frequency settings will be ignored.
-// int SCAN_RANGES[] = {850890, 920950};
-int SCAN_RANGES[] = {};
+// String SCAN_RANGES = String("850..890,920..950");
+String SCAN_RANGES = "";
+
+size_t scan_pages_sz = 0;
+ScanPage *scan_pages;
+size_t scan_page = 0;
 
 // MHZ per page
 // to put everything into one page set RANGE_PER_PAGE = FREQ_END - 800
@@ -213,8 +217,6 @@ bool detected_y[STEPS]; // 20 - ??? steps
 
 // Used as a Led Light and Buzzer/count trigger
 bool first_run, new_pixel, detected_x = false;
-// drone detection flag
-bool detected = false;
 uint64_t drone_detection_level = DEFAULT_DRONE_DETECTION_LEVEL;
 #define TRIGGER_LEVEL -80.0
 uint64_t drone_detected_frequency_start = 0;
@@ -243,9 +245,8 @@ HardwareSerial SerialPort(SERIAL_PORT);
 
 // #define WEB_SERVER true
 
-uint64_t x, y, range_item, w = WATERFALL_START, i = 0;
+uint64_t x, y, w = WATERFALL_START, i = 0;
 int osd_x = 1, osd_y = 2, col = 0, max_bin = 32;
-uint64_t ranges_count = 0;
 
 int rssi = 0;
 int state = 0;
@@ -482,17 +483,11 @@ void osdProcess()
 }
 #endif
 
-#ifdef SERIAL_OUT
 Config config;
-#endif
 
-struct RadioScan : Scan
+float getRSSI(void *param)
 {
-    float getRSSI() override;
-};
-
-float RadioScan::getRSSI()
-{
+    Scan *r = (Scan *)param;
 #if defined(USING_SX1280PA)
     // radio.startReceive();
     // get instantaneous RSSI value
@@ -512,7 +507,26 @@ float RadioScan::getRSSI()
 #endif
 }
 
-RadioScan r;
+float getCAD(void *param)
+{
+    Scan *r = (Scan *)param;
+
+    int16_t err = radio.scanChannel();
+    if (err != RADIOLIB_ERR_NONE)
+    {
+        return -999;
+    }
+
+#ifdef USING_LR1121
+    // LR1121 doesn't implement getRSSI(bool), getRSSI always
+    // returns RSSI of the last packet
+    return radio.getRSSI();
+#else
+    return radio.getRSSI(true);
+#endif
+}
+
+Scan r;
 
 #define WATERFALL_SENSITIVITY 0.05
 DecoratedBarChart *bar;
@@ -521,19 +535,68 @@ StackedChart stacked(display, 0, 0, 0, 0);
 
 UptimeClock *uptime;
 
+int16_t initForScan(float freq)
+{
+    int16_t state;
+
+#if defined(USING_SX1280PA)
+    state = radio.beginGFSK(freq);
+#elif defined(USING_LR1121)
+    state = radio.beginGFSK(freq, 4.8F, 5.0F, 156.2F, 10, 16U, 1.7F);
+#else
+    state = radio.beginFSK(freq);
+#endif
+
+    return state;
+}
+
+bool setFrequency(float curr_freq)
+{
+    r.current_frequency = curr_freq;
+    LOG("setFrequency:%f\n", r.current_frequency);
+
+    int16_t state;
+#ifdef USING_SX1280PA
+    int16_t state1 =
+        radio.setFrequency(r.current_frequency); // 1280 doesn't have calibration
+
+    state = radio.startReceive(RADIOLIB_SX128X_RX_TIMEOUT_INF);
+    if (state != RADIOLIB_ERR_NONE)
+    {
+        Serial.println("Error:startReceive:" + String(state));
+    }
+
+    state = state1;
+#elif USING_SX1276
+    state = radio.setFrequency(freq);
+#else
+    state = radio.setFrequency(r.current_frequency,
+                               true); // false = calibration is needed here
+#endif
+    if (state != RADIOLIB_ERR_NONE)
+    {
+        display.drawString(0, 64 - 10,
+                           "E(" + String(state) +
+                               "):setFrequency:" + String(r.current_frequency));
+        Serial.println("E(" + String(state) +
+                       "):setFrequency:" + String(r.current_frequency));
+        display.display();
+        delay(2);
+        return false;
+    }
+
+    return true;
+}
+
 void init_radio()
 {
     // initialize SX1262 FSK modem at the initial frequency
     both.println("Init radio");
-#if defined(USING_SX1280PA)
-    state = radio.beginGFSK(CONF_FREQ_BEGIN);
-#elif defined(USING_LR1121)
-    state = radio.beginGFSK(CONF_FREQ_BEGIN, 4.8F, 5.0F, 156.2F, 10, 16U, 1.7F);
-#else
-    state = radio.beginFSK(CONF_FREQ_BEGIN);
-#endif
+    state = initForScan(CONF_FREQ_BEGIN);
+
     if (state == RADIOLIB_ERR_NONE)
     {
+        radioIsScan = true;
         Serial.println(F("success!"));
     }
     else
@@ -579,30 +642,13 @@ void init_radio()
     }
     both.println("Starting scanning...");
 
-// calibrate only once ,,, at startup
-// TODO: check documentation (9.2.1) if we must calibrate in certain ranges
-#ifdef USING_SX1280PA
-    state = radio.setFrequency(CONF_FREQ_BEGIN);
-    if (state != RADIOLIB_ERR_NONE)
-    {
-        Serial.println("Error:setFrequency:" + String(state));
-    }
-    state = radio.startReceive();
-    if (state != RADIOLIB_ERR_NONE)
-    {
-        Serial.println("Error:startReceive:" + String(state));
-    }
-#elif USING_SX1276
-    // Sets carrier frequency. Allowed values range from 137.0 MHz to 1020.0 MHz.
-    radio.setFrequency(CONF_FREQ_BEGIN);
-#else
-    radio.setFrequency(CONF_FREQ_BEGIN, true);
-#endif
+    // calibrate only once ,,, at startup
+    // TODO: check documentation (9.2.1) if we must calibrate in certain ranges
+    setFrequency(CONF_FREQ_BEGIN);
 
     delay(50);
 }
 
-#ifdef SERIAL_OUT
 struct frequency_scan_result
 {
     uint64_t begin;
@@ -613,12 +659,10 @@ struct frequency_scan_result
     ScanTaskResult dump;
     size_t readings_sz;
 } frequency_scan_result;
-#endif
 
 TaskHandle_t logToSerial = NULL;
 TaskHandle_t dumpToComms = NULL;
 
-#ifdef SERIAL_OUT
 void eventListenerForReport(void *arg, Event &e)
 {
     if (e.type == EventType::DETECTED)
@@ -686,6 +730,8 @@ ScanTask report_scans = ScanTask{
     delay : 0  // 0 => as and when it happens; > 0 => at least once that many ms
 };
 
+bool requested_host = true;
+
 void dumpToCommsTask(void *parameter)
 {
     uint64_t last_epoch = frequency_scan_result.last_epoch;
@@ -712,10 +758,22 @@ void dumpToCommsTask(void *parameter)
         Message m;
         m.type = MessageType::SCAN_RESULT;
         m.payload.dump = frequency_scan_result.dump;
-        Comms0->send(m);
+        if (requested_host)
+        {
+            HostComms->send(m);
+        }
+        else
+        {
+            if (Comms0 != NULL)
+                Comms0->send(m);
+            if (Comms1 != NULL)
+                Comms1->send(m);
+        }
+
+        m.payload.dump.sz =
+            0; // dump is shared, so should not delete arrays in destructor
     }
 }
-#endif
 
 #ifdef LOG_DATA_JSON
 void logToSerialTask(void *parameter)
@@ -752,6 +810,119 @@ void logToSerialTask(void *parameter)
 
 void drone_sound_alarm(void *arg, Event &e);
 
+void configurePages()
+{
+    if (scan_pages_sz > 0)
+        delete[] scan_pages;
+
+    if (single_page_scan)
+    {
+        scan_pages_sz = 1;
+        ScanPage scan_page = {
+            start_mhz : CONF_FREQ_BEGIN,
+            end_mhz : CONF_FREQ_END,
+            page_sz : config.scan_ranges_sz
+        };
+        if (scan_page.page_sz > 0)
+        {
+            scan_page.scan_ranges = new ScanRange[scan_page.page_sz];
+        }
+        for (int i = 0; i < scan_page.page_sz; i++)
+        {
+            scan_page.scan_ranges[i] = config.scan_ranges[i];
+        }
+        scan_pages = new ScanPage[1]{scan_page};
+        scan_page.page_sz =
+            0; // make sure it doesn't free up the Scanranges that were just constructed
+    }
+    else
+    {
+        scan_pages_sz =
+            (CONF_FREQ_END - CONF_FREQ_BEGIN + RANGE_PER_PAGE - 1) / RANGE_PER_PAGE;
+        scan_pages = new ScanPage[scan_pages_sz];
+        for (int j = 0; j < scan_pages_sz; j++)
+        {
+            ScanPage scan_page = {
+                start_mhz : CONF_FREQ_BEGIN + j * RANGE_PER_PAGE,
+                end_mhz : CONF_FREQ_BEGIN + (j + 1) * RANGE_PER_PAGE,
+                page_sz : 0
+            };
+            for (int i = 0; i < config.scan_ranges_sz; i++)
+            {
+                if (config.scan_ranges[i].start_khz > scan_page.end_mhz * 1000 ||
+                    config.scan_ranges[i].end_khz < scan_page.start_mhz * 1000)
+                {
+                    continue;
+                }
+                scan_page.page_sz++;
+            }
+
+            if (scan_page.page_sz > 0)
+            {
+                scan_page.scan_ranges = new ScanRange[scan_page.page_sz];
+                for (int i = 0, r = 0; i < config.scan_ranges_sz; i++)
+                {
+                    if (config.scan_ranges[i].start_khz > scan_page.end_mhz * 1000 ||
+                        config.scan_ranges[i].end_khz < scan_page.start_mhz * 1000)
+                    {
+                        continue;
+                    }
+
+                    scan_page.scan_ranges[r] = {
+                        start_khz : max(config.scan_ranges[i].start_khz,
+                                        scan_page.start_mhz * 1000),
+                        end_khz :
+                            min(config.scan_ranges[i].end_khz, scan_page.end_mhz * 1000),
+                        step_khz : config.scan_ranges[i].step_khz
+                    };
+                    r++;
+                }
+            }
+            scan_pages[j] = scan_page;
+            scan_page.page_sz =
+                0; // we copied over the values, make sure the array doesn't get freed
+        }
+    }
+}
+
+void configureDetection()
+{
+    if (config.scan_ranges_sz == 0)
+    {
+        config.scan_ranges_sz = 1;
+        config.scan_ranges = new ScanRange[1];
+        config.scan_ranges[0].start_khz = FREQ_BEGIN * 1000;
+        config.scan_ranges[0].end_khz = FREQ_END * 1000;
+        config.scan_ranges[0].step_khz =
+            (float)(FREQ_END - FREQ_BEGIN) * 1000 / (STEPS * SCAN_RBW_FACTOR);
+    }
+
+    if (config.samples <= 0)
+    {
+        config.samples = SAMPLES_RSSI;
+    }
+
+    CONF_SAMPLES = config.samples;
+
+    CONF_FREQ_BEGIN = config.scan_ranges[0].start_khz / 1000;
+    CONF_FREQ_END = config.scan_ranges[0].end_khz / 1000;
+    for (int i = 0; i < config.scan_ranges_sz; i++)
+    {
+        CONF_FREQ_BEGIN = min(CONF_FREQ_BEGIN, config.scan_ranges[i].start_khz / 1000);
+        CONF_FREQ_END = max(CONF_FREQ_END, config.scan_ranges[i].end_khz / 1000);
+    }
+
+    median_frequency = (CONF_FREQ_BEGIN + CONF_FREQ_END) / 2;
+
+    samples = CONF_SAMPLES;
+
+    RANGE_PER_PAGE = CONF_FREQ_END - CONF_FREQ_BEGIN; // FREQ_END - CONF_FREQ_BEGIN
+    RANGE = (int)(CONF_FREQ_END - CONF_FREQ_BEGIN);
+    range = RANGE;
+
+    configurePages();
+}
+
 void readConfigFile()
 {
     // writeFile(LittleFS, "/text.txt", "{WIFI:{name:\"sdfsdf\",
@@ -777,27 +948,22 @@ void readConfigFile()
     smpls = readParameterFromParameterFile("samples");
     Serial.println("SAMPLES: " + smpls);
 
-    CONF_SAMPLES = (smpls == "") ? samples : atoi(smpls.c_str());
-    samples = CONF_SAMPLES;
-    CONF_FREQ_BEGIN = (fstart == "") ? FREQ_BEGIN : atoi(fstart.c_str());
-    CONF_FREQ_END = (fend == "") ? FREQ_END : atoi(fend.c_str());
+    String detection = String("RSSI");
+    if (smpls.length() > 0)
+        detection += "," + smpls;
+    if (fstart.length() == 0)
+        fstart = String(FREQ_BEGIN * 1000);
+    if (fend.length() == 0)
+        fend = String(FREQ_END * 1000);
+
+    detection += ":" + fstart + ".." + fend + "/" + String(STEPS * SCAN_RBW_FACTOR);
+
+    config.configureDetectionStrategy(detection);
+    configureDetection();
 
     both.println("C FREQ BEGIN:" + String(CONF_FREQ_BEGIN));
     both.println("C FREQ END:" + String(CONF_FREQ_END));
     both.println("C SAMPLES:" + String(CONF_SAMPLES));
-
-    RANGE_PER_PAGE = CONF_FREQ_END - CONF_FREQ_BEGIN; // FREQ_END - CONF_FREQ_BEGIN
-
-    RANGE = (int)(CONF_FREQ_END - CONF_FREQ_BEGIN);
-
-    SINGLE_STEP = (float)(RANGE / (STEPS * SCAN_RBW_FACTOR));
-
-    range = (int)(CONF_FREQ_END - CONF_FREQ_BEGIN);
-
-    iterations = RANGE / RANGE_PER_PAGE;
-
-    // uint64_t range_frequency = FREQ_END - CONF_FREQ_BEGIN;
-    median_frequency = (CONF_FREQ_BEGIN + CONF_FREQ_END) / 2;
 }
 
 void setup(void)
@@ -842,7 +1008,6 @@ void setup(void)
     bt_start = millis();
     wf_start = millis();
 
-#ifdef SERIAL_OUT
     config = Config::init();
     r.comms_initialized = Comms::initComms(config);
     if (r.comms_initialized)
@@ -853,7 +1018,6 @@ void setup(void)
     {
         Serial.println("Comms did not initialize");
     }
-#endif
 
     pinMode(LED, OUTPUT);
     pinMode(BUZZER_PIN, OUTPUT);
@@ -913,24 +1077,19 @@ void setup(void)
     initLittleFS();
 
     readConfigFile();
-
 #endif
 
 #ifndef WEB_SERVER
-    CONF_SAMPLES = samples;
-    CONF_FREQ_BEGIN = FREQ_BEGIN;
-    CONF_FREQ_END = FREQ_END;
+    if (config.scan_ranges_sz == 0 && SCAN_RANGES.length() > 0)
+    {
+        config.configureDetectionStrategy(config.detection_strategy + ":" + SCAN_RANGES);
+    }
+
+    configureDetection();
 
     both.println("FREQ BEGIN:" + String(CONF_FREQ_BEGIN));
     both.println("FREQ END:" + String(CONF_FREQ_END));
     both.println("SAMPLES:" + String(CONF_SAMPLES));
-
-    RANGE_PER_PAGE = CONF_FREQ_END - CONF_FREQ_BEGIN; // FREQ_END - CONF_FREQ_BEGIN
-    RANGE = (int)(CONF_FREQ_END - CONF_FREQ_BEGIN);
-    SINGLE_STEP = (float)(RANGE / (STEPS * SCAN_RBW_FACTOR));
-    range = (int)(CONF_FREQ_END - CONF_FREQ_BEGIN);
-    iterations = RANGE / RANGE_PER_PAGE;
-    median_frequency = (CONF_FREQ_BEGIN + CONF_FREQ_END) / 2;
 #endif
     init_radio();
 
@@ -1007,6 +1166,8 @@ void setup(void)
             }
         }
     }
+
+    configurePages();
     display.clear();
     Serial.println();
 
@@ -1036,9 +1197,7 @@ void setup(void)
 #ifdef LOG_DATA_JSON
     xTaskCreate(logToSerialTask, "LOG_DATA_JSON", 2048, NULL, 1, &logToSerial);
 #endif
-#ifdef SERIAL_OUT
     xTaskCreate(dumpToCommsTask, "DUMP_RESPONSE_PROCESS", 2048, NULL, 1, &dumpToComms);
-#endif
 
     r.trigger_level = TRIGGER_LEVEL;
     stacked.reset(0, 0, display.width(), display.height());
@@ -1076,12 +1235,10 @@ void setup(void)
     r.addEventListener(DETECTED, drone_sound_alarm, &r);
     r.addEventListener(SCAN_TASK_COMPLETE, stacked);
 
-#ifdef SERIAL_OUT
     frequency_scan_result.readings_sz = 0;
     frequency_scan_result.dump.sz = 0;
 
     r.addEventListener(ALL_EVENTS, eventListenerForReport, NULL);
-#endif
 
 #ifdef UPTIME_CLOCK
     uptime = new UptimeClock(display, millis());
@@ -1248,35 +1405,11 @@ bool is_new_x_pixel(int x)
         return false;
 }
 
-void check_ranges()
-{
-    if (RANGE_PER_PAGE == range)
-    {
-        single_page_scan = true;
-    }
-    else
-    {
-        single_page_scan = false;
-    }
-
-    for (int range : SCAN_RANGES)
-    {
-        ranges_count++;
-    }
-
-    if (ranges_count > 0)
-    {
-        iterations = ranges_count;
-        single_page_scan = false;
-    }
-}
-
-#ifdef SERIAL_OUT
 void checkComms()
 {
-    while (Comms0->available() > 0)
+    while (HostComms->available() > 0)
     {
-        Message *m = Comms0->receive();
+        Message *m = HostComms->receive();
         if (m == NULL)
             continue;
 
@@ -1284,15 +1417,82 @@ void checkComms()
         {
         case MessageType::SCAN:
             report_scans = m->payload.scan;
+            requested_host = true;
+            Serial.println("Host: forwarding message SCAN to peer");
+            Comms0->send(*m); // forward to peer
+            Comms1->send(*m); // forward to peer
+            break;
+        case MessageType::CONFIG_TASK:
+            if (m->payload.config.is_set)
+            {
+                String v = config.getConfig(*m->payload.config.key);
+                bool r =
+                    config.updateConfig(*m->payload.config.key, *m->payload.config.value);
+                Serial.printf("SET config (%s): %s = %s (was: %s)\n", r ? "OK" : "failed",
+                              m->payload.config.key->c_str(),
+                              m->payload.config.value->c_str(), v.c_str());
+            }
+            else
+            {
+                Serial.printf("GET config: %s = %s\n", m->payload.config.key->c_str(),
+                              config.getConfig(*m->payload.config.key).c_str());
+            }
+            break;
+        }
+        delete m;
+    }
+
+    while (Comms0->available() > 0)
+    {
+        Message *m = Comms0->receive();
+        Serial.println("Comms0: was available, but didn't receive");
+        if (m == NULL)
+            continue;
+
+        switch (m->type)
+        {
+        case MessageType::SCAN:
+            report_scans = m->payload.scan; // receive from peer
+            requested_host = false;
+            break;
+
+        case MessageType::SCAN_RESULT:
+            HostComms->send(*m); // forward from peer
+            break;
+        }
+        delete m;
+    }
+
+    while (Comms1->available() > 0)
+    {
+        Message *m = Comms1->receive();
+        Serial.println("Comms1: was available, but didn't receive");
+        if (m == NULL)
+            continue;
+
+        switch (m->type)
+        {
+        case MessageType::SCAN:
+            report_scans = m->payload.scan; // receive from peer
+            requested_host = false;
+            break;
+
+        case MessageType::SCAN_RESULT:
+            HostComms->send(*m); // forward from peer
             break;
         }
         delete m;
     }
 }
-#endif
 
 // MAX Frequency RSSI BIN value of the samples
 int max_rssi_x = 999;
+
+void doScan();
+
+void reportScan(RadioComms &c);
+
+int16_t checkRadio(RadioComms &c);
 
 void loop(void)
 {
@@ -1300,10 +1500,40 @@ void loop(void)
 
     r.detection_count = 0;
     drone_detected_frequency_start = 0;
-    ranges_count = 0;
 
-#ifdef SERIAL_OUT
     checkComms();
+
+    if (config.is_host)
+    {
+        if (TxComms != NULL)
+        {
+            // NB: swapping the use of Tx and Rx comms, so a pair of modules
+            //     with identical rx/tx_lora config can talk
+            int16_t status = checkRadio(*TxComms);
+            if (status != RADIOLIB_ERR_NONE)
+            {
+                Serial.printf("Error getting a message: %d\n", status);
+            }
+        }
+    }
+    else
+    {
+        doScan();
+        if (TxComms != NULL)
+            reportScan(*TxComms);
+        if (RxComms != NULL)
+            checkRadio(*RxComms);
+    }
+}
+
+void doScan()
+{
+    if (!radioIsScan)
+    {
+        radioIsScan = true;
+        initForScan(CONF_FREQ_BEGIN);
+        state = radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_NONE);
+    }
 
     // reset scan time
     if (config.print_profile_time)
@@ -1312,7 +1542,6 @@ void loop(void)
         loop_start = millis();
     }
     r.epoch++;
-#endif
 
     if (!ANIMATED_RELOAD || !single_page_scan)
     {
@@ -1331,35 +1560,13 @@ void loop(void)
     r.fr_begin = CONF_FREQ_BEGIN;
     r.fr_end = r.fr_begin;
 
-    // 50 is a single-screen range
-    // TODO: Make 50 a variable with the option to show the full range
-    iterations = range / RANGE_PER_PAGE;
-
-#if 0 // disabled code
-    if (range % RANGE_PER_PAGE != 0)
+    for (scan_page = 0; scan_page < scan_pages_sz; scan_page++)
     {
-        // add more scan
-        //++;
-    }
-#endif
-
-    check_ranges();
-
-    // Iterating by small ranges by 50 Mhz each pixel is 0.4 Mhz
-    for (range_item = 0; range_item < iterations; range_item++)
-    {
-        range = RANGE_PER_PAGE;
-        if (ranges_count == 0)
-        {
-            r.fr_begin = (range_item == 0) ? r.fr_begin : r.fr_begin + range;
-            r.fr_end = r.fr_begin + RANGE_PER_PAGE;
-        }
-        else
-        {
-            r.fr_begin = SCAN_RANGES[range_item] / 1000;
-            r.fr_end = SCAN_RANGES[range_item] % 1000;
-            range = r.fr_end - r.fr_begin;
-        }
+        ScanPage &page = scan_pages[scan_page];
+        r.fr_begin = page.start_mhz;
+        r.fr_end = page.end_mhz;
+        range = r.fr_end - r.fr_begin;
+        median_frequency = (page.start_mhz + page.end_mhz) / 2;
 
 #ifdef DISABLED_CODE
         if (!ANIMATED_RELOAD || !single_page_scan)
@@ -1379,10 +1586,38 @@ void loop(void)
 
         // horizontal (x axis) Frequency loop
         osd_x = 1, osd_y = 2, col = 0, max_bin = 0;
+
         // x loop
-        for (x = 0; x < STEPS * SCAN_RBW_FACTOR; x++)
+        for (int range = 0, step = 0; range < page.page_sz; range += (step == 0))
         {
-            new_pixel = is_new_x_pixel(x);
+            // the logic is:
+            // 1. go through each scan_range in the order that they are declared
+            //    in the page
+            // 2. start with scan_range.start and always end with scan_range.end
+            //    if adding step lands us a little short of end, there will be
+            //    extra iteration to scan actual end frequency
+            // 3. the next iteration after scanning end frequency will be next range
+            // 4. x is derived from the frequency we are going to scan with respect to
+            //    the page size
+            ScanRange scan_range = page.scan_ranges[range];
+            uint64_t curr_freq = scan_range.start_khz + scan_range.step_khz * step;
+            if (curr_freq > scan_range.end_khz)
+                curr_freq = scan_range.end_khz;
+
+            // for now support legacy calculation of x that relies on SCAN_RBW_FACTOR
+            x = (curr_freq - page.start_mhz * 1000) * STEPS * SCAN_RBW_FACTOR /
+                ((page.end_mhz - page.start_mhz) * 1000);
+
+            new_pixel = step == 0 || is_new_x_pixel(x);
+            if (curr_freq == scan_range.end_khz)
+            {
+                step = 0; // trigger switch to the next range on the next iteration
+            }
+            else
+            {
+                step++;
+            }
+
             if (ANIMATED_RELOAD && SCAN_RBW_FACTOR == 1)
             {
                 UI_drawCursor(x);
@@ -1399,35 +1634,8 @@ void loop(void)
             // Because of the SCAN_RBW_FACTOR x is not a display coordinate anymore
             // x > STEPS on SCAN_RBW_FACTOR
             int display_x = x / SCAN_RBW_FACTOR;
-            float step = (range * ((float)x / (STEPS * SCAN_RBW_FACTOR)));
 
-            r.current_frequency = r.fr_begin + step;
-            LOG("setFrequency:%f\n", r.current_frequency);
-
-#ifdef USING_SX1280PA
-            state =
-                radio.setFrequency(r.current_frequency); // 1280 doesn't have calibration
-            radio.startReceive(RADIOLIB_SX128X_RX_TIMEOUT_INF);
-#elif USING_SX1276
-            state = radio.setFrequency(freq);
-#else
-            state = radio.setFrequency(r.current_frequency,
-                                       true); // true = no calibration need here
-#endif
-            int radio_error_count = 0;
-            if (state != RADIOLIB_ERR_NONE)
-            {
-                display.drawString(0, 64 - 10,
-                                   "E(" + String(state) +
-                                       "):setFrequency:" + String(r.current_frequency));
-                Serial.println("E(" + String(state) +
-                               "):setFrequency:" + String(r.current_frequency));
-                display.display();
-                delay(2);
-                radio_error_count++;
-                if (radio_error_count > 10)
-                    continue;
-            }
+            setFrequency(curr_freq / 1000.0);
 
             LOG("Step:%d Freq: %f\n", x, r.current_frequency);
             // SpectralScan Method
@@ -1461,7 +1669,23 @@ void loop(void)
             // Spectrum analyzer using getRSSI
             {
                 LOG("METHOD RSSI");
-                uint16_t max_rssi = r.rssiMethod(CONF_SAMPLES, result,
+
+                float (*g)(void *);
+                samples = CONF_SAMPLES;
+
+                if (config.detection_strategy.equalsIgnoreCase("RSSI"))
+                    g = &getRSSI;
+                else if (config.detection_strategy.equalsIgnoreCase("CAD"))
+                {
+                    g = &getCAD;
+                    samples = min(
+                        1,
+                        CONF_SAMPLES); // TODO: do we need to support values other than 1
+                }
+                else
+                    g = &getRSSI;
+
+                uint16_t max_rssi = r.rssiMethod(g, &r, samples, result,
                                                  RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE);
 
                 if (max_x_rssi[display_x] > max_rssi)
@@ -1499,10 +1723,8 @@ void loop(void)
                 max_rssi_x = detected_at;
             }
 
-            detected = event.detected.detected;
             detected_y[display_x] = false;
 
-            float rr = event.detected.rssi;
             r.drone_detection_level = drone_detection_level;
 
             if (event.detected.trigger)
@@ -1706,17 +1928,13 @@ void loop(void)
 
     joy_btn_clicked = false;
 
-#ifdef SERIAL_OUT
     if (config.print_profile_time)
     {
-#endif
 #ifdef PRINT_PROFILE_TIME
         loop_time = millis() - loop_start;
         Serial.printf("LOOP: %lld ms; SCAN: %lld ms;\n  ", loop_time, scan_time);
 #endif
-#ifdef SERIAL_OUT
     }
-#endif
 
 // No WiFi and BT Scan Without OSD
 #ifdef OSD_ENABLED
@@ -1739,4 +1957,58 @@ void loop(void)
 #endif
     sideBarCol = SIDEBAR_START_COL;
 #endif
+}
+
+int16_t checkRadio(RadioComms &comms)
+{
+    radioIsScan = false;
+    int16_t status = comms.configureRadio();
+    if (status != RADIOLIB_ERR_NONE)
+        return status;
+
+    Message *msg = comms.receive(
+        config.is_host
+            ? 2000
+            : 200); // 200ms should be enough to receive 500 bytes at SF 7 and BW 500
+    if (msg == NULL)
+    {
+        return status;
+    }
+
+    if (msg->type == SCAN_RESULT)
+    {
+        HostComms->send(*msg);
+    }
+    else
+    {
+        Serial.printf("Received a message of unsupported type: %d\n", msg->type);
+    }
+
+    delete msg;
+
+    return status;
+}
+
+void reportScan(RadioComms &comms)
+{
+    radioIsScan = false;
+    int16_t status = comms.configureRadio();
+    if (status != RADIOLIB_ERR_NONE)
+    {
+        Serial.printf("Failed to configure Radio: %d\n", status);
+        return;
+    }
+
+    Message m;
+    m.type = SCAN_RESULT;
+    m.payload.dump = frequency_scan_result.dump;
+    status = comms.send(m);
+
+    m.payload.dump.sz = 0; // dump is shared, so should not delete underlying arrays
+
+    if (status != RADIOLIB_ERR_NONE)
+    {
+        Serial.printf("Failed to send scan result: %d\n", status);
+        return;
+    }
 }

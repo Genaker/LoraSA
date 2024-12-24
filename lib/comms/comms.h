@@ -1,16 +1,25 @@
 #ifndef __COMMS_H
 #define __COMMS_H
 
-#ifdef SERIAL_OUT
 #include <HardwareSerial.h>
+#include <LoRaBoards.h>
+
+#include <LiLyGo.h>
 #include <config.h>
+
+#ifndef ARDUINO_USB_CDC_ON_BOOT
+#define SERIAL0 Serial
+#else
+#define SERIAL0 Serial0
+#endif
 
 enum MessageType
 {
     WRAP = 0,
     SCAN,
     SCAN_RESULT,
-    _MAX_MESSAGE_TYPE = SCAN_RESULT
+    CONFIG_TASK,
+    _MAX_MESSAGE_TYPE = CONFIG_TASK
 };
 
 struct Wrapper
@@ -32,19 +41,30 @@ struct ScanTaskResult
     int16_t *rssis;
 };
 
+struct ConfigTask
+{
+    String *key;
+    String *value;
+    bool is_set;
+};
+
 struct Message
 {
     MessageType type;
     union
     {
         Wrapper wrap;
+        ConfigTask config;
         ScanTask scan;
         ScanTaskResult dump;
     } payload;
+
+    ~Message();
 };
 
 struct Comms
 {
+    String name;
     Stream &serial;
     Message **received;
     size_t received_sz;
@@ -52,8 +72,9 @@ struct Comms
 
     Message *wrap;
 
-    Comms(Stream &serial)
-        : serial(serial), received(NULL), received_sz(0), received_pos(0), wrap(NULL) {};
+    Comms(String name, Stream &serial)
+        : name(name), serial(serial), received(NULL), received_sz(0), received_pos(0),
+          wrap(NULL) {};
 
     virtual size_t available();
     virtual bool send(Message &) = 0;
@@ -67,7 +88,7 @@ struct Comms
 
 struct NoopComms : Comms
 {
-    NoopComms() : Comms(Serial0) {};
+    NoopComms() : Comms("no-op", SERIAL0) {};
 
     virtual bool send(Message &) { return true; };
     virtual void _onReceive() {};
@@ -77,14 +98,39 @@ struct ReadlineComms : Comms
 {
     String partialPacket;
 
-    ReadlineComms(Stream &serial) : Comms(serial), partialPacket("") {};
+    ReadlineComms(String name, Stream &serial)
+        : Comms(name, serial), partialPacket("") {};
 
     virtual bool send(Message &) override;
 
     virtual void _onReceive() override;
 };
 
+extern Comms *HostComms;
+
 extern Comms *Comms0;
 
-#endif
+extern Comms *Comms1;
+
+struct RadioComms
+{
+    String name;
+    RADIO_TYPE &radio;
+    LoRaConfig &loraCfg;
+
+    RadioComms(String name, RADIO_TYPE &radio, LoRaConfig &cfg)
+        : name(name), radio(radio), loraCfg(cfg)
+    {
+    }
+
+    Message **received;
+
+    int16_t configureRadio();
+    int16_t send(Message &);
+    Message *receive(uint16_t timeout_ms);
+};
+
+extern RadioComms *RxComms;
+extern RadioComms *TxComms;
+
 #endif

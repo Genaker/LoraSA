@@ -13,6 +13,7 @@ typedef struct {
 
 #define POLY 0x1021
 uint16_t crc16(char *p, char *end, uint16_t c) {
+    c ^= 0xffff;
     if (end == NULL) {
         end = strchr(p, 0);
     }
@@ -29,7 +30,7 @@ uint16_t crc16(char *p, char *end, uint16_t c) {
         }
     }
 
-    return c;
+    return c ^ 0xffff;
 }
 
 #define BUFSIZE 102400
@@ -132,6 +133,8 @@ int main(int argc, char** argv)
                     lines--;
                     write(1, buffer, pos);
                 } else if (!is_wrap) {
+                    write(1, "> ", 2);
+                    write(1, buffer, pos);
                     errors++;
                 }
 
