@@ -1,4 +1,7 @@
 #include "models.h"
+#include <algorithm>
+using namespace std;
+
 #include <cstring>
 
 WaterfallModel::WaterfallModel(size_t w, uint64_t base_dt, size_t m_sz,
@@ -67,13 +70,13 @@ void WaterfallModel::reset(uint64_t t0, size_t w)
  * and it gets added to incomplete minute. This gets repeated for incomplete
  * minutes, etc.
  */
-size_t WaterfallModel::updateModel(uint16_t t, size_t x, uint16_t y)
+size_t WaterfallModel::updateModel(uint64_t t, size_t x, uint16_t y)
 {
     size_t changed = 1;
 
     while (t > times[0])
     {
-        changed = push();
+        changed = max(changed, push());
     }
 
     counts[0][x]++;

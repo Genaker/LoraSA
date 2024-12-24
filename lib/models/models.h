@@ -18,7 +18,7 @@ struct WaterfallModel
     WaterfallModel(size_t w, uint64_t base_dt, size_t m_sz, const size_t *multiples);
 
     void reset(uint64_t t0, size_t width);
-    size_t updateModel(uint16_t t, size_t x, uint16_t y);
+    size_t updateModel(uint64_t t, size_t x, uint16_t y);
     size_t push();
 
     char *toString();
