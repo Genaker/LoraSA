@@ -25,9 +25,6 @@
 
 #include "FS.h"
 #include <Arduino.h>
-#ifdef LOG_DATA_JSON
-#include <ArduinoJson.h>
-#endif
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include <File.h>
@@ -233,15 +230,16 @@ uint64_t scan_time = 0;
 uint64_t scan_start_time = 0;
 #endif
 
-// Define which UART port to use (0, 1, or 2)
+// log data via serial console, JSON format:
+// Optionally it can be enabled via this flag, although its recommended to use
+// platformio config flag -DLOG_DATA_JSON
+// #define LOG_DATA_JSON true
+
+#ifdef SEEK_ON_X
 #define SERIAL_PORT 1
 
-// Define which pins to use
-#define TX_PIN 12
-#define RX_PIN 16 // not used
-
-// Create HardwareSerial instance (UART 1 or 2)
 HardwareSerial SerialPort(SERIAL_PORT);
+#endif
 
 // #define WEB_SERVER true
 
@@ -778,8 +776,6 @@ void dumpToCommsTask(void *parameter)
 #ifdef LOG_DATA_JSON
 void logToSerialTask(void *parameter)
 {
-    JsonDocument doc;
-    char jsonOutput[200];
     uint64_t last_epoch = frequency_scan_result.last_epoch;
     frequency_scan_result.rssi = -999;
 
@@ -797,12 +793,19 @@ void logToSerialTask(void *parameter)
                 continue;
             }
 
-            doc["low_range_freq"] = frequency_scan_result.begin;
-            doc["high_range_freq"] = frequency_scan_result.end;
-            doc["value"] = String(highest_value_scanned);
-
-            serializeJson(doc, jsonOutput);
-            SerialPort.println(jsonOutput);
+#ifdef SEEK_ON_X
+            SerialPort.printf("{\"low_range_freq\": %" PRIu64
+                              ", \"high_range_freq\": %" PRIu64 ", "
+                              "\"value\": \"%" PRIi16 "\"}\n",
+                              frequency_scan_result.begin, frequency_scan_result.end,
+                              highest_value_scanned);
+#else
+            Serial.printf("{\"low_range_freq\": %" PRIu64
+                          ", \"high_range_freq\": %" PRIu64 ", "
+                          "\"value\": \"%" PRIi16 "\"}\n",
+                          frequency_scan_result.begin, frequency_scan_result.end,
+                          highest_value_scanned);
+#endif
         }
     }
 }
@@ -972,18 +975,17 @@ void setup(void)
 #ifdef LOG_DATA_JSON
     Serial.begin(115200);
 
-    // Initialize custom Serial port
+#ifdef SEEK_ON_X
+    // Initialize custom Serial port on the hardware using pins
     // Parameters: baud rate, serial config, RX pin, TX pin
     SerialPort.begin(115200, SERIAL_8N1, RX_PIN, TX_PIN);
+#endif
 #endif
 
 #ifdef LILYGO
     setupBoards(); // true for disable U8g2 display library
     delay(500);
-    Serial.println("Setup LiLybeginSDCardGO board is done");
-#else
-    // Serial0.begin(115200); // Initialize UART0
-    // Serial0.println("Hello, Serial0 (UART0)!");
+    Serial.println("Setup LiLyGO board is done");
 #endif
 
     // LED brightness
