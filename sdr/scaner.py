@@ -2,22 +2,19 @@ import SoapySDR
 from SoapySDR import *  # SOAPY_SDR_* constants
 import numpy as np
 import time
-import matplotlib.pyplot as plt
+import sys
 
 # Configuration parameters
 start_freq = 800.1e6  # Start frequency in Hz (e.g., 900.1 MHz for S1G radio)
 stop_freq = 950e6  # Stop frequency in Hz (e.g., 2.49 GHz for HiF radio)
-step_size = 2e6  # Step size in Hz to match the SDR's adjusted bandwidth
+step_size_default = 0.25e6  # Default step size in Hz
 sample_rate_hif = 4e6  # Adjusted sample rate in Hz for HiF
-sample_rate_s1g = 2e6  # Adjusted sample rate in Hz for S1G
 gain = 69  # Gain in dB
 freq_resolution = 10e3  # Desired frequency resolution in Hz
 
 # Calculate the minimum number of samples needed
 min_samples_hif = int(sample_rate_hif / freq_resolution)
-min_samples_s1g = int(sample_rate_s1g / freq_resolution)
 duration_hif = min_samples_hif / sample_rate_hif  # Adjust duration based on minimum samples
-duration_s1g = min_samples_s1g / sample_rate_s1g
 
 # Frequency slice size for extraction (0.25 MHz)
 slice_size = 0.25e6
@@ -30,7 +27,40 @@ def calculate_rssi(signal, num_of_samples):
     mean_of_squares = sum_of_squares / num_of_samples
     return 10 * np.log10(mean_of_squares + 1e-10)  # Convert to dB with safety for log(0)
 
-def frequency_sweep():
+def render_ascii_chart(data):
+    if not data:
+        print("No data to render.")
+        return
+
+    max_rssi = max(data.values())
+    min_rssi = min(data.values())
+    chart_width = 50  # Width of the chart in characters
+
+    print("\nFrequency Sweep Results (ASCII Chart):")
+    for freq, rssi in data.items():
+        # Scale RSSI values to fit within chart width
+        scaled_rssi = int(((rssi - min_rssi) / (max_rssi - min_rssi)) * chart_width) if max_rssi != min_rssi else chart_width // 2
+        bar = "#" * scaled_rssi
+        print(f"{freq:.3f} MHz | {rssi:.2f} dB | {bar}")
+
+def render_graphical_chart(data):
+    import matplotlib.pyplot as plt
+    if not data:
+        print("No data to render.")
+        return
+
+    freqs = list(data.keys())
+    rssis = list(data.values())
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(freqs, rssis, marker="o", linestyle="-", color="b")
+    plt.title("Frequency Sweep Results (Graphical Chart)")
+    plt.xlabel("Frequency (MHz)")
+    plt.ylabel("RSSI (dB)")
+    plt.grid(True)
+    plt.show()
+
+def frequency_sweep(output_type="ascii", step_size=step_size_default):
     try:
         device = "Cariboulite"
         # Create and configure the SDR device
@@ -50,7 +80,6 @@ def frequency_sweep():
     # Set up HiF radio
     sdr.setSampleRate(SOAPY_SDR_RX, 0, sample_rate_hif)
     sdr.setGain(SOAPY_SDR_RX, 0, gain)
-    ##sdr.writeSetting(SOAPY_SDR_RX, "AGC", False)  # Disable AGC
 
     # Allocate a buffer for received samples
     buffer_size_hif = min_samples_hif
@@ -59,17 +88,7 @@ def frequency_sweep():
     print(f"Starting infinite frequency sweep from {start_freq / 1e6} MHz to {stop_freq / 1e6} MHz...")
     print(f"Frequency resolution: {freq_resolution / 1e3} kHz")
 
-    freq_list = []
-    rssi_list = []
-
-    # Setup plot
-    plt.ion()
-    fig, ax = plt.subplots()
-    line, = ax.plot([], [], marker='o', linestyle='-', color='b')
-    ax.set_title("Frequency Sweep Results")
-    ax.set_xlabel("Frequency (MHz)")
-    ax.set_ylabel("RSSI (dB)")
-    ax.grid(True)
+    freq_rssi_map = {}
 
     while True:
         current_freq = start_freq
@@ -99,8 +118,7 @@ def frequency_sweep():
                     rssi += gain + calibration_offset  # Adjust RSSI for gain and calibration
                     print(f"Center Frequency: {current_freq / 1e6:.3f} MHz, RSSI: {rssi:.2f} dB")
 
-                    freq_list.append(current_freq / 1e6)  # Store frequency in MHz
-                    rssi_list.append(rssi)  # Store RSSI value
+                    freq_rssi_map[current_freq / 1e6] = rssi  # Store frequency in MHz as key and RSSI as value
 
                 iteration_time = time.time() - start_time
                 print(f"Iteration completed in {iteration_time:.3f} seconds")
@@ -118,18 +136,27 @@ def frequency_sweep():
 
             current_freq += step_size
 
-        # Update the plot after the full sweep
-        if freq_list and rssi_list:
-            line.set_data(freq_list, rssi_list)
-            ax.set_xlim(min(freq_list), max(freq_list))
-            ax.set_ylim(min(rssi_list) - 5, max(rssi_list) + 5)
-            fig.canvas.draw()
-            fig.canvas.flush_events()
-            freq_list.clear()
-            rssi_list.clear()
+        # Render the chart after the full sweep
+        if freq_rssi_map:
+            if output_type == "ascii":
+                render_ascii_chart(freq_rssi_map)
+            elif output_type == "graphical":
+                render_graphical_chart(freq_rssi_map)
+            else:
+                print("Invalid output type. Choose 'ascii' or 'graphical'.")
+            freq_rssi_map.clear()
 
 if __name__ == "__main__":
     try:
-        frequency_sweep()
+        output_type = "ascii"  # Default to ASCII output
+        step_size = step_size_default  # Default step size
+        if len(sys.argv) > 1:
+            output_type = sys.argv[1].strip().lower()
+        if len(sys.argv) > 2:
+            try:
+                step_size = float(sys.argv[2])
+            except ValueError:
+                print("Invalid step size provided. Using default.")
+        frequency_sweep(output_type=output_type, step_size=step_size)
     except KeyboardInterrupt:
         print("Infinite sweep terminated by user.")
