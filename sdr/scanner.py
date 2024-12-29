@@ -1,8 +1,14 @@
+import sys
+
 import SoapySDR
 from SoapySDR import *  # SOAPY_SDR_* constants
+
 import numpy as np
 import time
-import sys
+import signal
+
+# set log level to error
+SoapySDR.setLogLevel(SoapySDR.SOAPY_SDR_ERROR)
 
 # Configuration parameters
 start_freq = 800.1e6  # Start frequency in Hz (e.g., 900.1 MHz for S1G radio)
@@ -147,16 +153,20 @@ def frequency_sweep(output_type="ascii", step_size=step_size_default):
             freq_rssi_map.clear()
 
 if __name__ == "__main__":
-    try:
-        output_type = "ascii"  # Default to ASCII output
-        step_size = step_size_default  # Default step size
-        if len(sys.argv) > 1:
-            output_type = sys.argv[1].strip().lower()
-        if len(sys.argv) > 2:
-            try:
-                step_size = float(sys.argv[2])
-            except ValueError:
-                print("Invalid step size provided. Using default.")
-        frequency_sweep(output_type=output_type, step_size=step_size)
-    except KeyboardInterrupt:
-        print("Infinite sweep terminated by user.")
+    def catch_quit(sig, frame):
+        sdr.deactivateStream(stream)
+        sdr.closeStream(stream)
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, catch_quit)
+    
+    output_type = "ascii"  # Default to ASCII output
+    step_size = step_size_default  # Default step size
+    if len(sys.argv) > 1:
+        output_type = sys.argv[1].strip().lower()
+    if len(sys.argv) > 2:
+        try:
+            step_size = float(sys.argv[2])
+        except ValueError:
+            print("Invalid step size provided. Using default.")
+    frequency_sweep(output_type=output_type, step_size=step_size)
