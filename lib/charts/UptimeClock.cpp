@@ -19,10 +19,12 @@ void UptimeClock::draw()
                 : mils < 100 ? ".0"
                              : ".") +
                String(mils);
-    int w = display.getStringWidth(s);
-    display.setColor(BLACK);
-    display.fillRect((display.width() - w) / 2, display.height() / 2 - 3, w, 7);
-    display.setColor(WHITE);
-    display.setTextAlignment(TEXT_ALIGN_CENTER_BOTH);
-    display.drawString(display.width() / 2, display.height() / 2, s);
+    uint16_t w, h1 = 0;
+    int16_t x1, y1 = 0;
+    display.getTextBounds(s.c_str(), 0, 0, &x1, &y1, &w, &h1);
+    display.fillRect((display.width() - w) / 2, display.height() / 2 - 3, w, 7, BLACK);
+    display.setTextColor(WHITE);
+    // display.setTextAlignment(TEXT_ALIGN_CENTER_BOTH);
+    display.setCursor(display.width() / 2, display.height() / 2);
+    display.print(s);
 }

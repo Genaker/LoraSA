@@ -13,6 +13,7 @@
 #include "LoRaBoards.h"
 
 #include "LiLyGo.h"
+#include <Adafruit_SSD1306.h>
 
 // Implement stubs for functions that exist on Heltec, but not on LilyGo
 void heltec_led(int led) {}
@@ -22,7 +23,7 @@ void heltec_deep_sleep(int sleep_seconds) {}
 void heltec_delay(int millisec) { delay(millisec); }
 
 DISPLAY_TYPE display = DISPLAY_INIT();
-BOTH_TYPE both = BOTH_INIT();
+BOTH_TYPE splitBoth = BOTH_INIT();
 
 HotButton button(BUTTON);
 
@@ -35,14 +36,11 @@ void heltec_loop()
 
 void heltec_display_power(bool on)
 {
-#ifndef HELTEC_NO_DISPLAY_INSTANCE
+    DISPLAY_TYPE display = DISPLAY_INIT();
+    BOTH_TYPE splitBoth = BOTH_INIT();
     if (on)
     {
-#ifdef HELTEC_WIRELESS_STICK
-        // They hooked the display to "external" power, and didn't tell anyone
-        heltec_ve(true);
-        delay(5);
-#endif
+
         pinMode(RST_OLED, OUTPUT);
         digitalWrite(RST_OLED, HIGH);
         delay(1);
@@ -52,13 +50,8 @@ void heltec_display_power(bool on)
     }
     else
     {
-#ifdef HELTEC_WIRELESS_STICK
-        heltec_ve(false);
-#else
-        display.displayOff();
-#endif
+        display.ssd1306_command(SSD1306_DISPLAYOFF);
     }
-#endif
 }
 
 void heltec_setup()
@@ -76,15 +69,17 @@ void heltec_setup()
 #endif
 
 #ifdef HELTEC
+    heltec_display_power(true);
+    display.begin(DISPLAY_ADDR, SCREEN_ADDRESS);
 #ifndef ARDUINO_heltec_wifi_32_lora_V3
     hspi->begin(SCK, MISO, MOSI, SS);
 #endif
 #endif
 #ifndef HELTEC_NO_DISPLAY_INSTANCE
     heltec_display_power(true);
-    display.init();
+    display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS);
     // display.setContrast(200);
-    display.flipScreenVertically();
+    // display.ssd1306_command(SSD1306_COMSCANINC);
 #endif
 }
 
@@ -111,7 +106,7 @@ HardwareSerial SerialGPS(GPS_RX_PIN, GPS_TX_PIN);
 #include "driver/gpio.h"
 #endif // ARDUINO_ARCH_ESP32
 
-DISPLAY_MODEL *u8g2 = NULL;
+// DISPLAY_MODEL *u8g2 = NULL;
 static DevInfo_t devInfo;
 
 #ifdef HAS_GPS
@@ -530,29 +525,31 @@ void loopPMU()
 
 bool beginDisplay()
 {
-    Wire.beginTransmission(DISPLAY_ADDR);
-    if (Wire.endTransmission() == 0)
-    {
-        Serial.printf("Find Display model at 0x%X address\n", DISPLAY_ADDR);
-        u8g2 = new DISPLAY_MODEL(U8G2_R0, U8X8_PIN_NONE);
-        u8g2->begin();
-        u8g2->clearBuffer();
-        u8g2->setFont(u8g2_font_inb19_mr);
-        u8g2->drawStr(0, 30, "LilyGo");
-        u8g2->drawHLine(2, 35, 47);
-        u8g2->drawHLine(3, 36, 47);
-        u8g2->drawVLine(45, 32, 12);
-        u8g2->drawVLine(46, 33, 12);
-        u8g2->setFont(u8g2_font_inb19_mf);
-        u8g2->drawStr(58, 60, "LoRa");
-        u8g2->sendBuffer();
-        u8g2->setFont(u8g2_font_fur11_tf);
-        delay(3000);
-        return true;
-    }
+    // ToDO: make it work with new Adafruit lib
+    /** Wire.beginTransmission(DISPLAY_ADDR);
+     if (Wire.endTransmission() == 0)
+     {
+         Serial.printf("Find Display model at 0x%X address\n", DISPLAY_ADDR);
+         u8g2 = new DISPLAY_MODEL(U8G2_R0, U8X8_PIN_NONE);
+         u8g2->begin();
+         u8g2->clearBuffer();
+         u8g2->setFont(u8g2_font_inb19_mr);
+         u8g2->drawStr(0, 30, "LilyGo");
+         u8g2->drawHLine(2, 35, 47);
+         u8g2->drawHLine(3, 36, 47);
+         u8g2->drawVLine(45, 32, 12);
+         u8g2->drawVLine(46, 33, 12);
+         u8g2->setFont(u8g2_font_inb19_mf);
+         u8g2->drawStr(58, 60, "LoRa");
+         u8g2->sendBuffer();
+         u8g2->setFont(u8g2_font_fur11_tf);
+         delay(3000);
+         return true;
+     }
 
-    Serial.printf("Warning: Failed to find Display at 0x%0X address\n", DISPLAY_ADDR);
-    return false;
+     Serial.printf("Warning: Failed to find Display at 0x%0X address\n", DISPLAY_ADDR);
+     return false;
+     */
 }
 
 bool beginSDCard()
@@ -847,7 +844,7 @@ void printResult(bool radio_online)
     Serial.println((psramFound()) ? "+" : "-");
 
     Serial.print("Display      : ");
-    Serial.println((u8g2) ? "+" : "-");
+    // Serial.println((u8g2) ? "+" : "-");
 
 #ifdef HAS_SDCARD
     Serial.print("Sd Card      : ");
@@ -866,34 +863,35 @@ void printResult(bool radio_online)
 #endif
 #endif
 
-    if (u8g2)
+    if (false /*&& u8g2*/)
     {
+        /*
+                u8g2->clearBuffer();
+                u8g2->setFont(u8g2_font_NokiaLargeBold_tf);
+                uint16_t str_w = u8g2->getStrWidth(BOARD_VARIANT_NAME);
+                u8g2->drawStr((u8g2->getWidth() - str_w) / 2, 16, BOARD_VARIANT_NAME);
+                u8g2->drawHLine(5, 21, u8g2->getWidth() - 5);
 
-        u8g2->clearBuffer();
-        u8g2->setFont(u8g2_font_NokiaLargeBold_tf);
-        uint16_t str_w = u8g2->getStrWidth(BOARD_VARIANT_NAME);
-        u8g2->drawStr((u8g2->getWidth() - str_w) / 2, 16, BOARD_VARIANT_NAME);
-        u8g2->drawHLine(5, 21, u8g2->getWidth() - 5);
+                u8g2->drawStr(0, 38, "Disp:");
+                u8g2->drawStr(45, 38, (u8g2) ? "+" : "-");
 
-        u8g2->drawStr(0, 38, "Disp:");
-        u8g2->drawStr(45, 38, (u8g2) ? "+" : "-");
+        #ifdef HAS_SDCARD
+                u8g2->drawStr(0, 54, "SD :");
+                u8g2->drawStr(45, 54, (SD.cardSize() != 0) ? "+" : "-");
+        #endif
 
-#ifdef HAS_SDCARD
-        u8g2->drawStr(0, 54, "SD :");
-        u8g2->drawStr(45, 54, (SD.cardSize() != 0) ? "+" : "-");
-#endif
+                u8g2->drawStr(62, 38, "Radio:");
+                u8g2->drawStr(120, 38, (radio_online) ? "+" : "-");
 
-        u8g2->drawStr(62, 38, "Radio:");
-        u8g2->drawStr(120, 38, (radio_online) ? "+" : "-");
+        #ifdef HAS_PMU
+                u8g2->drawStr(62, 54, "Power:");
+                u8g2->drawStr(120, 54, (PMU) ? "+" : "-");
+        #endif
 
-#ifdef HAS_PMU
-        u8g2->drawStr(62, 54, "Power:");
-        u8g2->drawStr(120, 54, (PMU) ? "+" : "-");
-#endif
+                u8g2->sendBuffer();
 
-        u8g2->sendBuffer();
-
-        delay(2000);
+                delay(2000);
+                */
     }
 #endif
 }

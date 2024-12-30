@@ -5,8 +5,9 @@
 #include "HT_DEPG0290BxS800FxX_BW.h"
 typedef DEPG0290BxS800FxX_BW Display_t;
 #else
-#include <OLEDDisplay.h>
-typedef OLEDDisplay Display_t;
+#include "Adafruit_GFX.h"
+#include "Adafruit_SSD1306.h"
+typedef Adafruit_SSD1306 Display_t;
 #endif
 
 #include <cstdint>

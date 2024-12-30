@@ -32,14 +32,12 @@ void WaterfallChart::draw()
                      (model->events[y][x] >= model->counts[y][x] * threshold);
             if (b)
             {
-                display.setColor(WHITE);
+                display.drawPixel(pos_x + x, pos_y + y, WHITE);
             }
             else
             {
-                display.setColor(BLACK);
+                display.drawPixel(pos_x + x, pos_y + y, BLACK);
             }
-
-            display.setPixel(pos_x + x, pos_y + y);
         }
     }
 

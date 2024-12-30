@@ -10,7 +10,10 @@
 #else
 #define DISPLAY_WIDTH 128
 #define DISPLAY_HEIGHT 64
-#include "SSD1306Wire.h"
+// #include "SSD1306Wire.h"
+#include "Adafruit_GFX.h"
+#include "Adafruit_SSD1306.h"
+
 #endif
 
 #define RADIO_TYPE SX1262
@@ -36,8 +39,8 @@ extern RADIO_TYPE radio;
 #endif
 #define SCREEN_ADDRESS 0x3C
 
-#define DISPLAY_TYPE SSD1306Wire
-#define DISPLAY_INIT() SSD1306Wire(SCREEN_ADDRESS, I2C_SDA, I2C_SCL, DISPLAY_GEOMETRY)
+#define DISPLAY_TYPE Adafruit_SSD1306
+#define DISPLAY_INIT() Adafruit_SSD1306(128, 64, &Wire, OLED_RST)
 // SH1106Wire display(0x3c, I2C_SDA, I2C_SCL, DISPLAY_GEOMETRY);
 #else
 #define DISPLAY_TYPE void *
@@ -62,7 +65,13 @@ extern RADIO_TYPE radio;
 // #include "OLEDDisplayUi.h"
 // #include "SH1106Wire.h"
 // #include "SSD1306Brzo.h"
-#include "SSD1306Wire.h"
+// #include "SSD1306Wire.h"
+
+#define DISPLAY_WIDTH 128
+#define DISPLAY_HEIGHT 64
+
+#include "Adafruit_GFX.h"
+#include "Adafruit_SSD1306.h"
 
 #ifdef USING_SX1280PA
 #define RADIO_TYPE SX1280
@@ -125,11 +134,13 @@ class PrintSplitter : public Print
     Print &b;
 };
 
-#define DISPLAY_GEOMETRY GEOMETRY_128_64
+#define DISPLAY_GEOMETRY "128_64"
 #define SCREEN_ADDRESS 0x3C
 
-#define DISPLAY_TYPE SSD1306Wire
-#define DISPLAY_INIT() SSD1306Wire(SCREEN_ADDRESS, I2C_SDA, I2C_SCL, DISPLAY_GEOMETRY)
+#define DISPLAY_TYPE Adafruit_SSD1306
+#define DISPLAY_INIT() Adafruit_SSD1306(128, 64, &Wire, OLED_RST)
+// Adafruit_SSD1306(SCREEN_ADDRESS, I2C_SDA, I2C_SCL, DISPLAY_GEOMETRY)
+// Adafruit_SSD1306(128, 64, &Wire, OLED_RST);
 // SH1106Wire display(0x3c, I2C_SDA, I2C_SCL, DISPLAY_GEOMETRY);
 
 #define BOTH_TYPE PrintSplitter

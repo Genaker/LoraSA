@@ -62,21 +62,21 @@ void BarChart::drawOne(int x)
 
     if (y < height)
     {
-        display.setColor(BLACK);
-        display.drawVerticalLine(pos_x + x, pos_y, y);
-        display.setColor(WHITE);
-        display.drawVerticalLine(pos_x + x, pos_y + y, height - y);
+        // display.setColor(BLACK);
+        display.drawFastVLine(pos_x + x, pos_y, y, BLACK);
+        // display.setColor(WHITE);
+        display.drawFastVLine(pos_x + x, pos_y + y, height - y, WHITE);
     }
     else
     {
-        display.setColor(BLACK);
-        display.drawVerticalLine(pos_x + x, pos_y, height);
+        // display.setColor(BLACK);
+        display.drawFastVLine(pos_x + x, pos_y, height, BLACK);
     }
 
     if (x % 2 == 0)
     {
-        display.setColor(INVERSE);
-        display.setPixel(pos_x + x, pos_y + y2pos(level_y));
+        // display.setColor(INVERSE);
+        display.drawPixel(pos_x + x, pos_y + y2pos(level_y), INVERSE);
     }
 
     changed[x] = false;
@@ -130,11 +130,11 @@ void DecoratedBarChart::draw()
 
     bar.draw();
 
-    display.setColor(BLACK);
-    display.fillRect(pos_x, pos_y, width, bar.pos_y - pos_y);
+    // display.setColor(BLACK);
+    display.fillRect(pos_x, pos_y, width, bar.pos_y - pos_y, BLACK);
 
-    display.setColor(WHITE);
-    display.setTextAlignment(TEXT_ALIGN_LEFT);
+    // display.setColor(WHITE);
+    // display.setTextAlignment(TEXT_ALIGN_LEFT);
 
     uint16_t first_untouched = 0;
 
@@ -144,7 +144,9 @@ void DecoratedBarChart::draw()
         if (y >= bar.level_y)
         {
             String s = String(bar.ys[x], 0);
-            uint16_t w = display.getStringWidth(s);
+            int16_t x0, y0; // Variables to store the top-left corner
+            uint16_t w, h0; // Variables to store width and height
+            display.getTextBounds(s.c_str(), 0, 0, &x0, &y0, &w, &h0);
             uint16_t x1 = x;
             for (; x < x1 + w && x < width; x++)
             {
@@ -152,7 +154,10 @@ void DecoratedBarChart::draw()
                 {
                     y = bar.ys[x];
                     s = String(y, 0);
-                    w = max(w, display.getStringWidth(s));
+                    int16_t x0, y0;  // Variables to store the top-left corner
+                    uint16_t w1, h0; // Variables to store width and height
+                    display.getTextBounds(s.c_str(), 0, 0, &x0, &y0, &w1, &h0);
+                    w = max(w, w1);
                 }
             }
 
@@ -164,31 +169,34 @@ void DecoratedBarChart::draw()
             first_untouched = x;
 
             if (x1 + w <= width)
-                display.drawString(pos_x + x1, pos_y, s);
+            {
+                // Detected dB level text
+                display.setCursor(pos_x + x1 - 10, pos_y);
+                display.print(s);
+            }
         }
     }
 
     if (draw_axis)
     {
-        display.setColor(WHITE);
 
         uint16_t y = pos_y + height - AXIS_HEIGHT + 2;
-        display.fillRect(pos_x, y - 1, width, X_AXIS_WEIGHT);
+        display.fillRect(pos_x, y - 1, width, X_AXIS_WEIGHT, WHITE);
 
         // Start and end ticks
-        display.fillRect(pos_x, y - 1, 2, AXIS_HEIGHT);
-        display.fillRect(pos_x + width - 2, y - 1, 2, AXIS_HEIGHT);
+        display.fillRect(pos_x, y - 1, 2, AXIS_HEIGHT, WHITE);
+        display.fillRect(pos_x + width - 2, y - 1, 2, AXIS_HEIGHT, WHITE);
 
         for (float step = 0; bar.min_x + step * MAJOR_TICKS < bar.max_x; step += 1)
         {
             int tick_pos = bar.x2pos(bar.min_x + step * MAJOR_TICKS);
-            display.drawVerticalLine(pos_x + tick_pos, y, MAJOR_TICK_LENGTH);
+            display.drawFastVLine(pos_x + tick_pos, y, MAJOR_TICK_LENGTH, WHITE);
         }
 
         for (float step = 0; bar.min_x + step * MINOR_TICKS < bar.max_x; step += 1)
         {
             int tick_pos = bar.x2pos(bar.min_x + step * MINOR_TICKS);
-            display.drawVerticalLine(pos_x + tick_pos, y, MINOR_TICK_LENGTH);
+            display.drawFastVLine(pos_x + tick_pos, y, MINOR_TICK_LENGTH, WHITE);
         }
     }
 }

@@ -21,7 +21,9 @@
   https://jgromes.github.io/RadioLib/
 */
 
-//  #define HELTEC_NO_DISPLAY
+// We are not using default display library but Adafruit insread
+#define HELTEC_NO_DISPLAY_INSTANCE
+#define HELTEC_NO_DISPLAY
 
 #include "FS.h"
 #include <Arduino.h>
@@ -32,6 +34,7 @@
 #include <ESPAsyncWebServer.h>
 #include <File.h>
 #include <LittleFS.h>
+#include <Wire.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <unordered_map>
@@ -63,6 +66,7 @@
 
 #ifndef LILYGO
 #include <heltec_unofficial.h>
+
 // This file contains a binary patch for the SX1262
 #include "modules/SX126x/patches/SX126x_patch_scan.h"
 #endif // end ifndef LILYGO
@@ -79,6 +83,48 @@
 //  Our Code
 #include <LiLyGo.h>
 #endif // end LILYGO
+
+#if defined(HELTEC) && defined(HELTEC_NO_DISPLAY)
+#define DISPLAY_ADDR 0x3C
+#include "Adafruit_GFX.h"
+#include "Adafruit_SSD1306.h"
+/**
+ * @class PrintSplitter
+ * @brief A class that splits the output of the Print class to two different
+ *        Print objects.
+ *
+ * The PrintSplitter class is used to split the output of the Print class to two
+ * different Print objects. It overrides the write() function to write the data
+ * to both Print objects.
+ */
+class PrintSplitter2 : public Print
+{
+  public:
+    PrintSplitter2(Print &_a, Print &_b) : a(_a), b(_b) {}
+    size_t write(uint8_t c)
+    {
+        a.write(c);
+        return b.write(c);
+    }
+    size_t write(const char *str)
+    {
+        a.write(str);
+        return b.write(str);
+    }
+
+  private:
+    Print &a;
+    Print &b;
+};
+
+#define DISPLAY_GEOMETRY GEOMETRY_128_64
+
+#define SCREEN_ADDRESS 0x3C
+// Wire.begin(SDA_OLED, SCL_OLED);
+Adafruit_SSD1306 display(128, 64, &Wire, RST_OLED);
+PrintSplitter2 splitBoth(Serial, display);
+
+#endif
 
 #define BT_SCAN_DELAY 60 * 1 * 1000
 #define WF_SCAN_DELAY 60 * 2 * 1000
@@ -575,9 +621,9 @@ bool setFrequency(float curr_freq)
 #endif
     if (state != RADIOLIB_ERR_NONE)
     {
-        display.drawString(0, 64 - 10,
-                           "E(" + String(state) +
-                               "):setFrequency:" + String(r.current_frequency));
+        display.setCursor(0, 64 - 10);
+        display.print("E(" + String(state) +
+                      "):setFrequency:" + String(r.current_frequency));
         Serial.println("E(" + String(state) +
                        "):setFrequency:" + String(r.current_frequency));
         display.display();
@@ -591,7 +637,7 @@ bool setFrequency(float curr_freq)
 void init_radio()
 {
     // initialize SX1262 FSK modem at the initial frequency
-    both.println("Init radio");
+    splitBoth.println("Init radio");
     state = initForScan(CONF_FREQ_BEGIN);
 
     if (state == RADIOLIB_ERR_NONE)
@@ -614,7 +660,7 @@ void init_radio()
     // upload a patch to the SX1262 to enable spectral scan
     // NOTE: this patch is uploaded into volatile memory,
     // and must be re-uploaded on every power up
-    both.println("Upload SX1262 patch");
+    splitBoth.println("Upload SX1262 patch");
 
     // Upload binary patch into the SX126x device RAM. Patch is needed to e.g.,
     // enable spectral scan and must be uploaded again on every power cycle.
@@ -622,7 +668,7 @@ void init_radio()
     // configure scan bandwidth and disable the data shaping
 #endif
 
-    both.println("Setting up radio");
+    splitBoth.println("Setting up radio");
 #ifdef USING_SX1280PA
     // RADIOLIB_OR_HALT(radio.setBandwidth(RADIOLIB_SX128X_LORA_BW_406_25));
 #elif USING_SX1276
@@ -640,7 +686,7 @@ void init_radio()
     {
         Serial.println("Error:setDataShaping:" + String(state));
     }
-    both.println("Starting scanning...");
+    splitBoth.println("Starting scanning...");
 
     // calibrate only once ,,, at startup
     // TODO: check documentation (9.2.1) if we must calibrate in certain ranges
@@ -961,9 +1007,9 @@ void readConfigFile()
     config.configureDetectionStrategy(detection);
     configureDetection();
 
-    both.println("C FREQ BEGIN:" + String(CONF_FREQ_BEGIN));
-    both.println("C FREQ END:" + String(CONF_FREQ_END));
-    both.println("C SAMPLES:" + String(CONF_SAMPLES));
+    splitBoth.println("C FREQ BEGIN:" + String(CONF_FREQ_BEGIN));
+    splitBoth.println("C FREQ END:" + String(CONF_FREQ_END));
+    splitBoth.println("C SAMPLES:" + String(CONF_SAMPLES));
 }
 
 void setup(void)
@@ -1023,6 +1069,16 @@ void setup(void)
     pinMode(BUZZER_PIN, OUTPUT);
     pinMode(REB_PIN, OUTPUT);
     heltec_setup();
+#if defined(HELTEC) && defined(HELTEC_NO_DISPLAY)
+    pinMode(RST_OLED, OUTPUT);
+    digitalWrite(RST_OLED, HIGH);
+    delay(1);
+    digitalWrite(RST_OLED, LOW);
+    delay(20);
+    digitalWrite(RST_OLED, HIGH);
+    Wire.begin((int)SDA_OLED, (int)SCL_OLED);
+    display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS, false, false);
+#endif
 
 #ifdef JOYSTICK_ENABLED
     calibrate_joy();
@@ -1043,21 +1099,21 @@ void setup(void)
         }
     }
 
-    display.clear();
+    display.clearDisplay();
 
 #ifdef WEB_SERVER
-    both.println("CLICK for WIFI settings.");
+    splitBoth.println("CLICK for WIFI settings.");
 
     for (int i = 0; i < 200; i++)
     {
-        both.print(".");
+        splitBoth.print(".");
 
         button.update();
         delay(10);
         if (button.pressedNow())
         {
-            both.println("-----------");
-            both.println("Starting WIFI-SERVER...");
+            splitBoth.println("-----------");
+            splitBoth.println("Starting WIFI-SERVER...");
             // Error here: E (15752) ledc: ledc_get_duty(745): LEDC is not initialized
             tone(BUZZER_PIN, 205, 100);
             delay(50);
@@ -1066,14 +1122,14 @@ void setup(void)
             delay(50);
 
             serverStart();
-            both.println("Ready to Connect: 192.168.4.1");
+            splitBoth.println("Ready to Connect: 192.168.4.1");
             delay(600);
             break;
         }
     }
-    both.print("\n");
+    splitBoth.print("\n");
 
-    both.println("Init File System");
+    splitBoth.println("Init File System");
     initLittleFS();
 
     readConfigFile();
@@ -1087,15 +1143,15 @@ void setup(void)
 
     configureDetection();
 
-    both.println("FREQ BEGIN:" + String(CONF_FREQ_BEGIN));
-    both.println("FREQ END:" + String(CONF_FREQ_END));
-    both.println("SAMPLES:" + String(CONF_SAMPLES));
+    splitBoth.println("FREQ BEGIN:" + String(CONF_FREQ_BEGIN));
+    splitBoth.println("FREQ END:" + String(CONF_FREQ_END));
+    splitBoth.println("SAMPLES:" + String(CONF_SAMPLES));
 #endif
     init_radio();
 
 #ifndef LILYGO
     vbat = heltec_vbat();
-    both.printf("V battery: %.2fV (%d%%)\n", vbat, heltec_battery_percent(vbat));
+    splitBoth.printf("V battery: %.2fV (%d%%)\n", vbat, heltec_battery_percent(vbat));
     delay(1000);
 #endif // end not LILYGO
 #ifdef WIFI_SCANNING_ENABLED
@@ -1106,7 +1162,7 @@ void setup(void)
 
 #endif
     delay(400);
-    display.clear();
+    display.clearDisplay();
 
     resolution = (float)RANGE / (STEPS * SCAN_RBW_FACTOR);
 
@@ -1122,17 +1178,17 @@ void setup(void)
 
     if (single_page_scan)
     {
-        both.println("Single Page Screen MODE");
-        both.println("Multi Screen View Press P - button");
-        both.println("Multi Screen Res: " + String(resolution) + "Mhz/tick");
-        both.println(
+        splitBoth.println("Single Page Screen MODE");
+        splitBoth.println("Multi Screen View Press P - button");
+        splitBoth.println("Multi Screen Res: " + String(resolution) + "Mhz/tick");
+        splitBoth.println(
             "Resolution: " + String((float)RANGE_PER_PAGE / (STEPS * SCAN_RBW_FACTOR)) +
             "MHz/tick");
         for (int i = 0; i < 500; i++)
         {
             button.update();
             delay(5);
-            both.print(".");
+            splitBoth.print(".");
             if (button.pressed())
             {
                 RANGE_PER_PAGE = DEFAULT_RANGE_PER_PAGE;
@@ -1146,17 +1202,17 @@ void setup(void)
     }
     else
     {
-        both.println("Multi Page Screen MODE");
-        both.println("Single screen View Press P - button");
-        both.println("Single screen Resol: " + String(resolution) + "Mhz/tick");
-        both.println(
+        splitBoth.println("Multi Page Screen MODE");
+        splitBoth.println("Single screen View Press P - button");
+        splitBoth.println("Single screen Resol: " + String(resolution) + "Mhz/tick");
+        splitBoth.println(
             "Resolution: " + String((float)RANGE_PER_PAGE / (STEPS * SCAN_RBW_FACTOR)) +
             "Mhz/tick");
         for (int i = 0; i < 500; i++)
         {
             button.update();
             delay(10);
-            both.print(".");
+            splitBoth.print(".");
             if (button.pressed())
             {
                 RANGE_PER_PAGE = range;
@@ -1168,7 +1224,7 @@ void setup(void)
     }
 
     configurePages();
-    display.clear();
+    display.clearDisplay();
     Serial.println();
 
 #ifdef METHOD_RSSI
@@ -1182,7 +1238,8 @@ void setup(void)
     if (state != RADIOLIB_ERR_NONE)
     {
         Serial.print(F("Failed to start receive mode, error code: "));
-        display.drawString(0, 64 - 10, "E:startReceive");
+        display.setCursor(0, 64 - 10);
+        display.print("E:startReceive");
         display.display();
         delay(500);
         Serial.println(state);
@@ -1374,24 +1431,29 @@ void joystickMoveCursor(int joy_x_pressed)
     if (joy_x_pressed > 0)
     {
         cursor_x_position--;
-        display.drawString(cursor_x_position, 0, String((int)r.current_frequency));
-        display.drawLine(cursor_x_position, 1, cursor_x_position, 10);
+        display.setCursor(cursor_x_position, 0);
+        display.print(String((int)r.current_frequency));
+        display.setCursor(cursor_x_position, 1);
+        display.drawFastHLine(cursor_x_position, 10, 1, WHITE);
         display.display();
         delay(10);
     }
     else if (joy_x_pressed < 0)
     {
         cursor_x_position++;
-        display.drawString(cursor_x_position, 0, String((int)r.current_frequency));
-        display.drawLine(cursor_x_position, 1, cursor_x_position, 10);
+        display.setCursor(cursor_x_position, 0);
+        display.print(String((int)r.current_frequency));
+        display.setCursor(cursor_x_position, 1);
+        display.drawFastHLine(cursor_x_position, 10, 1, WHITE);
         display.display();
         delay(10);
     }
     if (cursor_x_position > DISPLAY_WIDTH || cursor_x_position < 0)
     {
         cursor_x_position = 0;
-        display.drawString(cursor_x_position, 0, String((int)r.current_frequency));
-        display.drawLine(cursor_x_position, 1, cursor_x_position, 10);
+        display.setCursor(cursor_x_position, 0);
+        display.print(String((int)r.current_frequency));
+        display.drawLine(cursor_x_position, 1, cursor_x_position, 10, WHITE);
         display.display();
         delay(10);
     }
@@ -1577,7 +1639,7 @@ void doScan()
 #endif
 
         drone_detected_frequency_start = 0;
-        display.setTextAlignment(TEXT_ALIGN_RIGHT);
+        // display.setTextAlignment(TEXT_ALIGN_RIGHT);
 
         for (int i = 0; i < MAX_POWER_LEVELS; i++)
         {
@@ -1788,8 +1850,14 @@ void doScan()
 
             if (buttonInputRequested())
             {
-                display.setTextAlignment(TEXT_ALIGN_CENTER);
-                display.drawString(display.width() / 2, 0, String(r.current_frequency));
+                // display.setTextAlignment(TEXT_ALIGN_CENTER);
+                int16_t x1, y1;
+                uint16_t w, h0;
+                String s = String(r.current_frequency);
+                // Measure the text dimensions
+                display.getTextBounds(s.c_str(), 0, 0, &x1, &y1, &w, &h0);
+                display.setCursor((display.width() / 2) - w, 0);
+                display.print(s);
                 display.display();
 
                 ButtonEvent e = buttonPressEvent();
@@ -1797,11 +1865,16 @@ void doScan()
                 if (e == LONG_PRESS)
                 {
                     // Remove Curent Frequency Text
-                    display.setTextAlignment(TEXT_ALIGN_CENTER);
-                    display.setColor(BLACK);
-                    display.drawString(display.width() / 2, 0,
-                                       String(r.current_frequency));
-                    display.setColor(WHITE);
+                    // display.setTextAlignment(TEXT_ALIGN_CENTER);
+                    int16_t x1, y1;
+                    uint16_t w, h0;
+                    String s = String(r.current_frequency);
+                    // Measure the text dimensions
+                    display.getTextBounds(s.c_str(), 0, 0, &x1, &y1, &w, &h0);
+                    display.setTextColor(BLACK);
+                    display.setCursor((display.width() / 2) - w, 0);
+                    display.print(s);
+                    display.setTextColor(WHITE);
                     display.display();
 
                     break;
@@ -1810,7 +1883,7 @@ void doScan()
                 if (e == SUSPEND)
                 {
                     // Visually confirm it's off so user releases button
-                    display.displayOff();
+                    display.clearDisplay();
                     // Deep sleep (has wait for release so we don't wake up
                     // immediately)
                     heltec_deep_sleep();
@@ -1823,12 +1896,17 @@ void doScan()
                 if (e == TOO_SHORT)
                 {
                     String v = String(r.trigger_level) + " dB";
-                    uint16_t w = display.getStringWidth(v);
-                    display.setTextAlignment(TEXT_ALIGN_RIGHT);
-                    // erase old drone detection level value
-                    display.setColor(BLACK);
-                    display.fillRect(display.width() - w, 0, 13, w);
-                    display.setColor(WHITE);
+                    int16_t x0, y0;
+                    uint16_t w, h0;
+
+                    // Measure the text dimensions
+                    display.getTextBounds(v.c_str(), 0, 0, &x0, &y0, &w, &h0);
+
+                    // display.setTextAlignment(TEXT_ALIGN_RIGHT);
+                    //  erase old drone detection level value
+                    display.setTextColor(BLACK);
+                    display.fillRect(display.width() - w, 0, 13, w, BLACK);
+                    display.setTextColor(WHITE);
 
                     // dt is roughly single-pixel increment
                     float dt =
@@ -1842,7 +1920,8 @@ void doScan()
                     }
 
                     // print new value
-                    display.drawString(display.width(), 0, v);
+                    display.setCursor(display.width(), 0);
+                    display.print(v);
                     tone(BUZZER_PIN, 104, 150);
 
                     bar->bar.redraw_all = true;
@@ -1977,6 +2056,18 @@ int16_t checkRadio(RadioComms &comms)
 
     if (msg->type == SCAN_RESULT)
     {
+        display.clearDisplay();
+        // display.setDisplayRotation(1);
+        display.println("Host Mode ->");
+
+        size_t dump_sz = msg->payload.dump.sz;
+
+        for (int i = 0; i < dump_sz; i++)
+        {
+            int16_t rssi = msg->payload.dump.rssis[i];
+            int16_t fr = msg->payload.dump.freqs_khz[i];
+            display.println(String(fr) + ":" + String(rssi));
+        }
         HostComms->send(*msg);
     }
     else

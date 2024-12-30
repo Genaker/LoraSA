@@ -3,8 +3,8 @@
 #ifdef Vision_Master_E290
 #include "HT_DEPG0290BxS800FxX_BW.h"
 #else
-#include "OLEDDisplayUi.h"
-#include "SSD1306Wire.h"
+#include "Adafruit_SSD1306.h"
+// #include "OLEDDisplayUi.h"
 #include <Arduino.h>
 #endif
 
