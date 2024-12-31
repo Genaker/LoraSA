@@ -1521,9 +1521,9 @@ void loop(void)
     else
     {
         doScan();
-        if (TxComms != NULL)
+        if (TxComms != NULL && config.lora_enabled)
             reportScan(*TxComms);
-        if (RxComms != NULL)
+        if (RxComms != NULL && config.lora_enabled)
             checkRadio(*RxComms);
     }
 }
