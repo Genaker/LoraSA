@@ -1407,47 +1407,141 @@ bool is_new_x_pixel(int x)
         return false;
 }
 
-void checkComms()
+/*
+ * Given message type and config, modify from/to to route the message to the
+ * right destination.
+ */
+void routeMessage(RoutedMessage &m)
 {
+    if (m.message == NULL)
+    {
+        return;
+    }
+
+    if (m.message->type == MessageType::SCAN_RESULT ||
+        m.message->type == MessageType::CONFIG_TASK &&
+            (m.message->payload.config.task_type == ConfigTaskType::GETSET_SUCCESS ||
+             m.message->payload.config.task_type == ConfigTaskType::SET_FAIL))
+    {
+        m.to = HOST;
+        return;
+    }
+
+    if (config.is_host &&
+        (m.message->type == MessageType::SCAN ||
+         m.message->type == MessageType::CONFIG_TASK &&
+             m.message->payload.config.key->equalsIgnoreCase("detection_strategy")))
+    {
+        m.to = LORA;
+        return;
+    }
+}
+
+int16_t sendMessage(RadioComms &c, Message &m);
+
+void loraSendMessage(Message &m);
+
+/*
+ * If m.to is LOOP, the message is directed at this module; enact the message.
+ * If m.to is not LOOP, send the message via the respective interface.
+ */
+void sendMessage(RoutedMessage &m)
+{
+    if (m.message == NULL)
+    {
+        return;
+    }
+
+    Message *msg = m.message;
+
+    if (m.to == LOOP)
+    {
+        switch (msg->type)
+        {
+        case MessageType::SCAN:
+            report_scans = msg->payload.scan;
+            requested_host = m.from == HOST;
+            return;
+        case MessageType::CONFIG_TASK:
+            ConfigTaskType ctt = msg->payload.config.task_type;
+
+            // sanity check; GETSET_SUCCESS and SET_FAIL should get routed to HOST
+            if (ctt == ConfigTaskType::GET || ctt == ConfigTaskType::SET)
+            {
+                // must be GET or SET - both require sending back a response
+
+                String old_v = config.getConfig(*msg->payload.config.key);
+                bool success = true;
+                if (ctt == ConfigTaskType::SET)
+                {
+                    success = config.updateConfig(*msg->payload.config.key,
+                                                  *msg->payload.config.value);
+                    delete msg->payload.config.value;
+                }
+
+                if (success)
+                {
+                    msg->payload.config.task_type = GETSET_SUCCESS;
+                    msg->payload.config.value = new String(old_v);
+                }
+                else
+                {
+                    msg->payload.config.task_type = SET_FAIL;
+                }
+
+                m.to = m.from;
+                m.from = LOOP;
+                sendMessage(m);
+            }
+            return;
+        }
+
+        return;
+    }
+
+    if (m.to == HOST)
+    {
+        HostComms->send(*m.message);
+        return;
+    }
+
+    if (m.to == UART0)
+    {
+        Comms0->send(*m.message);
+        return;
+    }
+
+    if (m.to == UART1)
+    {
+        Comms1->send(*m.message);
+        return;
+    }
+
+    if (m.to == LORA)
+    {
+        loraSendMessage(*m.message);
+        return;
+    }
+}
+
+Result<int16_t, Message *> checkRadio(RadioComms &c);
+
+RoutedMessage checkComms()
+{
+    RoutedMessage mess;
+    mess.from = LOOP;
+    mess.to = LOOP;
+    mess.message = NULL;
+
     while (HostComms->available() > 0)
     {
         Message *m = HostComms->receive();
         if (m == NULL)
             continue;
 
-        switch (m->type)
-        {
-        case MessageType::SCAN:
-            report_scans = m->payload.scan;
-            requested_host = true;
-            Serial.println("Host: forwarding message SCAN to peer");
-            Comms0->send(*m); // forward to peer
-            Comms1->send(*m); // forward to peer
-            break;
-        case MessageType::CONFIG_TASK:
-            ConfigTaskType ctt = m->payload.config.task_type;
-            if (ctt == GET)
-            {
-                Serial.printf("GET config: %s = %s\n", m->payload.config.key->c_str(),
-                              config.getConfig(*m->payload.config.key).c_str());
-            }
-            else if (ctt == SET)
-            {
-                String v = config.getConfig(*m->payload.config.key);
-                bool r =
-                    config.updateConfig(*m->payload.config.key, *m->payload.config.value);
-                Serial.printf("SET config (%s): %s = %s (was: %s)\n", r ? "OK" : "failed",
-                              m->payload.config.key->c_str(),
-                              m->payload.config.value->c_str(), v.c_str());
-            }
-            else
-            {
-                Serial.printf("GET config: %s = %s\n", m->payload.config.key->c_str(),
-                              config.getConfig(*m->payload.config.key).c_str());
-            }
-            break;
-        }
-        delete m;
+        mess.from = HOST;
+        mess.message = m;
+        return mess;
     }
 
     while (Comms0->available() > 0)
@@ -1457,18 +1551,9 @@ void checkComms()
         if (m == NULL)
             continue;
 
-        switch (m->type)
-        {
-        case MessageType::SCAN:
-            report_scans = m->payload.scan; // receive from peer
-            requested_host = false;
-            break;
-
-        case MessageType::SCAN_RESULT:
-            HostComms->send(*m); // forward from peer
-            break;
-        }
-        delete m;
+        mess.from = UART0;
+        mess.message = m;
+        return mess;
     }
 
     while (Comms1->available() > 0)
@@ -1478,43 +1563,14 @@ void checkComms()
         if (m == NULL)
             continue;
 
-        switch (m->type)
-        {
-        case MessageType::SCAN:
-            report_scans = m->payload.scan; // receive from peer
-            requested_host = false;
-            break;
-
-        case MessageType::SCAN_RESULT:
-            HostComms->send(*m); // forward from peer
-            break;
-        }
-        delete m;
+        mess.from = UART1;
+        mess.message = m;
+        return mess;
     }
-}
 
-// MAX Frequency RSSI BIN value of the samples
-int max_rssi_x = 999;
-
-void doScan();
-
-void reportScan(RadioComms &c);
-
-Result<int16_t, Message *> checkRadio(RadioComms &c);
-int16_t sendMessage(RadioComms &c, Message &m);
-
-void loop(void)
-{
-    r.led_flag = false;
-
-    r.detection_count = 0;
-    drone_detected_frequency_start = 0;
-
-    checkComms();
     // NB: swapping the use of Tx and Rx comms, so a pair of modules
     //     with identical rx/tx_lora config can talk
     RadioComms *rx = config.is_host ? TxComms : RxComms;
-    RadioComms *tx = config.is_host ? RxComms : TxComms;
 
     if (rx != NULL && (config.is_host || config.lora_enabled))
     {
@@ -1528,26 +1584,43 @@ void loop(void)
                 Serial.printf("Error getting a message: %d\n", status);
             }
         }
-        else if (res.ok != NULL)
+        else
         {
-            if (config.is_host || tx == NULL)
-            {
-                HostComms->send(*res.ok);
-            }
-            else
-            {
-                sendMessage(*tx, *res.ok);
-            }
-
-            delete res.ok;
+            mess.from = LORA;
+            mess.message = res.ok;
         }
+
+        return mess;
+    }
+
+    return mess;
+}
+
+// MAX Frequency RSSI BIN value of the samples
+int max_rssi_x = 999;
+
+void doScan();
+
+void reportScan();
+
+void loop(void)
+{
+    r.led_flag = false;
+
+    r.detection_count = 0;
+    drone_detected_frequency_start = 0;
+
+    for (RoutedMessage mess = checkComms(); mess.message != NULL; mess = checkComms())
+    {
+        routeMessage(mess);
+        sendMessage(mess);
+        delete mess.message;
     }
 
     if (!config.is_host)
     {
         doScan();
-        if (tx != NULL && config.lora_enabled)
-            reportScan(*tx);
+        reportScan();
     }
 }
 
@@ -1703,9 +1776,9 @@ void doScan()
                 else if (config.detection_strategy.equalsIgnoreCase("CAD"))
                 {
                     g = &getCAD;
-                    samples = min(
-                        1,
-                        CONF_SAMPLES); // TODO: do we need to support values other than 1
+                    samples = min(1,
+                                  CONF_SAMPLES); // TODO: do we need to support values
+                                                 // other than 1
                 }
                 else
                     g = &getRSSI;
@@ -2001,39 +2074,6 @@ Result<int16_t, Message *> checkRadio(RadioComms &comms)
             ? 2000
             : 200); // 200ms should be enough to receive 500 bytes at SF 7 and BW 500
     ret.ok = msg;
-    if (msg == NULL)
-    {
-        return ret;
-    }
-
-    if (msg->type == CONFIG_TASK)
-    {
-        ConfigTaskType ctt = msg->payload.config.task_type;
-
-        if (ctt == ConfigTaskType::GET || ctt == ConfigTaskType::SET)
-        {
-            // must be GET or SET - both require sending back a response
-
-            String old_v = config.getConfig(*msg->payload.config.key);
-            bool success = true;
-            if (ctt == ConfigTaskType::SET)
-            {
-                success = config.updateConfig(*msg->payload.config.key,
-                                              *msg->payload.config.value);
-                delete msg->payload.config.value;
-            }
-
-            if (success)
-            {
-                msg->payload.config.task_type = GETSET_SUCCESS;
-                msg->payload.config.value = new String(old_v);
-            }
-            else
-            {
-                msg->payload.config.task_type = SET_FAIL;
-            }
-        }
-    }
 
     return ret;
 }
@@ -2059,12 +2099,26 @@ int16_t sendMessage(RadioComms &comms, Message &msg)
     return status;
 }
 
-void reportScan(RadioComms &comms)
+void loraSendMessage(Message &msg)
 {
+    RadioComms *tx = config.is_host ? RxComms : TxComms;
+    if (tx == NULL)
+    {
+        return;
+    }
+
+    sendMessage(*tx, msg);
+}
+
+void reportScan()
+{
+    if (!config.lora_enabled)
+        return;
+
     Message m;
     m.type = SCAN_RESULT;
     m.payload.dump = frequency_scan_result.dump;
-    int16_t status = sendMessage(comms, m);
+    loraSendMessage(m);
 
     m.payload.dump.sz = 0; // dump is shared, so should not delete underlying arrays
 }

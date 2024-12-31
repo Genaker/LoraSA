@@ -71,6 +71,23 @@ struct Message
     ~Message();
 };
 
+enum Endpoint
+{
+    LOOP = 0, // self
+    UART0,
+    UART1,
+    LORA, // rx or tx_lora, depending on is_host
+    HOST, // USB
+    MAX_ENDPOINT = HOST
+};
+
+struct RoutedMessage
+{
+    Endpoint from;
+    Endpoint to;
+    Message *message;
+};
+
 struct Comms
 {
     String name;
