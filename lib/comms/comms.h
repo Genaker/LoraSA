@@ -22,6 +22,15 @@ enum MessageType
     _MAX_MESSAGE_TYPE = CONFIG_TASK
 };
 
+enum ConfigTaskType
+{
+    GET = 0,
+    SET,
+    GETSET_SUCCESS,
+    SET_FAIL,
+    _MAX_CONFIG_TASK_TYPE = SET_FAIL
+};
+
 struct Wrapper
 {
     int32_t length;
@@ -45,7 +54,7 @@ struct ConfigTask
 {
     String *key;
     String *value;
-    bool is_set;
+    ConfigTaskType task_type;
 };
 
 struct Message

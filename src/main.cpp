@@ -1425,7 +1425,13 @@ void checkComms()
             Comms1->send(*m); // forward to peer
             break;
         case MessageType::CONFIG_TASK:
-            if (m->payload.config.is_set)
+            ConfigTaskType ctt = m->payload.config.task_type;
+            if (ctt == GET)
+            {
+                Serial.printf("GET config: %s = %s\n", m->payload.config.key->c_str(),
+                              config.getConfig(*m->payload.config.key).c_str());
+            }
+            else if (ctt == SET)
             {
                 String v = config.getConfig(*m->payload.config.key);
                 bool r =
@@ -1494,7 +1500,8 @@ void doScan();
 
 void reportScan(RadioComms &c);
 
-int16_t checkRadio(RadioComms &c);
+Result<int16_t, Message *> checkRadio(RadioComms &c);
+int16_t sendMessage(RadioComms &c, Message &m);
 
 void loop(void)
 {
@@ -1504,27 +1511,43 @@ void loop(void)
     drone_detected_frequency_start = 0;
 
     checkComms();
+    // NB: swapping the use of Tx and Rx comms, so a pair of modules
+    //     with identical rx/tx_lora config can talk
+    RadioComms *rx = config.is_host ? TxComms : RxComms;
+    RadioComms *tx = config.is_host ? RxComms : TxComms;
 
-    if (config.is_host)
+    if (rx != NULL && (config.is_host || config.lora_enabled))
     {
-        if (TxComms != NULL)
+        Result<int16_t, Message *> res = checkRadio(*rx);
+
+        if (!res.is_ok)
         {
-            // NB: swapping the use of Tx and Rx comms, so a pair of modules
-            //     with identical rx/tx_lora config can talk
-            int16_t status = checkRadio(*TxComms);
+            int16_t status = res.not_ok;
             if (status != RADIOLIB_ERR_NONE)
             {
                 Serial.printf("Error getting a message: %d\n", status);
             }
         }
+        else if (res.ok != NULL)
+        {
+            if (config.is_host || tx == NULL)
+            {
+                HostComms->send(*res.ok);
+            }
+            else
+            {
+                sendMessage(*tx, *res.ok);
+            }
+
+            delete res.ok;
+        }
     }
-    else
+
+    if (!config.is_host)
     {
         doScan();
-        if (TxComms != NULL && config.lora_enabled)
-            reportScan(*TxComms);
-        if (RxComms != NULL && config.lora_enabled)
-            checkRadio(*RxComms);
+        if (tx != NULL && config.lora_enabled)
+            reportScan(*tx);
     }
 }
 
@@ -1961,56 +1984,87 @@ void doScan()
 #endif
 }
 
-int16_t checkRadio(RadioComms &comms)
+Result<int16_t, Message *> checkRadio(RadioComms &comms)
 {
     radioIsScan = false;
-    int16_t status = comms.configureRadio();
-    if (status != RADIOLIB_ERR_NONE)
-        return status;
+    Result<int16_t, Message *> ret;
+    ret.is_ok = false;
+
+    ret.not_ok = comms.configureRadio();
+    if (ret.not_ok != RADIOLIB_ERR_NONE)
+        return ret;
+
+    ret.is_ok = true;
 
     Message *msg = comms.receive(
         config.is_host
             ? 2000
             : 200); // 200ms should be enough to receive 500 bytes at SF 7 and BW 500
+    ret.ok = msg;
     if (msg == NULL)
     {
-        return status;
+        return ret;
     }
 
-    if (msg->type == SCAN_RESULT)
+    if (msg->type == CONFIG_TASK)
     {
-        HostComms->send(*msg);
-    }
-    else
-    {
-        Serial.printf("Received a message of unsupported type: %d\n", msg->type);
+        ConfigTaskType ctt = msg->payload.config.task_type;
+
+        if (ctt == ConfigTaskType::GET || ctt == ConfigTaskType::SET)
+        {
+            // must be GET or SET - both require sending back a response
+
+            String old_v = config.getConfig(*msg->payload.config.key);
+            bool success = true;
+            if (ctt == ConfigTaskType::SET)
+            {
+                success = config.updateConfig(*msg->payload.config.key,
+                                              *msg->payload.config.value);
+                delete msg->payload.config.value;
+            }
+
+            if (success)
+            {
+                msg->payload.config.task_type = GETSET_SUCCESS;
+                msg->payload.config.value = new String(old_v);
+            }
+            else
+            {
+                msg->payload.config.task_type = SET_FAIL;
+            }
+        }
     }
 
-    delete msg;
-
-    return status;
+    return ret;
 }
 
-void reportScan(RadioComms &comms)
+int16_t sendMessage(RadioComms &comms, Message &msg)
 {
     radioIsScan = false;
     int16_t status = comms.configureRadio();
     if (status != RADIOLIB_ERR_NONE)
     {
         Serial.printf("Failed to configure Radio: %d\n", status);
-        return;
+        return status;
     }
 
-    Message m;
-    m.type = SCAN_RESULT;
-    m.payload.dump = frequency_scan_result.dump;
-    status = comms.send(m);
-
-    m.payload.dump.sz = 0; // dump is shared, so should not delete underlying arrays
+    status = comms.send(msg);
 
     if (status != RADIOLIB_ERR_NONE)
     {
-        Serial.printf("Failed to send scan result: %d\n", status);
-        return;
+        Serial.printf("Failed to send message of type %d: %d\n", msg.type, status);
+        return status;
     }
+
+    return status;
+}
+
+void reportScan(RadioComms &comms)
+{
+    Message m;
+    m.type = SCAN_RESULT;
+    m.payload.dump = frequency_scan_result.dump;
+    int16_t status = sendMessage(comms, m);
+
+    m.payload.dump.sz = 0; // dump is shared, so should not delete underlying arrays
 }

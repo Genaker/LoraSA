@@ -265,12 +265,18 @@ bool ReadlineComms::send(Message &m)
         p = _scan_result_str(m.payload.dump);
         break;
     case MessageType::CONFIG_TASK:
-        p = m.payload.config.is_set ? "SET " : "GET ";
+        ConfigTaskType ctt = m.payload.config.task_type;
+        p = ctt == GET              ? "GET "
+            : ctt == SET            ? "SET "
+            : ctt == GETSET_SUCCESS ? "Success: "
+                                    : "Failed to set: ";
         p += *m.payload.config.key;
-        if (m.payload.config.is_set)
+        if (ctt == SET || ctt == GETSET_SUCCESS)
         {
             p += " " + *m.payload.config.value;
         }
+
+        p += "\n";
         break;
     }
 
@@ -368,7 +374,7 @@ Message *_parsePacket(String p)
     {
         Message *m = new Message();
         m->type = MessageType::CONFIG_TASK;
-        m->payload.config.is_set = false;
+        m->payload.config.task_type = GET;
         m->payload.config.key = new String(_stringParam(p, ""));
         m->payload.config.value = NULL;
         return m;
@@ -378,7 +384,7 @@ Message *_parsePacket(String p)
     {
         Message *m = new Message();
         m->type = MessageType::CONFIG_TASK;
-        m->payload.config.is_set = true;
+        m->payload.config.task_type = SET;
         m->payload.config.key = new String(_stringParam(p, ""));
         m->payload.config.value = new String(_stringParam(p, ""));
 
@@ -430,7 +436,8 @@ Message::~Message()
     {
         delete payload.config.key;
 
-        if (payload.config.is_set)
+        ConfigTaskType ctt = payload.config.task_type;
+        if (ctt == GETSET_SUCCESS || ctt == SET)
         {
             delete payload.config.value;
         }

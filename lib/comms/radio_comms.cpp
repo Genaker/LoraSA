@@ -48,24 +48,25 @@ size_t _write(uint8_t *m, size_t sz, size_t p, uint8_t *v, size_t v_sz)
 #define RSSI_HI -80
 #define DETAIL_RSSIS 8
 #define RSSI_LO (RSSI_HI - 1 - DETAIL_RSSIS)
-int16_t RadioComms::send(Message &m)
+
+uint8_t *_serialize_scan_result(Message &m, size_t &p, uint8_t *msg)
 {
     if (m.type != SCAN_RESULT)
     {
-        return RADIOLIB_ERR_INVALID_FUNCTION;
+        return NULL;
     }
 
-    uint8_t msg[MAX_MSG];
     size_t dump_sz = m.payload.dump.sz;
-    size_t p = _write(msg, MAX_MSG, 0, (uint8_t)m.type);
+    size_t max_msg = p;
+    p = _write(msg, max_msg, 0, (uint8_t)m.type);
 
     // first cut: dump the RSSI as-is
     // optimize the message size later
-    p = _write(msg, MAX_MSG, p, (uint8_t *)&m.payload.dump.freqs_khz[0], 4);
-    p = _write(msg, MAX_MSG, p, (uint8_t *)&m.payload.dump.freqs_khz[dump_sz - 1], 4);
-    p = _write(msg, MAX_MSG, p, (uint8_t *)&dump_sz, 2);
+    p = _write(msg, max_msg, p, (uint8_t *)&m.payload.dump.freqs_khz[0], 4);
+    p = _write(msg, max_msg, p, (uint8_t *)&m.payload.dump.freqs_khz[dump_sz - 1], 4);
+    p = _write(msg, max_msg, p, (uint8_t *)&dump_sz, 2);
 
-    size_t rem = MAX_MSG - p;
+    size_t rem = max_msg - p;
     if (rem > dump_sz)
         rem = dump_sz;
 
@@ -75,7 +76,7 @@ int16_t RadioComms::send(Message &m)
     {
         if (i * rem / dump_sz > p - pp)
         {
-            p = _write(msg, MAX_MSG, p, bits);
+            p = _write(msg, max_msg, p, bits);
             bits = 0;
         }
         int16_t v = m.payload.dump.rssis[i];
@@ -97,10 +98,79 @@ int16_t RadioComms::send(Message &m)
 
     if (dump_sz > 0)
     {
-        p = _write(msg, MAX_MSG, p, bits);
+        p = _write(msg, max_msg, p, bits);
     }
 
-    return radio.transmit(msg, p);
+    return msg;
+}
+
+uint8_t *_serialize_config_task(Message &m, size_t &p, uint8_t *msg)
+{
+    if (m.type != CONFIG_TASK)
+    {
+        return NULL;
+    }
+    size_t max_msg = p;
+    ConfigTaskType ctt = m.payload.config.task_type;
+    p = _write(msg, max_msg, 0, (uint8_t)m.type);
+    p = _write(msg, max_msg, p, (uint8_t)ctt);
+
+    int key_len = m.payload.config.key->length();
+    if (max_msg - p < key_len + 1)
+    {
+        return NULL;
+    }
+
+    p = _write(msg, max_msg, p, (uint8_t)key_len);
+    p = _write(msg, max_msg, p, (uint8_t *)m.payload.config.key->c_str(), key_len);
+
+    if (ctt == GET || ctt == SET_FAIL)
+    {
+        return msg;
+    }
+
+    int v_len = m.payload.config.value->length();
+
+    if (max_msg - p < v_len + 1)
+    {
+        return NULL;
+    }
+
+    p = _write(msg, max_msg, p, (uint8_t)v_len);
+    p = _write(msg, max_msg, p, (uint8_t *)m.payload.config.value->c_str(), v_len);
+
+    return msg;
+}
+
+int16_t RadioComms::send(Message &m)
+{
+    uint8_t msg_buf[MAX_MSG];
+    size_t p = MAX_MSG;
+    uint8_t *msg = NULL;
+
+    if (m.type == SCAN_RESULT)
+    {
+        msg = _serialize_scan_result(m, p, msg_buf);
+    }
+    else if (m.type == MessageType::CONFIG_TASK)
+    {
+        msg = _serialize_config_task(m, p, msg_buf);
+    }
+
+    if (msg == NULL)
+    {
+        Serial.printf("Failed to encode message\n");
+        return RADIOLIB_ERR_INVALID_FUNCTION;
+    }
+
+    int16_t status = radio.transmit(msg, p);
+
+    if (msg != msg_buf)
+    {
+        delete[] msg;
+    }
+
+    return status;
 }
 
 size_t _read(uint8_t *buf, size_t sz, size_t p, uint8_t *v, size_t len)
@@ -116,6 +186,96 @@ size_t _read(uint8_t *buf, size_t sz, size_t p, uint8_t *v, size_t len)
 size_t _read(uint8_t *buf, size_t sz, size_t p, uint8_t *v)
 {
     return _read(buf, sz, p, v, 1);
+}
+
+Message *_deserialize_scan_result(size_t len, size_t &p, uint8_t *packet)
+{
+    Message *message = new Message();
+    message->type = SCAN_RESULT;
+
+    uint32_t s, e;
+    size_t dump_sz = 0;
+    p = _read(packet, len, p, (uint8_t *)&s, 4);
+    p = _read(packet, len, p, (uint8_t *)&e, 4);
+    p = _read(packet, len, p, (uint8_t *)&dump_sz, 2);
+    size_t rem = len - p;
+
+    message->payload.dump.sz = dump_sz;
+    if (dump_sz > 0)
+    {
+        message->payload.dump.rssis = new int16_t[dump_sz];
+        message->payload.dump.freqs_khz = new uint32_t[dump_sz];
+        message->payload.dump.freqs_khz[0] = s;
+        message->payload.dump.freqs_khz[dump_sz - 1] = e;
+
+        for (int i = 1; i < dump_sz - 1; i++)
+        {
+            uint32_t incr = (e - s) / (dump_sz - i);
+            s += incr;
+            message->payload.dump.freqs_khz[i] = s;
+        }
+
+        for (int i = 0, k = 0; i < rem; i++)
+        {
+            int j = (i + 1) * dump_sz / rem;
+            int16_t rssi = 0;
+            p = _read(packet, len, p, (uint8_t *)&rssi);
+            rssi -= 255;
+            for (; k < j; k++)
+            {
+                message->payload.dump.rssis[k] = rssi;
+            }
+        }
+    }
+
+    return message;
+}
+
+Message *_deserialize_config_task(size_t len, size_t &p, uint8_t *packet)
+{
+    Message *message = new Message();
+    message->type = CONFIG_TASK;
+
+    ConfigTaskType ctt = GET;
+    p = _read(packet, len, p, (uint8_t *)&ctt);
+    message->payload.config.task_type = ctt;
+
+    size_t key_len = 0;
+    size_t p1 = _read(packet, len, p, (uint8_t *)&key_len);
+    memmove(packet + p, packet + p + 1, key_len);
+    packet[p + key_len] = 0;
+    String *key = new String((char *)packet + p);
+    message->payload.config.key = key;
+
+    p = p1 + key_len;
+
+    if (key->length() != key_len)
+    {
+        delete message;
+        return NULL;
+    }
+
+    if (ctt == GET || ctt == SET_FAIL)
+    {
+        return message;
+    }
+
+    size_t v_len = 0;
+    p1 = _read(packet, len, p, (uint8_t *)&v_len);
+    memmove(packet + p, packet + p + 1, v_len);
+    packet[p + v_len] = 0;
+    String *value = new String((char *)packet + p);
+    message->payload.config.value = value;
+
+    p = p1 + v_len;
+
+    if (value->length() != v_len)
+    {
+        delete message;
+        return NULL;
+    }
+
+    return message;
 }
 
 volatile bool _received = false;
@@ -184,43 +344,11 @@ Message *RadioComms::receive(uint16_t timeout_ms)
     Message *message = NULL;
     if (b == SCAN_RESULT)
     {
-        message = new Message();
-        message->type = SCAN_RESULT;
-
-        uint32_t s, e;
-        size_t dump_sz = 0;
-        p = _read(packet, len, p, (uint8_t *)&s, 4);
-        p = _read(packet, len, p, (uint8_t *)&e, 4);
-        p = _read(packet, len, p, (uint8_t *)&dump_sz, 2);
-        size_t rem = len - p;
-
-        message->payload.dump.sz = dump_sz;
-        if (dump_sz > 0)
-        {
-            message->payload.dump.rssis = new int16_t[dump_sz];
-            message->payload.dump.freqs_khz = new uint32_t[dump_sz];
-            message->payload.dump.freqs_khz[0] = s;
-            message->payload.dump.freqs_khz[dump_sz - 1] = e;
-
-            for (int i = 1; i < dump_sz - 1; i++)
-            {
-                uint32_t incr = (e - s) / (dump_sz - i);
-                s += incr;
-                message->payload.dump.freqs_khz[i] = s;
-            }
-
-            for (int i = 0, k = 0; i < rem; i++)
-            {
-                int j = (i + 1) * dump_sz / rem;
-                int16_t rssi = 0;
-                p = _read(packet, len, p, (uint8_t *)&rssi);
-                rssi -= 255;
-                for (; k < j; k++)
-                {
-                    message->payload.dump.rssis[k] = rssi;
-                }
-            }
-        }
+        message = _deserialize_scan_result(len, p, packet);
+    }
+    else if (b == CONFIG_TASK)
+    {
+        message = _deserialize_config_task(len, p, packet);
     }
     else
     {

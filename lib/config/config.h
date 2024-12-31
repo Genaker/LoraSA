@@ -3,6 +3,16 @@
 
 #include <SD.h>
 
+template <typename L, typename R> struct Result
+{
+    bool is_ok;
+    union
+    {
+        L not_ok;
+        R ok;
+    };
+};
+
 struct ScanRange
 {
     uint64_t start_khz;
