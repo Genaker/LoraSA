@@ -909,7 +909,7 @@ void configureDetection()
 
     CONF_FREQ_BEGIN = config.scan_ranges[0].start_khz / 1000;
     CONF_FREQ_END = config.scan_ranges[0].end_khz / 1000;
-    for (int i = 0; i < config.scan_ranges_sz; i++)
+    for (int i = 1; i < config.scan_ranges_sz; i++)
     {
         CONF_FREQ_BEGIN = min(CONF_FREQ_BEGIN, config.scan_ranges[i].start_khz / 1000);
         CONF_FREQ_END = max(CONF_FREQ_END, config.scan_ranges[i].end_khz / 1000);
@@ -1419,6 +1419,7 @@ void routeMessage(RoutedMessage &m)
     }
 
     if (m.message->type == MessageType::SCAN_RESULT ||
+        m.message->type == MessageType::SCAN_MAX_RESULT ||
         m.message->type == MessageType::CONFIG_TASK &&
             (m.message->payload.config.task_type == ConfigTaskType::GETSET_SUCCESS ||
              m.message->payload.config.task_type == ConfigTaskType::SET_FAIL))
@@ -1477,6 +1478,12 @@ void sendMessage(RoutedMessage &m)
                     success = config.updateConfig(*msg->payload.config.key,
                                                   *msg->payload.config.value);
                     delete msg->payload.config.value;
+
+                    if (success &&
+                        msg->payload.config.key->equalsIgnoreCase("detection_strategy"))
+                    {
+                        configureDetection(); // redo the pages and scan ranges
+                    }
                 }
 
                 if (success)
@@ -1771,7 +1778,8 @@ void doScan()
                 float (*g)(void *);
                 samples = CONF_SAMPLES;
 
-                if (config.detection_strategy.equalsIgnoreCase("RSSI"))
+                if (config.detection_strategy.equalsIgnoreCase("RSSI") ||
+                    config.detection_strategy.equalsIgnoreCase("RSSI_MAX"))
                     g = &getRSSI;
                 else if (config.detection_strategy.equalsIgnoreCase("CAD"))
                 {
@@ -2117,8 +2125,52 @@ void reportScan()
 
     Message m;
     m.type = SCAN_RESULT;
-    m.payload.dump = frequency_scan_result.dump;
-    loraSendMessage(m);
+    m.payload.dump.sz = 0;
 
-    m.payload.dump.sz = 0; // dump is shared, so should not delete underlying arrays
+    if (config.detection_strategy.equalsIgnoreCase("RSSI"))
+    {
+        size_t sz = frequency_scan_result.dump.sz;
+        m.payload.dump.sz = sz;
+        m.payload.dump.freqs_khz = new uint32_t[sz];
+        m.payload.dump.rssis = new int16_t[sz];
+
+        memcpy(m.payload.dump.freqs_khz, frequency_scan_result.dump.freqs_khz,
+               sizeof(uint32_t) * sz);
+        memcpy(m.payload.dump.rssis, frequency_scan_result.dump.rssis,
+               sizeof(int16_t) * sz);
+    }
+    else if (config.detection_strategy.equalsIgnoreCase("RSSI_MAX"))
+    {
+        m.type = SCAN_MAX_RESULT;
+
+        size_t sz = config.scan_ranges_sz;
+        m.payload.dump.sz = sz;
+        m.payload.dump.freqs_khz = new uint32_t[sz];
+        m.payload.dump.rssis = new int16_t[sz];
+
+        for (int i = 0; i < sz; i++)
+        {
+            int16_t rssi = -999;
+            for (int j = 0; j < frequency_scan_result.dump.sz; j++)
+            {
+                uint32_t f = frequency_scan_result.dump.freqs_khz[j];
+
+                if (config.scan_ranges[i].start_khz > f ||
+                    config.scan_ranges[i].end_khz < f)
+                    continue;
+
+                rssi = max(rssi, frequency_scan_result.dump.rssis[j]);
+            }
+
+            m.payload.dump.freqs_khz[i] =
+                (config.scan_ranges[i].start_khz + config.scan_ranges[i].end_khz) / 2;
+            m.payload.dump.rssis[i] = rssi;
+        }
+    }
+    else
+    {
+        return;
+    }
+
+    loraSendMessage(m);
 }

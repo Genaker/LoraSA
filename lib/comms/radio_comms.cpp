@@ -62,9 +62,9 @@ uint8_t *_serialize_scan_result(Message &m, size_t &p, uint8_t *msg)
 
     // first cut: dump the RSSI as-is
     // optimize the message size later
+    p = _write(msg, max_msg, p, (uint8_t *)&dump_sz, 2);
     p = _write(msg, max_msg, p, (uint8_t *)&m.payload.dump.freqs_khz[0], 4);
     p = _write(msg, max_msg, p, (uint8_t *)&m.payload.dump.freqs_khz[dump_sz - 1], 4);
-    p = _write(msg, max_msg, p, (uint8_t *)&dump_sz, 2);
 
     size_t rem = max_msg - p;
     if (rem > dump_sz)
@@ -99,6 +99,44 @@ uint8_t *_serialize_scan_result(Message &m, size_t &p, uint8_t *msg)
     if (dump_sz > 0)
     {
         p = _write(msg, max_msg, p, bits);
+    }
+
+    return msg;
+}
+
+uint8_t *_serialize_scan_max_result(Message &m, size_t &p, uint8_t *msg)
+{
+    if (m.type != SCAN_MAX_RESULT)
+    {
+        return NULL;
+    }
+
+    size_t dump_sz = m.payload.dump.sz;
+    size_t max_msg = p;
+    p = _write(msg, max_msg, 0, (uint8_t)m.type);
+    p = _write(msg, max_msg, p, (uint8_t *)&dump_sz, 2);
+
+    int16_t b = SCAN_MAX_RESULT_KHZ_SCALE; // scale to fit khz into 2 bytes
+    p = _write(msg, max_msg, p, (uint8_t)b);
+
+    for (int i = 0; i < dump_sz; i++)
+    {
+        b = m.payload.dump.freqs_khz[i] / SCAN_MAX_RESULT_KHZ_SCALE;
+        p = _write(msg, max_msg, p, (uint8_t *)&b, 2);
+        b = m.payload.dump.rssis[i];
+        if (b >= 0)
+        {
+            b = 255;
+        }
+        else
+        {
+            b += 255;
+            if (b < 0)
+            {
+                b = 0;
+            }
+        }
+        p = _write(msg, max_msg, p, (uint8_t)b);
     }
 
     return msg;
@@ -152,6 +190,10 @@ int16_t RadioComms::send(Message &m)
     {
         msg = _serialize_scan_result(m, p, msg_buf);
     }
+    else if (m.type == MessageType::SCAN_MAX_RESULT)
+    {
+        msg = _serialize_scan_max_result(m, p, msg_buf);
+    }
     else if (m.type == MessageType::CONFIG_TASK)
     {
         msg = _serialize_config_task(m, p, msg_buf);
@@ -195,9 +237,9 @@ Message *_deserialize_scan_result(size_t len, size_t &p, uint8_t *packet)
 
     uint32_t s, e;
     size_t dump_sz = 0;
+    p = _read(packet, len, p, (uint8_t *)&dump_sz, 2);
     p = _read(packet, len, p, (uint8_t *)&s, 4);
     p = _read(packet, len, p, (uint8_t *)&e, 4);
-    p = _read(packet, len, p, (uint8_t *)&dump_sz, 2);
     size_t rem = len - p;
 
     message->payload.dump.sz = dump_sz;
@@ -226,6 +268,36 @@ Message *_deserialize_scan_result(size_t len, size_t &p, uint8_t *packet)
                 message->payload.dump.rssis[k] = rssi;
             }
         }
+    }
+
+    return message;
+}
+
+Message *_deserialize_scan_max_result(size_t len, size_t &p, uint8_t *packet)
+{
+    Message *message = new Message();
+    message->type = SCAN_MAX_RESULT;
+
+    uint32_t b = 0;
+    size_t dump_sz = 0;
+    p = _read(packet, len, p, (uint8_t *)&dump_sz, 2);
+    uint32_t *freqs = new uint32_t[dump_sz];
+    int16_t *rssis = new int16_t[dump_sz];
+    message->payload.dump.sz = dump_sz;
+    message->payload.dump.freqs_khz = freqs;
+    message->payload.dump.rssis = rssis;
+
+    uint32_t scale = 0;
+    p = _read(packet, len, p, (uint8_t *)&scale);
+
+    for (int i = 0; i < dump_sz; i++)
+    {
+        p = _read(packet, len, p, (uint8_t *)&b, 2);
+        freqs[i] = scale * b;
+
+        b = 0;
+        p = _read(packet, len, p, (uint8_t *)&b);
+        rssis[i] = ((int16_t)b) - 255;
     }
 
     return message;
@@ -345,6 +417,10 @@ Message *RadioComms::receive(uint16_t timeout_ms)
     if (b == SCAN_RESULT)
     {
         message = _deserialize_scan_result(len, p, packet);
+    }
+    else if (b == SCAN_MAX_RESULT)
+    {
+        message = _deserialize_scan_max_result(len, p, packet);
     }
     else if (b == CONFIG_TASK)
     {

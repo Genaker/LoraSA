@@ -262,6 +262,7 @@ bool ReadlineComms::send(Message &m)
         Serial.println(name + ": the message is: " + p);
         break;
     case MessageType::SCAN_RESULT:
+    case MessageType::SCAN_MAX_RESULT:
         p = _scan_result_str(m.payload.dump);
         break;
     case MessageType::CONFIG_TASK:
@@ -420,7 +421,7 @@ String _wrap_str(String v)
 
 Message::~Message()
 {
-    if (type == SCAN_RESULT)
+    if (type == SCAN_RESULT || type == SCAN_MAX_RESULT)
     {
         if (payload.dump.sz > 0)
         {

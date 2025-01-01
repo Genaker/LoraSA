@@ -13,11 +13,18 @@
 #define SERIAL0 Serial0
 #endif
 
+#ifndef SCAN_MAX_RESULT_KHZ_SCALE
+// kHz scale: round frequency, so it fits into 2 bytes
+// 2500000 / 40 = 62500, scale 40 fits 2.5GHz into two bytes
+#define SCAN_MAX_RESULT_KHZ_SCALE 40
+#endif
+
 enum MessageType
 {
     WRAP = 0,
     SCAN,
     SCAN_RESULT,
+    SCAN_MAX_RESULT,
     CONFIG_TASK,
     _MAX_MESSAGE_TYPE = CONFIG_TASK
 };

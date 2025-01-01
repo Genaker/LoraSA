@@ -20,6 +20,22 @@ struct ScanRange
     uint64_t step_khz;
 };
 
+struct ScanPage
+{
+    uint64_t start_mhz;
+    uint64_t end_mhz;
+    size_t page_sz;
+    ScanRange *scan_ranges;
+
+    ~ScanPage()
+    {
+        if (page_sz > 0)
+        {
+            delete[] scan_ranges;
+        }
+    }
+};
+
 struct LoRaConfig
 {
     float freq;

@@ -34,22 +34,6 @@ constexpr float LO_RSSI_THRESHOLD = HI_RSSI_THRESHOLD - 66;
 #define SAMPLES_RSSI 20
 #endif
 
-struct ScanPage
-{
-    uint64_t start_mhz;
-    uint64_t end_mhz;
-    size_t page_sz;
-    ScanRange *scan_ranges;
-
-    ~ScanPage()
-    {
-        if (page_sz > 0)
-        {
-            delete[] scan_ranges;
-        }
-    }
-};
-
 struct Scan
 {
     uint64_t epoch;
