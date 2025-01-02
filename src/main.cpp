@@ -1442,6 +1442,8 @@ int16_t sendMessage(RadioComms &c, Message &m);
 
 void loraSendMessage(Message &m);
 
+Result<int16_t, Message *> checkRadio(RadioComms &c);
+
 /*
  * If m.to is LOOP, the message is directed at this module; enact the message.
  * If m.to is not LOOP, send the message via the respective interface.
@@ -1526,12 +1528,16 @@ void sendMessage(RoutedMessage &m)
 
     if (m.to == LORA)
     {
+        if (config.is_host && TxComms != NULL)
+        {
+            checkRadio(*TxComms); // waiting for peer to squak first, so message sending
+                                  // will land on the receiving cycle
+        }
+
         loraSendMessage(*m.message);
         return;
     }
 }
-
-Result<int16_t, Message *> checkRadio(RadioComms &c);
 
 RoutedMessage checkComms()
 {
