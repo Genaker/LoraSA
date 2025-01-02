@@ -212,7 +212,7 @@ String detectionStrategyToStr(Config &c)
                 res += ".." + String(c.scan_ranges[i].end_khz);
                 if (c.scan_ranges[i].step_khz < s)
                 {
-                    res += ":" + String(c.scan_ranges[i].step_khz);
+                    res += "+" + String(c.scan_ranges[i].step_khz);
                 }
             }
         }
