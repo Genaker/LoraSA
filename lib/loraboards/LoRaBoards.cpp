@@ -555,6 +555,30 @@ bool beginDisplay()
     return false;
 }
 
+File logFile;
+
+#ifdef SDCARD_CS
+// Function to redirect serial output to both Serial and SD card
+int redirectOutput(const char *format, va_list args)
+{
+    // Print to Serial
+    int ret = vprintf(format, args);
+
+    // https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-guides/fatal-errors.html
+    // Print to SD card
+    if (logFile && (strstr(format, "Guru Meditation Error") != NULL ||
+                    strstr(format, "Backtrace") != NULL))
+    {
+        char buffer[256];
+        vsnprintf(buffer, sizeof(buffer), format, args);
+        logFile.print(buffer);
+    }
+
+    return ret;
+}
+
+#endif
+
 bool beginSDCard()
 {
 #ifdef SDCARD_CS
@@ -564,6 +588,17 @@ bool beginSDCard()
         Serial.print("Sd Card init succeeded, The current available capacity is ");
         Serial.print(cardSize / 1024.0);
         Serial.println(" GB");
+
+        logFile = SD.open("/crash_log.txt", FILE_WRITE);
+        if (!logFile)
+        {
+            Serial.println("Failed to open log file!");
+            return true;
+        }
+
+        // Redirect serial output
+        esp_log_set_vprintf(redirectOutput);
+
         return true;
     }
     else
