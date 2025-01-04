@@ -153,6 +153,8 @@ typedef enum
 // String SCAN_RANGES = String("850..890,920..950");
 String SCAN_RANGES = "";
 
+std::unordered_map<int, bool> ignoredFreq = {/*{916, true}, {915, true}*/};
+
 size_t scan_pages_sz = 0;
 ScanPage *scan_pages;
 size_t scan_page = 0;
@@ -1686,10 +1688,18 @@ void doScan()
                 }
                 else
                     g = &getRSSI;
-
-                uint16_t max_rssi = r.rssiMethod(g, &r, samples, result,
-                                                 RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE);
-
+                uint16_t max_rssi = 120;
+                // Scan if not in the ignore list
+                if (ignoredFreq.find((int)r.current_frequency) == ignoredFreq.end())
+                {
+                    max_rssi = r.rssiMethod(g, &r, samples, result,
+                                            RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE);
+                }
+                else
+                {
+                    // if ignored default RSSI value -120dB
+                    max_rssi = 120;
+                }
                 if (max_x_rssi[display_x] > max_rssi)
                 {
                     max_x_rssi[display_x] = max_rssi;
@@ -1961,6 +1971,33 @@ void doScan()
 #endif
 }
 
+std::unordered_map<int, int> previousPac = {/*{916, true}, {915, true}*/};
+
+std::unordered_map<int, int16_t> findMaxRssi(int16_t *rssis, uint32_t *freqs_khz,
+                                             int dump_sz, int level = 80)
+{
+    std::unordered_map<int, int16_t> maxRssiPerMHz; // Map to store max RSSI per MHz
+
+    for (int i = 0; i < dump_sz; i++)
+    {
+        int16_t rssi = rssis[i];
+        int freq_mhz = (int)freqs_khz[i] / 1000; // Convert kHz to MHz
+
+        // Update the maximum RSSI for this MHz frequency
+        if (maxRssiPerMHz.find(freq_mhz) == maxRssiPerMHz.end() ||
+            maxRssiPerMHz[freq_mhz] < rssi)
+        {
+            if (abs(rssi) < level)
+            {
+                maxRssiPerMHz[freq_mhz] = rssi;
+            }
+        }
+    }
+
+    return maxRssiPerMHz;
+}
+
+bool lock = false;
 int16_t checkRadio(RadioComms &comms)
 {
     radioIsScan = false;
@@ -1971,7 +2008,7 @@ int16_t checkRadio(RadioComms &comms)
     Message *msg = comms.receive(
         config.is_host
             ? 2000
-            : 200); // 200ms should be enough to receive 500 bytes at SF 7 and BW 500
+            : 500); // 200ms should be enough to receive 500 bytes at SF 7 and BW 500
     if (msg == NULL)
     {
         return status;
@@ -1979,6 +2016,49 @@ int16_t checkRadio(RadioComms &comms)
 
     if (msg->type == SCAN_RESULT)
     {
+        // if (lock == false)
+        {
+            lock = true;
+
+            // display.setDisplayRotation(1);
+            // display.println("Host Mode ->");
+
+            size_t dump_sz = msg->payload.dump.sz;
+            int16_t *rssi = msg->payload.dump.rssis;
+            uint32_t *fr = msg->payload.dump.freqs_khz;
+
+            std::unordered_map<int, int16_t> maxMhzRssi =
+                findMaxRssi(rssi, fr, dump_sz, 85);
+
+            int lx, ly, i = 0;
+            for (const auto &pair : maxMhzRssi)
+            {
+                if (i == 0 && maxMhzRssi.size() > 0)
+                {
+                    display.clear();
+                }
+                // screen overflow protection
+                if (lx < 130)
+                {
+                    int16_t rssi = pair.second;
+                    int16_t fr = (int)pair.first;
+                    display.drawString(lx, ly, String(fr) + ":" + String(rssi));
+                    // go to next line
+                    ly += 10;
+                    if (ly > 60)
+                    {
+                        ly = 0;
+
+                        // go to next column
+                        lx += 50;
+                    }
+                    display.display();
+                }
+                i++;
+            }
+            lock = false;
+        }
+
         HostComms->send(*msg);
     }
     else
