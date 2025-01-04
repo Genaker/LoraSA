@@ -1419,12 +1419,18 @@ void routeMessage(RoutedMessage &m)
     }
 
     if (m.message->type == MessageType::SCAN_RESULT ||
-        m.message->type == MessageType::SCAN_MAX_RESULT ||
-        m.message->type == MessageType::CONFIG_TASK &&
-            (m.message->payload.config.task_type == ConfigTaskType::GETSET_SUCCESS ||
-             m.message->payload.config.task_type == ConfigTaskType::SET_FAIL))
+        m.message->type == MessageType::SCAN_MAX_RESULT)
     {
-        m.to = HOST;
+        m.to.host = 1;
+        return;
+    }
+
+    if (m.message->type == MessageType::CONFIG_TASK &&
+        (m.message->payload.config.task_type == ConfigTaskType::GETSET_SUCCESS ||
+         m.message->payload.config.task_type == ConfigTaskType::SET_FAIL))
+    {
+        m.to.addr = 0;
+        m.to.host = 1;
         return;
     }
 
@@ -1433,7 +1439,7 @@ void routeMessage(RoutedMessage &m)
          m.message->type == MessageType::CONFIG_TASK &&
              m.message->payload.config.key->equalsIgnoreCase("detection_strategy")))
     {
-        m.to = LORA;
+        m.to.lora = 1; // apply to self, and send over to lora
         return;
     }
 }
@@ -1457,21 +1463,30 @@ void sendMessage(RoutedMessage &m)
 
     Message *msg = m.message;
 
-    if (m.to == LOOP)
+    if (m.to.loop)
     {
         switch (msg->type)
         {
         case MessageType::SCAN:
             report_scans = msg->payload.scan;
-            requested_host = m.from == HOST;
-            return;
+            requested_host = !!m.from.host;
+            break;
         case MessageType::CONFIG_TASK:
+        {
             ConfigTaskType ctt = msg->payload.config.task_type;
 
             // sanity check; GETSET_SUCCESS and SET_FAIL should get routed to HOST
             if (ctt == ConfigTaskType::GET || ctt == ConfigTaskType::SET)
             {
                 // must be GET or SET - both require sending back a response
+                RoutedMessage resp;
+                resp.to.addr = m.from.addr;
+                resp.to.loop = 0;
+
+                resp.from.addr = 0;
+                resp.from.loop = 1;
+                resp.message = new Message();
+                resp.message->type = msg->type;
 
                 String old_v = config.getConfig(*msg->payload.config.key);
                 bool success = true;
@@ -1479,7 +1494,6 @@ void sendMessage(RoutedMessage &m)
                 {
                     success = config.updateConfig(*msg->payload.config.key,
                                                   *msg->payload.config.value);
-                    delete msg->payload.config.value;
 
                     if (success &&
                         msg->payload.config.key->equalsIgnoreCase("detection_strategy"))
@@ -1488,45 +1502,49 @@ void sendMessage(RoutedMessage &m)
                     }
                 }
 
+                resp.message->payload.config.key = new String(*msg->payload.config.key);
                 if (success)
                 {
-                    msg->payload.config.task_type = GETSET_SUCCESS;
-                    msg->payload.config.value = new String(old_v);
+                    resp.message->payload.config.task_type = GETSET_SUCCESS;
+                    resp.message->payload.config.value = new String(old_v);
                 }
                 else
                 {
-                    msg->payload.config.task_type = SET_FAIL;
+                    resp.message->payload.config.task_type = SET_FAIL;
                 }
 
-                m.to = m.from;
-                m.from = LOOP;
-                sendMessage(m);
-            }
-            return;
-        }
+                sendMessage(resp);
 
-        return;
+                delete resp.message;
+            }
+        }
+        break;
+        case SCAN_RESULT:
+        case SCAN_MAX_RESULT:
+            if (config.is_host)
+            {
+                display_scan_result(m.message->payload.dump);
+            }
+            break;
+        }
     }
 
-    if (m.to == HOST)
+    if (m.to.host)
     {
         HostComms->send(*m.message);
-        return;
     }
 
-    if (m.to == UART0)
+    if (m.to.uart0)
     {
         Comms0->send(*m.message);
-        return;
     }
 
-    if (m.to == UART1)
+    if (m.to.uart1)
     {
         Comms1->send(*m.message);
-        return;
     }
 
-    if (m.to == LORA)
+    if (m.to.lora)
     {
         if (config.is_host && TxComms != NULL)
         {
@@ -1535,15 +1553,15 @@ void sendMessage(RoutedMessage &m)
         }
 
         loraSendMessage(*m.message);
-        return;
     }
 }
 
 RoutedMessage checkComms()
 {
     RoutedMessage mess;
-    mess.from = LOOP;
-    mess.to = LOOP;
+    mess.from.addr = 0;
+    mess.to.addr = 0;
+    mess.to.loop = 1;
     mess.message = NULL;
 
     while (HostComms->available() > 0)
@@ -1552,7 +1570,7 @@ RoutedMessage checkComms()
         if (m == NULL)
             continue;
 
-        mess.from = HOST;
+        mess.from.host = 1;
         mess.message = m;
         return mess;
     }
@@ -1564,7 +1582,7 @@ RoutedMessage checkComms()
         if (m == NULL)
             continue;
 
-        mess.from = UART0;
+        mess.from.uart0 = 1;
         mess.message = m;
         return mess;
     }
@@ -1576,7 +1594,7 @@ RoutedMessage checkComms()
         if (m == NULL)
             continue;
 
-        mess.from = UART1;
+        mess.from.uart1 = 1;
         mess.message = m;
         return mess;
     }
@@ -1599,13 +1617,14 @@ RoutedMessage checkComms()
         }
         else
         {
-            mess.from = LORA;
+            mess.from.lora = 1;
             mess.message = res.ok;
         }
 
         return mess;
     }
 
+    mess.from.loop = 1;
     return mess;
 }
 

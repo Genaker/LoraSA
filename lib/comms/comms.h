@@ -78,14 +78,20 @@ struct Message
     ~Message();
 };
 
-enum Endpoint
+struct Endpoint
 {
-    LOOP = 0, // self
-    UART0,
-    UART1,
-    LORA, // rx or tx_lora, depending on is_host
-    HOST, // USB
-    MAX_ENDPOINT = HOST
+    union
+    {
+
+        struct
+        {
+            uint8_t loop : 1, // self
+                uart0 : 1, uart1 : 1,
+                lora : 1, // rx or tx_lora, depending on is_host
+                host : 1; // USB
+        };
+        uint8_t addr;
+    };
 };
 
 struct RoutedMessage
