@@ -18,6 +18,16 @@ void BarChart::reset(uint16_t x, uint16_t y, uint16_t w, uint16_t h)
     Chart::reset(x, y, w, h);
 }
 
+void BarChart::clear()
+{
+    for (int i = 0; i < width; i++)
+    {
+        ys[i] = min_y;
+    }
+
+    redraw_all = true;
+}
+
 int BarChart::updatePoint(float x, float y)
 {
     if (x < min_x || x >= max_x)

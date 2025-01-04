@@ -924,6 +924,12 @@ void configureDetection()
     range = RANGE;
 
     configurePages();
+
+    if (bar != NULL)
+    {
+        bar->bar.min_x = CONF_FREQ_BEGIN;
+        bar->bar.max_x = CONF_FREQ_END;
+    }
 }
 
 void readConfigFile()
@@ -1449,6 +1455,8 @@ int16_t sendMessage(RadioComms &c, Message &m);
 void loraSendMessage(Message &m);
 
 Result<int16_t, Message *> checkRadio(RadioComms &c);
+
+void display_scan_result(ScanTaskResult &dump);
 
 /*
  * If m.to is LOOP, the message is directed at this module; enact the message.
@@ -2198,4 +2206,50 @@ void reportScan()
     }
 
     loraSendMessage(m);
+}
+
+void display_scan_result(ScanTaskResult &dump)
+{
+    if (bar == NULL)
+        return;
+    // assuming this module and the peer are in sync w.r.t. scan ranges
+    if (config.detection_strategy.equalsIgnoreCase("RSSI"))
+    {
+        for (int i = 0; i < dump.sz; i++)
+            bar->bar.updatePoint(dump.freqs_khz[i] / 1000, dump.rssis[i]);
+
+        bar->draw();
+        display.display();
+
+        return;
+    }
+
+    if (config.detection_strategy.equalsIgnoreCase("RSSI_MAX"))
+    {
+        float step = (bar->bar.max_x - bar->bar.min_x) / bar->bar.width;
+
+        bar->bar.clear();
+
+        for (int i = 0; i < config.scan_ranges_sz; i++)
+        {
+            int j;
+            for (j = 0; j < dump.sz; j++)
+            {
+                if (config.scan_ranges[i].start_khz <= dump.freqs_khz[j] &&
+                    config.scan_ranges[i].end_khz >= dump.freqs_khz[j])
+                    break;
+            }
+
+            int16_t rssi = j < dump.sz ? dump.rssis[j] : bar->bar.min_y;
+
+            for (float f = config.scan_ranges[i].start_khz / 1000;
+                 f <= config.scan_ranges[i].end_khz / 1000; f += step)
+                bar->bar.updatePoint(f, rssi);
+        }
+
+        bar->draw();
+        display.display();
+
+        return;
+    }
 }
