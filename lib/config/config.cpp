@@ -107,23 +107,26 @@ Config Config::init()
     return c;
 }
 
+#define UPDATE_BOOL(val, key, value)                                                     \
+    if (key.equalsIgnoreCase(#val))                                                      \
+    {                                                                                    \
+        String v = value;                                                                \
+        bool p = v.equalsIgnoreCase("true");                                             \
+        if (!p && !v.equalsIgnoreCase("false"))                                          \
+        {                                                                                \
+            Serial.printf("Expected bool for '%s', found '%s' - ignoring\n",             \
+                          key.c_str(), value.c_str());                                   \
+        }                                                                                \
+        else                                                                             \
+        {                                                                                \
+            val = p;                                                                     \
+        }                                                                                \
+        return true;                                                                     \
+    }
+
 bool Config::updateConfig(String key, String value)
 {
-    if (key.equalsIgnoreCase("print_profile_time"))
-    {
-        String v = value;
-        bool p = v.equalsIgnoreCase("true");
-        if (!p && !v.equalsIgnoreCase("false"))
-        {
-            Serial.printf("Expected bool for '%s', found '%s' - ignoring\n", key.c_str(),
-                          value.c_str());
-        }
-        else
-        {
-            print_profile_time = p;
-        }
-        return true;
-    }
+    UPDATE_BOOL(print_profile_time, key, value);
 
     if (key.equalsIgnoreCase("log_data_json_interval"))
     {
@@ -167,21 +170,9 @@ bool Config::updateConfig(String key, String value)
         return true;
     }
 
-    if (key.equalsIgnoreCase("is_host"))
-    {
-        String v = value;
-        bool p = v.equalsIgnoreCase("true");
-        if (!p && !v.equalsIgnoreCase("false"))
-        {
-            Serial.printf("Expected bool for '%s', found '%s' - ignoring\n", key.c_str(),
-                          value.c_str());
-        }
-        else
-        {
-            is_host = p;
-        }
-        return true;
-    }
+    UPDATE_BOOL(is_host, key, value);
+
+    UPDATE_BOOL(lora_enabled, key, value);
 
     return false;
 }
@@ -221,7 +212,7 @@ String detectionStrategyToStr(Config &c)
                 res += ".." + String(c.scan_ranges[i].end_khz);
                 if (c.scan_ranges[i].step_khz < s)
                 {
-                    res += ":" + String(c.scan_ranges[i].step_khz);
+                    res += "+" + String(c.scan_ranges[i].step_khz);
                 }
             }
         }
@@ -511,6 +502,8 @@ bool Config::write_config(const char *path)
     f.println("rx_lora = " + getConfig("rx_lora"));
     f.println("tx_lora = " + getConfig("tx_lora"));
     f.println("is_host = " + getConfig("is_host"));
+
+    f.println("lora_enabled = " + getConfig("lora_enabled"));
 
     f.close();
     return true;

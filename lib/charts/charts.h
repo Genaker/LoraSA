@@ -81,6 +81,7 @@ struct BarChart : ProgressChart, Listener
     };
 
     void reset(uint16_t x, uint16_t y, uint16_t w, uint16_t h) override;
+    void clear();
     int updatePoint(float x, float y) override;
     void drawOne(int x) override;
     void draw() override;
