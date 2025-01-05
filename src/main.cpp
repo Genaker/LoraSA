@@ -2231,7 +2231,7 @@ std::unordered_map<int, int16_t> findMaxRssi(int16_t *rssis, uint32_t *freqs_khz
         if (maxRssiPerMHz.find(freq_mhz) == maxRssiPerMHz.end() ||
             maxRssiPerMHz[freq_mhz] < rssi)
         {
-            if (abs(rssi) < level)
+            if (abs(rssi) <= level)
             {
                 maxRssiPerMHz[freq_mhz] = rssi;
             }
