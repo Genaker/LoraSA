@@ -1524,7 +1524,8 @@ void display_raw_scan(ScanTaskResult &dump)
     int16_t *rssi = dump.rssis;
     uint32_t *fr = dump.freqs_khz;
 
-    std::unordered_map<int, int16_t> maxMhzRssi = findMaxRssi(rssi, fr, dump_sz, 80);
+    std::unordered_map<int, int16_t> maxMhzRssi =
+        findMaxRssi(rssi, fr, dump_sz, abs(TRIGGER_LEVEL));
     Serial.println("PRINT SIZE :" + String(maxMhzRssi.size()));
     int lx = 0;
     int ly = 0;
