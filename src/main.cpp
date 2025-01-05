@@ -1460,6 +1460,57 @@ Result<int16_t, Message *> checkRadio(RadioComms &c);
 
 void display_scan_result(ScanTaskResult &dump);
 
+std::unordered_map<int, int16_t> findMaxRssi(int16_t *rssis, uint32_t *freqs_khz,
+                                             int dump_sz, int level = 80);
+
+void display_raw_scan(ScanTaskResult &dump)
+{
+    // display.setDisplayRotation(1);
+    // display.println("Host Mode ->");
+
+    size_t dump_sz = dump.sz;
+    int16_t *rssi = dump.rssis;
+    uint32_t *fr = dump.freqs_khz;
+
+    std::unordered_map<int, int16_t> maxMhzRssi = findMaxRssi(rssi, fr, dump_sz, 85);
+    Serial.println("PRINT SIZE :" + String(maxMhzRssi.size()));
+    int lx = 0;
+    int ly = 0;
+    int i = 0;
+    for (const auto &pair : maxMhzRssi)
+    {
+        if (i == 0 && maxMhzRssi.size() > 0)
+        {
+            display.clear();
+        }
+        int16_t rssi = pair.second;
+        int16_t fr = (int)pair.first;
+
+        Serial.println("PRINT FR:" + String(fr) + ":" + String(rssi) + " lx " +
+                       String(lx));
+        // screen overflow protection
+        if (lx < 130)
+        {
+
+            display.drawString(lx, ly, String(fr) + ":" + String(rssi));
+            Serial.println("PRINT FR:" + String(fr) + ":" + String(rssi));
+            // go to next line
+            ly = ly + 10;
+            if (ly > 60)
+            {
+                ly = 0;
+
+                // go to next column
+                lx = lx + 45;
+            }
+        }
+        i++;
+    }
+    if (maxMhzRssi.size() > 0)
+    {
+        display.display();
+    }
+}
 /*
  * If m.to is LOOP, the message is directed at this module; enact the message.
  * If m.to is not LOOP, send the message via the respective interface.
@@ -1533,7 +1584,11 @@ void sendMessage(RoutedMessage &m)
         case SCAN_MAX_RESULT:
             if (config.is_host)
             {
+#ifdef DISPLAY_RAW_SCAN
+                display_raw_scan(m.message->payload.dump);
+#else
                 display_scan_result(m.message->payload.dump);
+#endif
             }
             break;
         }
@@ -2111,7 +2166,7 @@ void doScan()
 std::unordered_map<int, int> previousPac = {/*{916, true}, {915, true}*/};
 
 std::unordered_map<int, int16_t> findMaxRssi(int16_t *rssis, uint32_t *freqs_khz,
-                                             int dump_sz, int level = 80)
+                                             int dump_sz, int level)
 {
     std::unordered_map<int, int16_t> maxRssiPerMHz; // Map to store max RSSI per MHz
 
@@ -2156,34 +2211,6 @@ Result<int16_t, Message *> checkRadio(RadioComms &comms)
     return ret;
 }
 
-std::unordered_map<int, int> previousPac = {/*{916, true}, {915, true}*/};
-
-std::unordered_map<int, int16_t> findMaxRssi(int16_t *rssis, uint32_t *freqs_khz,
-                                             int dump_sz, int level = 80)
-{
-    std::unordered_map<int, int16_t> maxRssiPerMHz; // Map to store max RSSI per MHz
-
-    for (int i = 0; i < dump_sz; i++)
-    {
-        int16_t rssi = rssis[i];
-        int freq_mhz = (int)freqs_khz[i] / 1000; // Convert kHz to MHz
-
-        // Update the maximum RSSI for this MHz frequency
-        if (maxRssiPerMHz.find(freq_mhz) == maxRssiPerMHz.end() ||
-            maxRssiPerMHz[freq_mhz] < rssi)
-        {
-            if (abs(rssi) < level)
-            {
-                maxRssiPerMHz[freq_mhz] = rssi;
-            }
-        }
-    }
-
-    return maxRssiPerMHz;
-}
-
-bool lock = false;
-
 int16_t sendMessage(RadioComms &comms, Message &msg)
 {
     radioIsScan = false;
@@ -2198,41 +2225,6 @@ int16_t sendMessage(RadioComms &comms, Message &msg)
     {
         lock = true;
 
-        // display.setDisplayRotation(1);
-        // display.println("Host Mode ->");
-
-        size_t dump_sz = msg->payload.dump.sz;
-        int16_t *rssi = msg->payload.dump.rssis;
-        uint32_t *fr = msg->payload.dump.freqs_khz;
-
-        std::unordered_map<int, int16_t> maxMhzRssi = findMaxRssi(rssi, fr, dump_sz, 85);
-
-        int lx, ly, i = 0;
-        for (const auto &pair : maxMhzRssi)
-        {
-            if (i == 0 && maxMhzRssi.size() > 0)
-            {
-                display.clear();
-            }
-            // screen overflow protection
-            if (lx < 130)
-            {
-                int16_t rssi = pair.second;
-                int16_t fr = (int)pair.first;
-                display.drawString(lx, ly, String(fr) + ":" + String(rssi));
-                // go to next line
-                ly += 10;
-                if (ly > 60)
-                {
-                    ly = 0;
-
-                    // go to next column
-                    lx += 50;
-                }
-                display.display();
-            }
-            i++;
-        }
         lock = false;
     }
 
