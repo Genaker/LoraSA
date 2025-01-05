@@ -1177,6 +1177,7 @@ void setup(void)
 
     configurePages();
     display.clear();
+    init_fonts();
     Serial.println();
 
 #ifdef METHOD_RSSI
@@ -2229,6 +2230,7 @@ void display_scan_result(ScanTaskResult &dump)
         float step = (bar->bar.max_x - bar->bar.min_x) / bar->bar.width;
 
         bar->bar.clear();
+        bar->draw_labels = true;
 
         for (int i = 0; i < config.scan_ranges_sz; i++)
         {
