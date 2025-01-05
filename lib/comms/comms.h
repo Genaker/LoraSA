@@ -13,13 +13,29 @@
 #define SERIAL0 Serial0
 #endif
 
+#ifndef SCAN_MAX_RESULT_KHZ_SCALE
+// kHz scale: round frequency, so it fits into 2 bytes
+// 2500000 / 40 = 62500, scale 40 fits 2.5GHz into two bytes
+#define SCAN_MAX_RESULT_KHZ_SCALE 40
+#endif
+
 enum MessageType
 {
     WRAP = 0,
     SCAN,
     SCAN_RESULT,
+    SCAN_MAX_RESULT,
     CONFIG_TASK,
     _MAX_MESSAGE_TYPE = CONFIG_TASK
+};
+
+enum ConfigTaskType
+{
+    GET = 0,
+    SET,
+    GETSET_SUCCESS,
+    SET_FAIL,
+    _MAX_CONFIG_TASK_TYPE = SET_FAIL
 };
 
 struct Wrapper
@@ -45,7 +61,7 @@ struct ConfigTask
 {
     String *key;
     String *value;
-    bool is_set;
+    ConfigTaskType task_type;
 };
 
 struct Message
@@ -60,6 +76,29 @@ struct Message
     } payload;
 
     ~Message();
+};
+
+struct Endpoint
+{
+    union
+    {
+
+        struct
+        {
+            uint8_t loop : 1, // self
+                uart0 : 1, uart1 : 1,
+                lora : 1, // rx or tx_lora, depending on is_host
+                host : 1; // USB
+        };
+        uint8_t addr;
+    };
+};
+
+struct RoutedMessage
+{
+    Endpoint from;
+    Endpoint to;
+    Message *message;
 };
 
 struct Comms

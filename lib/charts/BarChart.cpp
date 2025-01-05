@@ -18,6 +18,16 @@ void BarChart::reset(uint16_t x, uint16_t y, uint16_t w, uint16_t h)
     Chart::reset(x, y, w, h);
 }
 
+void BarChart::clear()
+{
+    for (int i = 0; i < width; i++)
+    {
+        ys[i] = min_y;
+    }
+
+    redraw_all = true;
+}
+
 int BarChart::updatePoint(float x, float y)
 {
     if (x < min_x || x >= max_x)
@@ -189,6 +199,22 @@ void DecoratedBarChart::draw()
         {
             int tick_pos = bar.x2pos(bar.min_x + step * MINOR_TICKS);
             display.drawVerticalLine(pos_x + tick_pos, y, MINOR_TICK_LENGTH);
+        }
+
+        if (draw_labels)
+        { // TODO: adjust chart size; for now we'll just assume that we are not ruining
+          // display
+            display.setColor(BLACK);
+            display.fillRect(pos_x, y + MAJOR_TICK_LENGTH, width,
+                             display.getStringWidth("00000"));
+            display.setColor(WHITE);
+            for (float step = 1; bar.min_x + step * MAJOR_TICKS < bar.max_x; step += 1)
+            {
+                int tick_pos = bar.x2pos(bar.min_x + step * MAJOR_TICKS);
+                drawVerticalString(display, ArialMT_Plain_10_Vert, pos_x + tick_pos - 5,
+                                   y + MAJOR_TICK_LENGTH,
+                                   String((int)(bar.min_x + step * MAJOR_TICKS)));
+            }
         }
     }
 }

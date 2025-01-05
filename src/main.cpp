@@ -894,12 +894,63 @@ void configureDetection()
 {
     if (config.scan_ranges_sz == 0)
     {
-        config.scan_ranges_sz = 1;
-        config.scan_ranges = new ScanRange[1];
-        config.scan_ranges[0].start_khz = FREQ_BEGIN * 1000;
-        config.scan_ranges[0].end_khz = FREQ_END * 1000;
-        config.scan_ranges[0].step_khz =
-            (float)(FREQ_END - FREQ_BEGIN) * 1000 / (STEPS * SCAN_RBW_FACTOR);
+        if (config.detection_strategy.equalsIgnoreCase("RSSI_MAX"))
+        {
+            size_t sz = 10;
+            uint32_t f_khz = FREQ_BEGIN * 1000;
+            uint32_t ssz = (FREQ_END - FREQ_BEGIN) * 1000 / 10;
+            uint32_t step =
+                (float)(FREQ_END - FREQ_BEGIN) * 1000 / (STEPS * SCAN_RBW_FACTOR);
+
+            uint32_t rx_b = FREQ_END * 1000 + 100000;
+            uint32_t rx_e = rx_b + 500;
+            if (RxComms != NULL)
+            {
+                rx_e = RxComms->loraCfg.bw;
+                rx_b = RxComms->loraCfg.freq * 1000 - rx_e;
+                rx_e = rx_b + 2 * rx_e;
+                if (rx_e / ssz == rx_b / ssz && rx_e > f_khz && rx_b < FREQ_END * 1000)
+                {
+                    // entire exclusion range is in one bucket
+                    sz++;
+                }
+            }
+
+            config.scan_ranges_sz = sz;
+            config.scan_ranges = new ScanRange[sz];
+            for (int i = 0; i < sz; i++)
+            {
+                config.scan_ranges[i].step_khz = step;
+                config.scan_ranges[i].start_khz = f_khz > rx_b ? max(f_khz, rx_e) : f_khz;
+
+                bool starts_before = f_khz < rx_e;
+                bool ends_after = f_khz + ssz > rx_b;
+
+                if (starts_before && ends_after)
+                {
+                    config.scan_ranges[i].end_khz = rx_b;
+                    i++;
+                    config.scan_ranges[i].start_khz = rx_e;
+                    config.scan_ranges[i].step_khz = step;
+                }
+
+                f_khz += ssz;
+                config.scan_ranges[i].end_khz =
+                    f_khz - step < rx_e ? min(f_khz - step, rx_b) : f_khz - step;
+            }
+
+            if (config.scan_ranges[sz - 1].end_khz > rx_e)
+                config.scan_ranges[sz - 1].end_khz = FREQ_END * 1000;
+        }
+        else
+        {
+            config.scan_ranges_sz = 1;
+            config.scan_ranges = new ScanRange[1];
+            config.scan_ranges[0].start_khz = FREQ_BEGIN * 1000;
+            config.scan_ranges[0].end_khz = FREQ_END * 1000;
+            config.scan_ranges[0].step_khz =
+                (float)(FREQ_END - FREQ_BEGIN) * 1000 / (STEPS * SCAN_RBW_FACTOR);
+        }
     }
 
     if (config.samples <= 0)
@@ -911,7 +962,7 @@ void configureDetection()
 
     CONF_FREQ_BEGIN = config.scan_ranges[0].start_khz / 1000;
     CONF_FREQ_END = config.scan_ranges[0].end_khz / 1000;
-    for (int i = 0; i < config.scan_ranges_sz; i++)
+    for (int i = 1; i < config.scan_ranges_sz; i++)
     {
         CONF_FREQ_BEGIN = min(CONF_FREQ_BEGIN, config.scan_ranges[i].start_khz / 1000);
         CONF_FREQ_END = max(CONF_FREQ_END, config.scan_ranges[i].end_khz / 1000);
@@ -926,6 +977,12 @@ void configureDetection()
     range = RANGE;
 
     configurePages();
+
+    if (bar != NULL)
+    {
+        bar->bar.min_x = CONF_FREQ_BEGIN;
+        bar->bar.max_x = CONF_FREQ_END;
+    }
 }
 
 void readConfigFile()
@@ -1173,6 +1230,7 @@ void setup(void)
 
     configurePages();
     display.clear();
+    init_fonts();
     Serial.println();
 
 #ifdef METHOD_RSSI
@@ -1409,41 +1467,230 @@ bool is_new_x_pixel(int x)
         return false;
 }
 
-void checkComms()
+/*
+ * Given message type and config, modify from/to to route the message to the
+ * right destination.
+ */
+void routeMessage(RoutedMessage &m)
 {
+    if (m.message == NULL)
+    {
+        return;
+    }
+
+    if (m.message->type == MessageType::SCAN_RESULT ||
+        m.message->type == MessageType::SCAN_MAX_RESULT)
+    {
+        m.to.host = 1;
+        return;
+    }
+
+    if (m.message->type == MessageType::CONFIG_TASK &&
+        (m.message->payload.config.task_type == ConfigTaskType::GETSET_SUCCESS ||
+         m.message->payload.config.task_type == ConfigTaskType::SET_FAIL))
+    {
+        m.to.addr = 0;
+        m.to.host = 1;
+        return;
+    }
+
+    if (config.is_host &&
+        (m.message->type == MessageType::SCAN ||
+         m.message->type == MessageType::CONFIG_TASK &&
+             m.message->payload.config.key->equalsIgnoreCase("detection_strategy")))
+    {
+        m.to.lora = 1; // apply to self, and send over to lora
+        return;
+    }
+}
+
+int16_t sendMessage(RadioComms &c, Message &m);
+
+void loraSendMessage(Message &m);
+
+Result<int16_t, Message *> checkRadio(RadioComms &c);
+
+void display_scan_result(ScanTaskResult &dump);
+
+std::unordered_map<int, int16_t> findMaxRssi(int16_t *rssis, uint32_t *freqs_khz,
+                                             int dump_sz, int level = 80);
+
+void display_raw_scan(ScanTaskResult &dump)
+{
+    // display.setDisplayRotation(1);
+    // display.println("Host Mode ->");
+
+    size_t dump_sz = dump.sz;
+    int16_t *rssi = dump.rssis;
+    uint32_t *fr = dump.freqs_khz;
+
+    std::unordered_map<int, int16_t> maxMhzRssi =
+        findMaxRssi(rssi, fr, dump_sz, abs(TRIGGER_LEVEL));
+    Serial.println("PRINT SIZE :" + String(maxMhzRssi.size()));
+    int lx = 0;
+    int ly = 0;
+    int i = 0;
+    for (const auto &pair : maxMhzRssi)
+    {
+        if (i == 0 && maxMhzRssi.size() > 0)
+        {
+            display.clear();
+        }
+        int16_t rssi = pair.second;
+        int16_t fr = (int)pair.first;
+
+        Serial.println("PRINT FR:" + String(fr) + ":" + String(rssi) + " lx " +
+                       String(lx));
+        // screen overflow protection
+        if (lx < 130)
+        {
+
+            display.drawString(lx, ly, String(fr) + ":" + String(rssi));
+            Serial.println("PRINT FR:" + String(fr) + ":" + String(rssi));
+            // go to next line
+            ly = ly + 10;
+            if (ly > 60)
+            {
+                ly = 0;
+
+                // go to next column
+                lx = lx + 45;
+            }
+        }
+        i++;
+    }
+    if (maxMhzRssi.size() > 0)
+    {
+        display.display();
+    }
+}
+/*
+ * If m.to is LOOP, the message is directed at this module; enact the message.
+ * If m.to is not LOOP, send the message via the respective interface.
+ */
+void sendMessage(RoutedMessage &m)
+{
+    if (m.message == NULL)
+    {
+        return;
+    }
+
+    Message *msg = m.message;
+
+    if (m.to.loop)
+    {
+        switch (msg->type)
+        {
+        case MessageType::SCAN:
+            report_scans = msg->payload.scan;
+            requested_host = !!m.from.host;
+            break;
+        case MessageType::CONFIG_TASK:
+        {
+            ConfigTaskType ctt = msg->payload.config.task_type;
+
+            // sanity check; GETSET_SUCCESS and SET_FAIL should get routed to HOST
+            if (ctt == ConfigTaskType::GET || ctt == ConfigTaskType::SET)
+            {
+                // must be GET or SET - both require sending back a response
+                RoutedMessage resp;
+                resp.to.addr = m.from.addr;
+                resp.to.loop = 0;
+
+                resp.from.addr = 0;
+                resp.from.loop = 1;
+                resp.message = new Message();
+                resp.message->type = msg->type;
+
+                String old_v = config.getConfig(*msg->payload.config.key);
+                bool success = true;
+                if (ctt == ConfigTaskType::SET)
+                {
+                    success = config.updateConfig(*msg->payload.config.key,
+                                                  *msg->payload.config.value);
+
+                    if (success &&
+                        msg->payload.config.key->equalsIgnoreCase("detection_strategy"))
+                    {
+                        configureDetection(); // redo the pages and scan ranges
+                    }
+                }
+
+                resp.message->payload.config.key = new String(*msg->payload.config.key);
+                if (success)
+                {
+                    resp.message->payload.config.task_type = GETSET_SUCCESS;
+                    resp.message->payload.config.value = new String(old_v);
+                }
+                else
+                {
+                    resp.message->payload.config.task_type = SET_FAIL;
+                }
+
+                sendMessage(resp);
+
+                delete resp.message;
+            }
+        }
+        break;
+        case SCAN_RESULT:
+        case SCAN_MAX_RESULT:
+            if (config.is_host)
+            {
+#ifdef DISPLAY_RAW_SCAN
+                display_raw_scan(m.message->payload.dump);
+#else
+                display_scan_result(m.message->payload.dump);
+#endif
+            }
+            break;
+        }
+    }
+
+    if (m.to.host)
+    {
+        HostComms->send(*m.message);
+    }
+
+    if (m.to.uart0)
+    {
+        Comms0->send(*m.message);
+    }
+
+    if (m.to.uart1)
+    {
+        Comms1->send(*m.message);
+    }
+
+    if (m.to.lora)
+    {
+        if (config.is_host && TxComms != NULL)
+        {
+            checkRadio(*TxComms); // waiting for peer to squak first, so message sending
+                                  // will land on the receiving cycle
+        }
+
+        loraSendMessage(*m.message);
+    }
+}
+
+RoutedMessage checkComms()
+{
+    RoutedMessage mess;
+    mess.from.addr = 0;
+    mess.to.addr = 0;
+    mess.to.loop = 1;
+    mess.message = NULL;
+
     while (HostComms->available() > 0)
     {
         Message *m = HostComms->receive();
         if (m == NULL)
             continue;
 
-        switch (m->type)
-        {
-        case MessageType::SCAN:
-            report_scans = m->payload.scan;
-            requested_host = true;
-            Serial.println("Host: forwarding message SCAN to peer");
-            Comms0->send(*m); // forward to peer
-            Comms1->send(*m); // forward to peer
-            break;
-        case MessageType::CONFIG_TASK:
-            if (m->payload.config.is_set)
-            {
-                String v = config.getConfig(*m->payload.config.key);
-                bool r =
-                    config.updateConfig(*m->payload.config.key, *m->payload.config.value);
-                Serial.printf("SET config (%s): %s = %s (was: %s)\n", r ? "OK" : "failed",
-                              m->payload.config.key->c_str(),
-                              m->payload.config.value->c_str(), v.c_str());
-            }
-            else
-            {
-                Serial.printf("GET config: %s = %s\n", m->payload.config.key->c_str(),
-                              config.getConfig(*m->payload.config.key).c_str());
-            }
-            break;
-        }
-        delete m;
+        mess.from.host = 1;
+        mess.message = m;
+        return mess;
     }
 
     while (Comms0->available() > 0)
@@ -1453,18 +1700,9 @@ void checkComms()
         if (m == NULL)
             continue;
 
-        switch (m->type)
-        {
-        case MessageType::SCAN:
-            report_scans = m->payload.scan; // receive from peer
-            requested_host = false;
-            break;
-
-        case MessageType::SCAN_RESULT:
-            HostComms->send(*m); // forward from peer
-            break;
-        }
-        delete m;
+        mess.from.uart0 = 1;
+        mess.message = m;
+        return mess;
     }
 
     while (Comms1->available() > 0)
@@ -1474,19 +1712,38 @@ void checkComms()
         if (m == NULL)
             continue;
 
-        switch (m->type)
-        {
-        case MessageType::SCAN:
-            report_scans = m->payload.scan; // receive from peer
-            requested_host = false;
-            break;
-
-        case MessageType::SCAN_RESULT:
-            HostComms->send(*m); // forward from peer
-            break;
-        }
-        delete m;
+        mess.from.uart1 = 1;
+        mess.message = m;
+        return mess;
     }
+
+    // NB: swapping the use of Tx and Rx comms, so a pair of modules
+    //     with identical rx/tx_lora config can talk
+    RadioComms *rx = config.is_host ? TxComms : RxComms;
+
+    if (rx != NULL && (config.is_host || config.lora_enabled))
+    {
+        Result<int16_t, Message *> res = checkRadio(*rx);
+
+        if (!res.is_ok)
+        {
+            int16_t status = res.not_ok;
+            if (status != RADIOLIB_ERR_NONE)
+            {
+                Serial.printf("Error getting a message: %d\n", status);
+            }
+        }
+        else
+        {
+            mess.from.lora = 1;
+            mess.message = res.ok;
+        }
+
+        return mess;
+    }
+
+    mess.from.loop = 1;
+    return mess;
 }
 
 // MAX Frequency RSSI BIN value of the samples
@@ -1494,9 +1751,7 @@ int max_rssi_x = 999;
 
 void doScan();
 
-void reportScan(RadioComms &c);
-
-int16_t checkRadio(RadioComms &c);
+void reportScan();
 
 void loop(void)
 {
@@ -1505,28 +1760,17 @@ void loop(void)
     r.detection_count = 0;
     drone_detected_frequency_start = 0;
 
-    checkComms();
-
-    if (config.is_host)
+    for (RoutedMessage mess = checkComms(); mess.message != NULL; mess = checkComms())
     {
-        if (TxComms != NULL)
-        {
-            // NB: swapping the use of Tx and Rx comms, so a pair of modules
-            //     with identical rx/tx_lora config can talk
-            int16_t status = checkRadio(*TxComms);
-            if (status != RADIOLIB_ERR_NONE)
-            {
-                Serial.printf("Error getting a message: %d\n", status);
-            }
-        }
+        routeMessage(mess);
+        sendMessage(mess);
+        delete mess.message;
     }
-    else
+
+    if (!config.is_host)
     {
         doScan();
-        if (TxComms != NULL)
-            reportScan(*TxComms);
-        if (RxComms != NULL)
-            checkRadio(*RxComms);
+        reportScan();
     }
 }
 
@@ -1677,14 +1921,15 @@ void doScan()
                 float (*g)(void *);
                 samples = CONF_SAMPLES;
 
-                if (config.detection_strategy.equalsIgnoreCase("RSSI"))
+                if (config.detection_strategy.equalsIgnoreCase("RSSI") ||
+                    config.detection_strategy.equalsIgnoreCase("RSSI_MAX"))
                     g = &getRSSI;
                 else if (config.detection_strategy.equalsIgnoreCase("CAD"))
                 {
                     g = &getCAD;
-                    samples = min(
-                        1,
-                        CONF_SAMPLES); // TODO: do we need to support values other than 1
+                    samples = min(1,
+                                  CONF_SAMPLES); // TODO: do we need to support values
+                                                 // other than 1
                 }
                 else
                     g = &getRSSI;
@@ -1974,7 +2219,7 @@ void doScan()
 std::unordered_map<int, int> previousPac = {/*{916, true}, {915, true}*/};
 
 std::unordered_map<int, int16_t> findMaxRssi(int16_t *rssis, uint32_t *freqs_khz,
-                                             int dump_sz, int level = 80)
+                                             int dump_sz, int level)
 {
     std::unordered_map<int, int16_t> maxRssiPerMHz; // Map to store max RSSI per MHz
 
@@ -1987,7 +2232,7 @@ std::unordered_map<int, int16_t> findMaxRssi(int16_t *rssis, uint32_t *freqs_khz
         if (maxRssiPerMHz.find(freq_mhz) == maxRssiPerMHz.end() ||
             maxRssiPerMHz[freq_mhz] < rssi)
         {
-            if (abs(rssi) < level)
+            if (abs(rssi) <= level)
             {
                 maxRssiPerMHz[freq_mhz] = rssi;
             }
@@ -1998,99 +2243,166 @@ std::unordered_map<int, int16_t> findMaxRssi(int16_t *rssis, uint32_t *freqs_khz
 }
 
 bool lock = false;
-int16_t checkRadio(RadioComms &comms)
+Result<int16_t, Message *> checkRadio(RadioComms &comms)
 {
     radioIsScan = false;
-    int16_t status = comms.configureRadio();
-    if (status != RADIOLIB_ERR_NONE)
-        return status;
+    Result<int16_t, Message *> ret;
+    ret.is_ok = false;
+
+    ret.not_ok = comms.configureRadio();
+    if (ret.not_ok != RADIOLIB_ERR_NONE)
+        return ret;
+
+    ret.is_ok = true;
 
     Message *msg = comms.receive(
         config.is_host
             ? 2000
-            : 500); // 200ms should be enough to receive 500 bytes at SF 7 and BW 500
-    if (msg == NULL)
-    {
-        return status;
-    }
+            : 200); // 200ms should be enough to receive 500 bytes at SF 7 and BW 500
+    ret.ok = msg;
 
-    if (msg->type == SCAN_RESULT)
-    {
-        // if (lock == false)
-        {
-            lock = true;
-
-            // display.setDisplayRotation(1);
-            // display.println("Host Mode ->");
-
-            size_t dump_sz = msg->payload.dump.sz;
-            int16_t *rssi = msg->payload.dump.rssis;
-            uint32_t *fr = msg->payload.dump.freqs_khz;
-
-            std::unordered_map<int, int16_t> maxMhzRssi =
-                findMaxRssi(rssi, fr, dump_sz, 85);
-
-            int lx, ly, i = 0;
-            for (const auto &pair : maxMhzRssi)
-            {
-                if (i == 0 && maxMhzRssi.size() > 0)
-                {
-                    display.clear();
-                }
-                // screen overflow protection
-                if (lx < 130)
-                {
-                    int16_t rssi = pair.second;
-                    int16_t fr = (int)pair.first;
-                    display.drawString(lx, ly, String(fr) + ":" + String(rssi));
-                    // go to next line
-                    ly += 10;
-                    if (ly > 60)
-                    {
-                        ly = 0;
-
-                        // go to next column
-                        lx += 50;
-                    }
-                    display.display();
-                }
-                i++;
-            }
-            lock = false;
-        }
-
-        HostComms->send(*msg);
-    }
-    else
-    {
-        Serial.printf("Received a message of unsupported type: %d\n", msg->type);
-    }
-
-    delete msg;
-
-    return status;
+    return ret;
 }
 
-void reportScan(RadioComms &comms)
+int16_t sendMessage(RadioComms &comms, Message &msg)
 {
     radioIsScan = false;
     int16_t status = comms.configureRadio();
     if (status != RADIOLIB_ERR_NONE)
     {
         Serial.printf("Failed to configure Radio: %d\n", status);
-        return;
+        return status;
     }
 
-    Message m;
-    m.type = SCAN_RESULT;
-    m.payload.dump = frequency_scan_result.dump;
-    status = comms.send(m);
+    if (false)
+    {
+        lock = true;
 
-    m.payload.dump.sz = 0; // dump is shared, so should not delete underlying arrays
+        lock = false;
+    }
+
+    status = comms.send(msg);
 
     if (status != RADIOLIB_ERR_NONE)
     {
-        Serial.printf("Failed to send scan result: %d\n", status);
+        Serial.printf("Failed to send message of type %d: %d\n", msg.type, status);
+        return status;
+    }
+
+    return status;
+}
+
+void loraSendMessage(Message &msg)
+{
+    RadioComms *tx = config.is_host ? RxComms : TxComms;
+    if (tx == NULL)
+    {
+        return;
+    }
+
+    sendMessage(*tx, msg);
+}
+
+void reportScan()
+{
+    if (!config.lora_enabled)
+        return;
+
+    Message m;
+    m.type = SCAN_RESULT;
+    m.payload.dump.sz = 0;
+
+    if (config.detection_strategy.equalsIgnoreCase("RSSI"))
+    {
+        size_t sz = frequency_scan_result.dump.sz;
+        m.payload.dump.sz = sz;
+        m.payload.dump.freqs_khz = new uint32_t[sz];
+        m.payload.dump.rssis = new int16_t[sz];
+
+        memcpy(m.payload.dump.freqs_khz, frequency_scan_result.dump.freqs_khz,
+               sizeof(uint32_t) * sz);
+        memcpy(m.payload.dump.rssis, frequency_scan_result.dump.rssis,
+               sizeof(int16_t) * sz);
+    }
+    else if (config.detection_strategy.equalsIgnoreCase("RSSI_MAX"))
+    {
+        m.type = SCAN_MAX_RESULT;
+
+        size_t sz = config.scan_ranges_sz;
+        m.payload.dump.sz = sz;
+        m.payload.dump.freqs_khz = new uint32_t[sz];
+        m.payload.dump.rssis = new int16_t[sz];
+
+        for (int i = 0; i < sz; i++)
+        {
+            int16_t rssi = -999;
+            for (int j = 0; j < frequency_scan_result.dump.sz; j++)
+            {
+                uint32_t f = frequency_scan_result.dump.freqs_khz[j];
+
+                if (config.scan_ranges[i].start_khz > f ||
+                    config.scan_ranges[i].end_khz < f)
+                    continue;
+
+                rssi = max(rssi, frequency_scan_result.dump.rssis[j]);
+            }
+
+            m.payload.dump.freqs_khz[i] =
+                (config.scan_ranges[i].start_khz + config.scan_ranges[i].end_khz) / 2;
+            m.payload.dump.rssis[i] = rssi;
+        }
+    }
+    else
+    {
+        return;
+    }
+
+    loraSendMessage(m);
+}
+
+void display_scan_result(ScanTaskResult &dump)
+{
+    if (bar == NULL)
+        return;
+    // assuming this module and the peer are in sync w.r.t. scan ranges
+    if (config.detection_strategy.equalsIgnoreCase("RSSI"))
+    {
+        for (int i = 0; i < dump.sz; i++)
+            bar->bar.updatePoint(dump.freqs_khz[i] / 1000, dump.rssis[i]);
+
+        bar->draw();
+        display.display();
+
+        return;
+    }
+
+    if (config.detection_strategy.equalsIgnoreCase("RSSI_MAX"))
+    {
+        float step = (bar->bar.max_x - bar->bar.min_x) / bar->bar.width;
+
+        bar->bar.clear();
+        bar->draw_labels = true;
+
+        for (int i = 0; i < config.scan_ranges_sz; i++)
+        {
+            int j;
+            for (j = 0; j < dump.sz; j++)
+            {
+                if (config.scan_ranges[i].start_khz <= dump.freqs_khz[j] &&
+                    config.scan_ranges[i].end_khz >= dump.freqs_khz[j])
+                    break;
+            }
+
+            int16_t rssi = j < dump.sz ? dump.rssis[j] : bar->bar.min_y;
+
+            for (float f = config.scan_ranges[i].start_khz / 1000;
+                 f <= config.scan_ranges[i].end_khz / 1000; f += step)
+                bar->bar.updatePoint(f, rssi);
+        }
+
+        bar->draw();
+        display.display();
+
         return;
     }
 }
