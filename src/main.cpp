@@ -894,12 +894,63 @@ void configureDetection()
 {
     if (config.scan_ranges_sz == 0)
     {
-        config.scan_ranges_sz = 1;
-        config.scan_ranges = new ScanRange[1];
-        config.scan_ranges[0].start_khz = FREQ_BEGIN * 1000;
-        config.scan_ranges[0].end_khz = FREQ_END * 1000;
-        config.scan_ranges[0].step_khz =
-            (float)(FREQ_END - FREQ_BEGIN) * 1000 / (STEPS * SCAN_RBW_FACTOR);
+        if (config.detection_strategy.equalsIgnoreCase("RSSI_MAX"))
+        {
+            size_t sz = 10;
+            uint32_t f_khz = FREQ_BEGIN * 1000;
+            uint32_t ssz = (FREQ_END - FREQ_BEGIN) * 1000 / 10;
+            uint32_t step =
+                (float)(FREQ_END - FREQ_BEGIN) * 1000 / (STEPS * SCAN_RBW_FACTOR);
+
+            uint32_t rx_b = FREQ_END * 1000 + 100000;
+            uint32_t rx_e = rx_b + 500;
+            if (RxComms != NULL)
+            {
+                rx_e = RxComms->loraCfg.bw;
+                rx_b = RxComms->loraCfg.freq * 1000 - rx_e;
+                rx_e = rx_b + 2 * rx_e;
+                if (rx_e / ssz == rx_b / ssz && rx_e > f_khz && rx_b < FREQ_END * 1000)
+                {
+                    // entire exclusion range is in one bucket
+                    sz++;
+                }
+            }
+
+            config.scan_ranges_sz = sz;
+            config.scan_ranges = new ScanRange[sz];
+            for (int i = 0; i < sz; i++)
+            {
+                config.scan_ranges[i].step_khz = step;
+                config.scan_ranges[i].start_khz = f_khz > rx_b ? max(f_khz, rx_e) : f_khz;
+
+                bool starts_before = f_khz < rx_e;
+                bool ends_after = f_khz + ssz > rx_b;
+
+                if (starts_before && ends_after)
+                {
+                    config.scan_ranges[i].end_khz = rx_b;
+                    i++;
+                    config.scan_ranges[i].start_khz = rx_e;
+                    config.scan_ranges[i].step_khz = step;
+                }
+
+                f_khz += ssz;
+                config.scan_ranges[i].end_khz =
+                    f_khz - step < rx_e ? min(f_khz - step, rx_b) : f_khz - step;
+            }
+
+            if (config.scan_ranges[sz - 1].end_khz > rx_e)
+                config.scan_ranges[sz - 1].end_khz = FREQ_END * 1000;
+        }
+        else
+        {
+            config.scan_ranges_sz = 1;
+            config.scan_ranges = new ScanRange[1];
+            config.scan_ranges[0].start_khz = FREQ_BEGIN * 1000;
+            config.scan_ranges[0].end_khz = FREQ_END * 1000;
+            config.scan_ranges[0].step_khz =
+                (float)(FREQ_END - FREQ_BEGIN) * 1000 / (STEPS * SCAN_RBW_FACTOR);
+        }
     }
 
     if (config.samples <= 0)
@@ -1179,6 +1230,7 @@ void setup(void)
 
     configurePages();
     display.clear();
+    init_fonts();
     Serial.println();
 
 #ifdef METHOD_RSSI
@@ -2328,6 +2380,7 @@ void display_scan_result(ScanTaskResult &dump)
         float step = (bar->bar.max_x - bar->bar.min_x) / bar->bar.width;
 
         bar->bar.clear();
+        bar->draw_labels = true;
 
         for (int i = 0; i < config.scan_ranges_sz; i++)
         {

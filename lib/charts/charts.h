@@ -101,12 +101,14 @@ struct BarChart : ProgressChart, Listener
 struct DecoratedBarChart : Chart
 {
     BarChart bar;
+    bool draw_labels;
 
     DecoratedBarChart(Display_t &d, uint16_t x, uint16_t y, uint16_t w, uint16_t h,
                       float min_x, float max_x, float min_y, float max_y, float level_y)
         : Chart(d, x, y, w, h),
           bar(d, x, y + LABEL_HEIGHT, w, h - LABEL_HEIGHT - AXIS_HEIGHT, min_x, max_x,
-              min_y, max_y, level_y) {};
+              min_y, max_y, level_y),
+          draw_labels(false) {};
 
     void reset(uint16_t x, uint16_t y, uint16_t w, uint16_t h) override;
     void draw() override;
@@ -175,5 +177,11 @@ struct UptimeClock : Chart
     void draw(uint64_t t);
     virtual void draw() override;
 };
+
+extern uint8_t *ArialMT_Plain_10_Vert;
+
+void init_fonts();
+void drawVerticalString(Display_t &display, const uint8_t *v_font, int x, int y,
+                        String s);
 
 #endif
