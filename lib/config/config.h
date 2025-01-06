@@ -73,6 +73,11 @@ LoRaConfig *configureLora(String cfg);
 #ifndef DEFAULT_LORA_ENABLED
 #define DEFAULT_LORA_ENABLED false
 #endif
+
+#ifndef DEFAULT_LORA_TX_POWER
+#define DEFAULT_LORA_TX_POWER 1
+#endif
+
 #define CREATE_MISSING_CONFIG true
 struct Config
 {

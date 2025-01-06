@@ -352,7 +352,7 @@ LoRaConfig *configureLora(String cfg)
         bw : 500,
         sf : 7,
         cr : 5,
-        tx_power : 1,
+        tx_power : DEFAULT_LORA_TX_POWER,
         preamble_len : 8,
         sync_word : 0x1e,
         crc : false,
