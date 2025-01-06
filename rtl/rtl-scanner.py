@@ -5,6 +5,24 @@ import traceback
 import time
 import os
 
+def printxy(x, y, text):
+    """
+    Print text at a specific (x, y) coordinate in the console.
+    :param x: Column number (1-based)
+    :param y: Row number (1-based)
+    :param text: The text to print
+    """
+    # ANSI escape code to move the cursor to (y, x)
+    print(f"\033[{y};{x}H{text}", end="", flush=True)
+
+def bar_draw(x,y,rssi,max_height=20,symbol="#"):
+    normalized = rssi / (rssi + 1e-6) # Normalize to 0-1
+    height = int(normalized * max_height)
+    for i in range(max_height):
+        printxy(x,y-i," ")
+    for i in range(height):
+        printxy(x,y-i,symbol)
+
 def ascii_bar_chart(data, start_freq, step, max_height=20, symbol='#'):
     """
     Converts an array of RSSI values into an ASCII vertical bar chart with RSSI labels on the left and MHz labels under every 5th step.
@@ -30,8 +48,8 @@ def ascii_bar_chart(data, start_freq, step, max_height=20, symbol='#'):
         f"{(start_freq + step * i) / 1e6:.0f}" if i % 5 == 0 else ""
         for i in range(len(data))
     ]
-    print(" " * 8 + '-' * len(data))  # Bar separator
-    x_axis = " " * 8
+    print(" " * 9 + '-' * len(data))  # Bar separator
+    x_axis = " " * 9
     printed = 0
     previous_label = ""
     for i, label in enumerate(freq_labels):
@@ -44,6 +62,7 @@ def ascii_bar_chart(data, start_freq, step, max_height=20, symbol='#'):
                 x_axis += "|"  # No space between bars
             printed += 1
     print(x_axis)
+    init=True
 
 async def read_samples_async(sdr, fft_size):
     """
@@ -51,13 +70,16 @@ async def read_samples_async(sdr, fft_size):
     """
     return await asyncio.to_thread(sdr.read_samples, fft_size)
 
-async def scan_frequency_range(start_freq, end_freq, step, sdr1, sdr2, fft_size=2*1024):
+async def scan_frequency_range(start_freq, end_freq, step, sdr1, sdr2, fft_size=1024*4):
     """
     Scans a frequency range using two RTL-SDR devices and calculates RSSI for each frequency.
     """
     center_frequencies = np.arange(start_freq, end_freq + step, step)
     rssi_values1 = []
     rssi_values2 = []
+
+    x=9
+    y=20
 
     for freq in center_frequencies:
         sdr1.center_freq = freq
@@ -77,10 +99,13 @@ async def scan_frequency_range(start_freq, end_freq, step, sdr1, sdr2, fft_size=
         power_spectrum2 = np.abs(np.fft.fft(samples2))**2
         power_db1 = 10 * np.log10(power_spectrum1 + 1e-6)  # Convert to dB
         power_db2 = 10 * np.log10(power_spectrum2 + 1e-6)  # Convert to dB
-        avg_rssi1 = np.percentile(power_db1, 90)  # 90th percentile RSSI for this frequency
-        avg_rssi2 = np.percentile(power_db2, 90)  # 90th percentile RSSI for this frequency
+        avg_rssi1 = np.percentile(power_db1, 85)  # 90th percentile RSSI for this frequency
+        avg_rssi2 = np.percentile(power_db2, 85)  # 90th percentile RSSI for this frequency
         rssi_values1.append(avg_rssi1)
+            #bar_draw(x,y,avg_rssi1,20,"#")
         rssi_values2.append(avg_rssi2)
+            #bar_draw(x,y+24,avg_rssi2,20,"#")
+        x=x+1
 
     return rssi_values1, rssi_values2
 
@@ -100,8 +125,8 @@ def process_samples(samples):
 
 async def main():
     # Frequency range in Hz
-    start_freq = 860e6  # 800 MHz
-    end_freq = 1060e6    # 900 MHz
+    start_freq = 880e6  # 800 MHz
+    end_freq = 960e6    # 900 MHz
     step = 1e6          # 1 MHz steps
 
     # Initialize two RTL-SDR devices
@@ -115,7 +140,7 @@ async def main():
     # Set parameters for both devices
     for sdr in [sdr1, sdr2]:
         sdr.sample_rate = 2.048e6  # 2.048 MSPS
-        sdr.gain = 10              # Adjust gain as needed
+        sdr.gain = 40              # Adjust gain as needed
 
     try:
         while True:

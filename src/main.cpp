@@ -32,6 +32,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "WIFI_SERVER.h"
 
@@ -153,7 +154,8 @@ typedef enum
 // String SCAN_RANGES = String("850..890,920..950");
 String SCAN_RANGES = "";
 
-std::unordered_map<int, bool> ignoredFreq = {/*{916, true}, {915, true}*/};
+std::unordered_set<int> ignoredFreq = {/*{916, true}, {915, true}*/};
+std::unordered_set<int> frAlwaysShow = {915};
 
 size_t scan_pages_sz = 0;
 ScanPage *scan_pages;
@@ -2279,7 +2281,7 @@ std::unordered_map<int, int16_t> findMaxRssi(int16_t *rssis, uint32_t *freqs_khz
         if (maxRssiPerMHz.find(freq_mhz) == maxRssiPerMHz.end() ||
             maxRssiPerMHz[freq_mhz] < rssi)
         {
-            if (abs(rssi) <= level)
+            if (abs(rssi) <= level || frAlwaysShow.find(freq_mhz) != frAlwaysShow.end())
             {
                 maxRssiPerMHz[freq_mhz] = rssi;
             }
