@@ -159,6 +159,14 @@ size_t scan_pages_sz = 0;
 ScanPage *scan_pages;
 size_t scan_page = 0;
 
+struct RSSIData
+{
+    short rssi;
+    unsigned long int time;
+};
+
+std::unordered_map<unsigned int, RSSIData> historyRSSI;
+
 // MHZ per page
 // to put everything into one page set RANGE_PER_PAGE = FREQ_END - 800
 uint64_t RANGE_PER_PAGE; // FREQ_END - CONF_FREQ_BEGIN
@@ -1515,10 +1523,22 @@ void display_scan_result(ScanTaskResult &dump);
 std::unordered_map<int, int16_t> findMaxRssi(int16_t *rssis, uint32_t *freqs_khz,
                                              int dump_sz, int level = 80);
 
+void dumpHashMap(const std::unordered_map<unsigned int, RSSIData> &map)
+{
+
+    for (const auto &entry : map)
+    {
+        Serial.println("Key: " + String(entry.first) +
+                       ", RSSI: " + String(entry.second.rssi) +
+                       ", Time: " + String(entry.second.time) + " ms\n");
+    }
+}
+
 void display_raw_scan(ScanTaskResult &dump)
 {
     // display.setDisplayRotation(1);
     // display.println("Host Mode ->");
+    dumpHashMap(historyRSSI);
 
     size_t dump_sz = dump.sz;
     int16_t *rssi = dump.rssis;
@@ -1526,30 +1546,59 @@ void display_raw_scan(ScanTaskResult &dump)
 
     std::unordered_map<int, int16_t> maxMhzRssi =
         findMaxRssi(rssi, fr, dump_sz, abs(TRIGGER_LEVEL));
-    Serial.println("PRINT SIZE :" + String(maxMhzRssi.size()));
+
     int lx = 0;
     int ly = 0;
     int i = 0;
+    String frSign = ":";
     for (const auto &pair : maxMhzRssi)
     {
         if (i == 0 && maxMhzRssi.size() > 0)
         {
             display.clear();
         }
+
         int16_t rssi = pair.second;
         int16_t fr = (int)pair.first;
 
-        Serial.println("PRINT FR:" + String(fr) + ":" + String(rssi) + " lx " +
-                       String(lx));
+        if (historyRSSI.find(fr) != historyRSSI.end())
+        {
+            // Clear old RSSI
+            if (millis() - historyRSSI[fr].time > 60 * 1000)
+            {
+                historyRSSI.erase(fr);
+            }
+            else
+            {
+                if (abs(historyRSSI[fr].rssi) > abs(rssi))
+                {
+                    frSign = "<";
+                }
+                else if (abs(historyRSSI[fr].rssi) < abs(rssi))
+                {
+                    frSign = ">";
+                }
+                else
+                {
+                    frSign = "=";
+                }
+            }
+        }
+
+        // Save previous value
+        historyRSSI[fr] = {(short)abs(rssi), millis()};
+        Serial.println("RSSI:" + String(historyRSSI[fr].rssi) + "/" +
+                       String(historyRSSI[fr].time) + ":" + String(millis()));
+
         // screen overflow protection
         if (lx < 130)
         {
 
-            display.drawString(lx, ly, String(fr) + ":" + String(rssi));
-            Serial.println("PRINT FR:" + String(fr) + ":" + String(rssi));
+            display.drawString(lx, ly, String(fr) + frSign + String(rssi));
+
             // go to next line
             ly = ly + 10;
-            if (ly > 60)
+            if (ly > 55)
             {
                 ly = 0;
 
@@ -1666,8 +1715,8 @@ void sendMessage(RoutedMessage &m)
     {
         if (config.is_host && TxComms != NULL)
         {
-            checkRadio(*TxComms); // waiting for peer to squak first, so message sending
-                                  // will land on the receiving cycle
+            checkRadio(*TxComms); // waiting for peer to squak first, so message
+                                  // sending will land on the receiving cycle
         }
 
         loraSendMessage(*m.message);
@@ -2216,8 +2265,6 @@ void doScan()
 #endif
 }
 
-std::unordered_map<int, int> previousPac = {/*{916, true}, {915, true}*/};
-
 std::unordered_map<int, int16_t> findMaxRssi(int16_t *rssis, uint32_t *freqs_khz,
                                              int dump_sz, int level)
 {
@@ -2238,7 +2285,6 @@ std::unordered_map<int, int16_t> findMaxRssi(int16_t *rssis, uint32_t *freqs_khz
             }
         }
     }
-
     return maxRssiPerMHz;
 }
 
