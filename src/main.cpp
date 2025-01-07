@@ -97,8 +97,10 @@ unsigned int osdCyclesCount = 0;
 #define OSD_MAX_CLEAR_CYCLES 10
 #ifdef OSD_ENABLED
 #include "DFRobot_OSD.h"
-#define SIDEBAR_START_COL 2
-#define SIDEBAR_END_COL 10
+#define SIDEBAR_START_ROW 1
+#define SIDEBAR_END_ROW 10
+// Set SIDEBAR_POSITION to 1 to right side
+#define SIDEBAR_POSITION OSD_WIDTH - 7
 // #define SIDEBAR_ACCENT_ONLY 1
 #define SIDEBAR_DB_LEVEL 80 // Absolute value without minus
 #define SIDEBAR_DB_DELTA 2  // detect changes <> threshold
@@ -125,6 +127,10 @@ int global_counter = 0;
 
 #ifdef OSD_ENABLED
 DFRobot_OSD osd(OSD_CS);
+#endif
+
+#ifndef OSD_BAR_CHAR
+#define OSD_BAR_CHAR "."
 #endif
 
 #include "global_config.h"
@@ -309,9 +315,50 @@ scanWiFi(osd)
 
 void osdPrintSignalLevelChart(int col, int signal_value)
 {
+#ifdef METHOD_RSSI
+    signal_value = (signal_value / 6);
+#endif
+    int barSize = 5;
+    int maxLevel = 30;
+    int dbPerChar = (maxLevel - drone_detection_level) / 5;
+    // signal_value = abs(signal_value);
+
+#ifdef OSD_DOT_DISPLAY
+
+    if (signal_value <= drone_detection_level)
+    {
+        for (int i = 0; i <= barSize; i++)
+        {
+            if (i < (drone_detection_level - signal_value) / dbPerChar)
+            {
+                osd.displayString(15 - i, col, OSD_BAR_CHAR);
+                // osd.displayString(5, col, "s:" + String(signal_value));
+                // osd.displayString(
+                //   6, col, String((drone_detection_level - signal_value) / dbPerChar));
+            }
+            else
+            {
+                osd.displayString(15 - i, col, " ");
+                // osd.displayString(15 - i - 1, col, " ");
+                // break;
+            }
+        }
+    }
+    else
+    {
+        for (int i = 0; i <= barSize; i++)
+        {
+            // Clear bar
+            osd.displayString(15 - i, col, " ");
+        }
+    }
+
+#else
+
     // Third line
     if (signal_value <= 9 && signal_value <= drone_detection_level)
     {
+        osd.displayString(5, col, "s:" + String(signal_value));
         osd.displayChar(13, col + 2, 0x100);
         osd.displayChar(14, col + 2, 0x100);
         osd.displayChar(12, col + 2, selectFreqChar(signal_value, drone_detection_level));
@@ -331,13 +378,14 @@ void osdPrintSignalLevelChart(int col, int signal_value)
         osd.displayChar(13, col + 2, 0x100);
         osd.displayChar(14, col + 2, selectFreqChar(signal_value, drone_detection_level));
     }
+#endif
 }
 
 // Start Sidebar
-int sideBarCol = SIDEBAR_START_COL;
+int sideBarRow = SIDEBAR_START_ROW;
 
 std::unordered_map<int, bool> accentFreq = {{950, true}, {915, true}};
-
+int rowDebug = 0;
 void osdProcess()
 { // OSD enabled
     osdCyclesCount++;
@@ -345,7 +393,7 @@ void osdProcess()
     max_bin = 32;
 
     osd.displayString(12, 1, String(CONF_FREQ_BEGIN));
-    osd.displayString(12, OSD_WIDTH - 8, String(CONF_FREQ_END));
+    osd.displayString(12, OSD_WIDTH - 10, String(CONF_FREQ_END));
     // Finding biggest in result
     //  Skiping 0 and 32 31 to avoid overflow
     for (int i = 1; i < MAX_POWER_LEVELS - 3; i++)
@@ -372,7 +420,12 @@ void osdProcess()
         max_step_range = max_bin;
 // Store RSSI value for RSSI Method
 #ifdef METHOD_RSSI
-        max_step_range = result[max_bin];
+        if (result[max_bin] != 0)
+        {
+            max_step_range = result[max_bin];
+            // osd.displayString(rowDebug++, 0, String(max_step_range));
+            // sleep(1);
+        }
 #endif
     }
     // Going to the next OSD step
@@ -384,7 +437,7 @@ void osdProcess()
 #ifndef METHOD_RSSI
             if (max_step_range < 16)
             {
-                osd.displayString(sideBarCol++, OSD_WIDTH - 7,
+                osd.displayString(sideBarRow++, OSD_WIDTH - 7,
                                   String(CONF_FREQ_BEGIN + (col * osd_mhz_in_bin)) + "-" +
                                       String(max_step_range) + " ");
             }
@@ -432,7 +485,7 @@ void osdProcess()
                     printChar = printChar;
                 }
 
-                if (true || sideBarCol == SIDEBAR_START_COL || freqOSD % 100 == 0)
+                if (true || sideBarRow == SIDEBAR_START_ROW || freqOSD % 100 == 0)
                 {
                     freqOSDString = String(freqOSD);
                 }
@@ -442,7 +495,7 @@ void osdProcess()
                 }
 
                 long int osd_start = millis();
-                osd.displayString(sideBarCol++, OSD_WIDTH - 7,
+                osd.displayString(sideBarRow++, SIDEBAR_POSITION,
                                   freqOSDString + printChar + String(max_step_range) +
                                       " ");
                 long int osd_end = millis();
@@ -456,17 +509,17 @@ void osdProcess()
                 {
                     prevDBvalue[freqOSD] = 0;
                     // Clear sidebar 3 first values always on screen
-                    for (int i = sideBarCol + 3; i <= SIDEBAR_END_COL; i++)
+                    for (int i = sideBarRow + 3; i <= SIDEBAR_END_ROW; i++)
                     {
-                        osd.displayString(i++, OSD_WIDTH - 7, String("       "));
+                        osd.displayString(i++, SIDEBAR_POSITION, String("       "));
                     }
                     osdCyclesCount = 0;
                 }
             }
             // MAx down sidebar
-            if (sideBarCol >= SIDEBAR_END_COL)
+            if (sideBarRow >= SIDEBAR_END_ROW)
             {
-                sideBarCol = SIDEBAR_START_COL;
+                sideBarRow = SIDEBAR_START_ROW;
             }
 
 #endif
@@ -477,8 +530,11 @@ void osdProcess()
 #ifdef METHOD_RSSI
         // With THe RSSI method we can get real RSSI value not just a bin
 #endif
-        // PRINT SIGNAL CHAR ROW, COL, VALUE
-        osdPrintSignalLevelChart(col, max_step_range);
+        if (max_step_range > 0)
+        {
+            // PRINT SIGNAL CHAR ROW, COL, VALUE
+            osdPrintSignalLevelChart(col, max_step_range);
+        }
 
 #ifdef PRINT_DEBUG
         Serial.println("MAX:" + String(max_step_range));
@@ -2262,7 +2318,7 @@ void doScan()
         bt_start = millis();
     }
 #endif
-    sideBarCol = SIDEBAR_START_COL;
+    sideBarRow = SIDEBAR_START_ROW;
 #endif
 }
 
