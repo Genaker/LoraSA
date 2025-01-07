@@ -55,6 +55,7 @@ struct ScanTaskResult
     size_t sz;
     uint32_t *freqs_khz;
     int16_t *rssis;
+    int16_t prssi;
 };
 
 struct ConfigTask

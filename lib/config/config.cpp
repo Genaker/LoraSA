@@ -350,7 +350,7 @@ LoRaConfig *configureLora(String cfg)
     LoRaConfig *lora = new LoRaConfig({
         freq : 0,
         bw : 500,
-        sf : 7,
+        sf : DEFAULT_LORA_SF,
         cr : 5,
         tx_power : DEFAULT_LORA_TX_POWER,
         preamble_len : 8,
