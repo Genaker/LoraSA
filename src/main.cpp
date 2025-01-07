@@ -1555,9 +1555,10 @@ void display_raw_scan(ScanTaskResult &dump)
     String frSign = ":";
     for (const auto &pair : maxMhzRssi)
     {
-        if (i == 0 && maxMhzRssi.size() > 0)
+        if (i == 0)
         {
             display.clear();
+            display.drawString(100, 0, "R:" + String(dump.prssi));
         }
 
         int16_t rssi = pair.second;
@@ -1610,10 +1611,8 @@ void display_raw_scan(ScanTaskResult &dump)
         }
         i++;
     }
-    if (maxMhzRssi.size() > 0)
-    {
-        display.display();
-    }
+
+    display.display();
 }
 /*
  * If m.to is LOOP, the message is directed at this module; enact the message.

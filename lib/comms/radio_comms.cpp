@@ -1,5 +1,7 @@
 #include "comms.h"
 
+int packetRssi = 0;
+
 int16_t RadioComms::configureRadio()
 {
     int16_t status =
@@ -243,6 +245,7 @@ Message *_deserialize_scan_result(size_t len, size_t &p, uint8_t *packet)
     size_t rem = len - p;
 
     message->payload.dump.sz = dump_sz;
+    message->payload.dump.prssi = packetRssi;
     if (dump_sz > 0)
     {
         message->payload.dump.rssis = new int16_t[dump_sz];
@@ -381,6 +384,8 @@ Message *RadioComms::receive(uint16_t timeout_ms)
     }
     radio.clearDio1Action();
 
+    packetRssi = radio.getRSSI(true);
+    Serial.println("Lora Last Packet RSSI:" + String(packetRssi));
     size_t len = radio.getPacketLength(true);
     uint8_t *packet = msg;
 
