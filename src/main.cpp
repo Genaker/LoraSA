@@ -540,6 +540,9 @@ void osdProcess()
         Serial.println("MAX:" + String(max_step_range));
 #endif
         max_step_range = 32;
+#ifdef METHOD_RSSI
+        max_step_range = 120;
+#endif
         col++;
     }
     if (osdCyclesCount >= OSD_MAX_CLEAR_CYCLES)
