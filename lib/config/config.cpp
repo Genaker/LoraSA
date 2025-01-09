@@ -535,7 +535,7 @@ String Config::getConfig(String key)
     {
         return listen_on_usb;
     }
-
+    // Example: SET detection_strategy RSSI_MAX 900000..950000+390
     if (key.equalsIgnoreCase("detection_strategy"))
     {
         return detectionStrategyToStr(*this);

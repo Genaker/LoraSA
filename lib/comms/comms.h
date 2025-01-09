@@ -83,7 +83,6 @@ struct Endpoint
 {
     union
     {
-
         struct
         {
             uint8_t loop : 1, // self

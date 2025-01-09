@@ -137,10 +137,11 @@ def draw_histogram(stdscr, data, histogram_start_row, db_threshold, db_per_hash,
     """
     max_height, max_width = stdscr.getmaxyx()
 
+    histogram_height = 20
     # Clear the histogram area
-    clear_histogram_area(stdscr, histogram_start_row, 15, max_width)
+    clear_histogram_area(stdscr, histogram_start_row, histogram_height, max_width)
 
-    baseline_row = histogram_start_row + 12  # Set the baseline for bars
+    baseline_row = histogram_start_row + histogram_height  # Set the baseline for bars
     legend_start = baseline_row + 1          # Legends go below the baseline
 
     # Calculate maximum bar height
@@ -259,6 +260,9 @@ def read_serial_data(stdscr, port, baudrate, resolution_mhz, db_threshold, db_pe
                         use_color,
                         show_debug
                     )
+                elif response.startswith("LORA_RSSI"):
+                    stdscr.addstr(0, 0, "                               ", curses.color_pair(1)) 
+                    stdscr.addstr(0, 0, response + "dB", curses.color_pair(1)) 
                 else:
                     stdscr.refresh()
     except serial.SerialException as e:
