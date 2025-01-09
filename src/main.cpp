@@ -344,10 +344,6 @@ void osdPrintSignalLevelChart(int col, int signal_value)
         {
             if (i < (drone_detection_level - signal_value) / dbPerChar)
             {
-                if (i == 0)
-                {
-                    osd.displayString(OSD_CHART_START_ROW - i, col, ":");
-                }
                 osd.displayString(OSD_CHART_START_ROW - i, col, OSD_BAR_CHAR);
                 // osd.displayString(5, col, "s:" + String(signal_value));
                 // osd.displayString(
