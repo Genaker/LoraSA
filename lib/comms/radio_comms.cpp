@@ -385,7 +385,7 @@ Message *RadioComms::receive(uint16_t timeout_ms)
     radio.clearDio1Action();
 
     packetRssi = radio.getRSSI(true);
-    Serial.println("Lora Last Packet RSSI:" + String(packetRssi));
+    Serial.println("LORA_RSSI: " + String(packetRssi));
     size_t len = radio.getPacketLength(true);
     uint8_t *packet = msg;
 

@@ -238,6 +238,8 @@ uint64_t drone_detected_frequency_start = 0;
 uint64_t drone_detected_frequency_end = 0;
 bool single_page_scan = false;
 
+float vbat = 0;
+
 // #define PRINT_DEBUG
 
 #define PRINT_PROFILE_TIME
@@ -1133,7 +1135,7 @@ void setup(void)
     osd.displayString(14, 15, "    Lora SA");
     osd.displayString(2, 1, "   Spectral RF Analyzer");
 #endif
-    float vbat;
+
     float resolution;
     bt_start = millis();
     wf_start = millis();
