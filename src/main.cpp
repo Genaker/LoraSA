@@ -126,6 +126,10 @@ unsigned int osdCyclesCount = 0;
 #define OSD_X_START 1
 #define OSD_Y_START 16
 
+#ifndef OSD_CHART_START_COL
+#define OSD_CHART_START_COL 2
+#endif
+
 // TODO: Calculate dynamically:
 // osd_steps = osd_mhz_in_bin / (FM range / LORA radio x Steps)
 int osd_mhz_in_bin = 5;
@@ -271,7 +275,7 @@ HardwareSerial SerialPort(SERIAL_PORT);
 // #define WEB_SERVER true
 
 uint64_t x, y, w = WATERFALL_START, i = 0;
-int osd_x = 1, osd_y = 2, col = 0, max_bin = 32;
+int osd_x = 1, osd_y = 2, col = 0, colOSD = OSD_CHART_START_COL, max_bin = 32;
 
 int rssi = 0;
 int state = 0;
@@ -400,20 +404,20 @@ int sideBarRow = SIDEBAR_START_ROW;
 std::unordered_map<int, bool> accentFreq = {{950, true}, {915, true}};
 int accentSize = accentFreq.size();
 int rowDebug = 0;
+int indexAccent = 0;
+
 void osdProcess()
 { // OSD enabled
     osdCyclesCount++;
     // memset(max_step_range, 33, 30);
     max_bin = 32;
-    int index = 0;
 
-    osd.displayString(12, 1, String(CONF_FREQ_BEGIN));
-    osd.displayString(12, OSD_WIDTH - 10, String(CONF_FREQ_END));
+    osd.displayString(12, OSD_CHART_START_COL, String(CONF_FREQ_BEGIN));
+    osd.displayString(12, OSD_WIDTH - 10 + OSD_CHART_START_COL, String(CONF_FREQ_END));
     // Finding biggest in result
     //  Skiping 0 and 32 31 to avoid overflow
     for (int i = 1; i < MAX_POWER_LEVELS - 3; i++)
     {
-
         // filter
         if (result[i] > 0
 #if FILTER_SPECTRUM_RESULTS
@@ -520,10 +524,10 @@ void osdProcess()
                 }
                 else
                 {
-                    osd.displayString(index + sideBarRow++, SIDEBAR_POSITION,
+                    osd.displayString(SIDEBAR_START_ROW + indexAccent, SIDEBAR_POSITION,
                                       freqOSDString + printChar + String(max_step_range) +
                                           " ");
-                    index++;
+                    indexAccent++;
                 }
                 long int osd_end = millis();
                 // Serial.println("Time of EXecution: " + String((osd_end - osd_start)));
@@ -560,7 +564,7 @@ void osdProcess()
         if (max_step_range > 0)
         {
             // PRINT SIGNAL CHAR ROW, COL, VALUE
-            osdPrintSignalLevelChart(col, max_step_range);
+            osdPrintSignalLevelChart(colOSD, max_step_range);
         }
 
 #ifdef PRINT_DEBUG
@@ -570,6 +574,7 @@ void osdProcess()
 #ifdef METHOD_RSSI
         max_step_range = 120;
 #endif
+        colOSD++;
         col++;
     }
     if (osdCyclesCount >= OSD_MAX_CLEAR_CYCLES)
@@ -1969,7 +1974,8 @@ void doScan()
 
         // horizontal (x axis) Frequency loop
         osd_x = 1, osd_y = 2, col = 0, max_bin = 0;
-
+        colOSD = OSD_CHART_START_COL;
+        indexAccent = 0;
         // x loop
         for (int range = 0, step = 0; range < page.page_sz; range += (step == 0))
         {
