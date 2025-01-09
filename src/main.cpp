@@ -97,8 +97,15 @@ unsigned int osdCyclesCount = 0;
 #define OSD_MAX_CLEAR_CYCLES 10
 #ifdef OSD_ENABLED
 #include "DFRobot_OSD.h"
+#ifndef SIDEBAR_START_ROW
 #define SIDEBAR_START_ROW 1
+#endif
+#ifndef SIDEBAR_END_ROW
 #define SIDEBAR_END_ROW 10
+#endif
+#ifndef OSD_CHART_START_ROW
+#define OSD_CHART_START_ROW 14
+#endif
 // Set SIDEBAR_POSITION to 1 to right side
 #define SIDEBAR_POSITION OSD_WIDTH - 7
 // #define SIDEBAR_ACCENT_ONLY 1
@@ -333,14 +340,18 @@ void osdPrintSignalLevelChart(int col, int signal_value)
         {
             if (i < (drone_detection_level - signal_value) / dbPerChar)
             {
-                osd.displayString(15 - i, col, OSD_BAR_CHAR);
+                if (i == 0)
+                {
+                    osd.displayString(OSD_CHART_START_ROW - i, col, ":");
+                }
+                osd.displayString(OSD_CHART_START_ROW - i, col, OSD_BAR_CHAR);
                 // osd.displayString(5, col, "s:" + String(signal_value));
                 // osd.displayString(
                 //   6, col, String((drone_detection_level - signal_value) / dbPerChar));
             }
             else
             {
-                osd.displayString(15 - i, col, " ");
+                osd.displayString(OSD_CHART_START_ROW - i, col, " ");
                 // osd.displayString(15 - i - 1, col, " ");
                 // break;
             }
@@ -351,7 +362,7 @@ void osdPrintSignalLevelChart(int col, int signal_value)
         for (int i = 0; i <= barSize; i++)
         {
             // Clear bar
-            osd.displayString(15 - i, col, " ");
+            osd.displayString(OSD_CHART_START_ROW - i, col, " ");
         }
     }
 
@@ -571,6 +582,7 @@ float getRSSI(void *param)
     // Try getRssiInst
     float rssi;
     radio.getRssiInst(&rssi);
+    Serial.println("RSSI: " + String(rssi));
     // pass the replies
     return rssi;
 #else
@@ -613,7 +625,7 @@ int16_t initForScan(float freq)
 #if defined(USING_SX1280PA)
     state = radio.beginGFSK(freq);
 #elif defined(USING_LR1121)
-    state = radio.beginGFSK(freq, 4.8F, 5.0F, 156.2F, 10, 16U, 1.7F);
+    state = radio.beginGFSK(freq, 4.8F, 5.0F, 156.2F, 10, 16U, 1.6F);
 #else
     state = radio.beginFSK(freq);
 #endif
@@ -1588,7 +1600,6 @@ std::unordered_map<int, int16_t> findMaxRssi(int16_t *rssis, uint32_t *freqs_khz
 
 void dumpHashMap(const std::unordered_map<unsigned int, RSSIData> &map)
 {
-
     for (const auto &entry : map)
     {
         Serial.println("Key: " + String(entry.first) +
@@ -1665,7 +1676,6 @@ void display_raw_scan(ScanTaskResult &dump)
             if (ly > 55)
             {
                 ly = 0;
-
                 // go to next column
                 lx = lx + 45;
             }
