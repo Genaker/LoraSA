@@ -398,12 +398,14 @@ void osdPrintSignalLevelChart(int col, int signal_value)
 int sideBarRow = SIDEBAR_START_ROW;
 
 std::unordered_map<int, bool> accentFreq = {{950, true}, {915, true}};
+int accentSize = accentFreq.size();
 int rowDebug = 0;
 void osdProcess()
 { // OSD enabled
     osdCyclesCount++;
     // memset(max_step_range, 33, 30);
     max_bin = 32;
+    int index = 0;
 
     osd.displayString(12, 1, String(CONF_FREQ_BEGIN));
     osd.displayString(12, OSD_WIDTH - 10, String(CONF_FREQ_END));
@@ -510,9 +512,19 @@ void osdProcess()
                 }
 
                 long int osd_start = millis();
-                osd.displayString(sideBarRow++, SIDEBAR_POSITION,
-                                  freqOSDString + printChar + String(max_step_range) +
-                                      " ");
+                if (accentFreq[freqOSD] == false)
+                {
+                    osd.displayString(accentSize + sideBarRow++, SIDEBAR_POSITION,
+                                      freqOSDString + printChar + String(max_step_range) +
+                                          " ");
+                }
+                else
+                {
+                    osd.displayString(index + sideBarRow++, SIDEBAR_POSITION,
+                                      freqOSDString + printChar + String(max_step_range) +
+                                          " ");
+                    index++;
+                }
                 long int osd_end = millis();
                 // Serial.println("Time of EXecution: " + String((osd_end - osd_start)));
                 prevDBvalue[freqOSD] = max_step_range;
