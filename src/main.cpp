@@ -433,6 +433,8 @@ void osdProcess()
         max_step_range = max_bin;
 // Store RSSI value for RSSI Method
 #ifdef METHOD_RSSI
+        // set to the min RSSI value
+        max_step_range = 120;
         if (result[max_bin] != 0)
         {
             max_step_range = result[max_bin];
