@@ -137,10 +137,10 @@ def draw_histogram(stdscr, data, histogram_start_row, db_threshold, db_per_hash,
     """
     max_height, max_width = stdscr.getmaxyx()
 
-    # Clear the histogram area
-    clear_histogram_area(stdscr, histogram_start_row, 15, max_width)
-
     histogram_height = 20
+    # Clear the histogram area
+    clear_histogram_area(stdscr, histogram_start_row, histogram_height, max_width)
+
     baseline_row = histogram_start_row + histogram_height  # Set the baseline for bars
     legend_start = baseline_row + 1          # Legends go below the baseline
 
