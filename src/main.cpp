@@ -136,6 +136,11 @@ int osd_mhz_in_bin = 5;
 int osd_steps = 12;
 int global_counter = 0;
 
+std::unordered_map<int, bool> accentFreq = {{950, true}, {915, true}};
+int accentSize = accentFreq.size();
+int indexAccent = 0;
+int rowDebug = 0;
+
 #ifdef OSD_ENABLED
 DFRobot_OSD osd(OSD_CS);
 #endif
@@ -397,11 +402,6 @@ void osdPrintSignalLevelChart(int col, int signal_value)
 // Start Sidebar
 int sideBarRow = SIDEBAR_START_ROW;
 
-std::unordered_map<int, bool> accentFreq = {{950, true}, {915, true}};
-int accentSize = accentFreq.size();
-int rowDebug = 0;
-int indexAccent = 0;
-
 void osdProcess()
 { // OSD enabled
     osdCyclesCount++;
@@ -641,6 +641,27 @@ int16_t initForScan(float freq)
     state = radio.beginGFSK(freq);
 #elif defined(USING_LR1121)
     state = radio.beginGFSK(freq, 4.8F, 5.0F, 156.2F, 10, 16U, 1.6F);
+    // RF Switch info Provided by LilyGo support:
+    // https://github.com/Xinyuan-LilyGO/LilyGo-LoRa-Series/blob/f2d3d995cba03c65a7031c73e212f106b03c95a2/examples/RadioLibExamples/Receive_Interrupt/Receive_Interrupt.ino#L279
+
+    // LR1121
+    // set RF switch configuration for Wio WM1110
+    // Wio WM1110 uses DIO5 and DIO6 for RF switching
+    static const uint32_t rfswitch_dio_pins[] = {RADIOLIB_LR11X0_DIO5,
+                                                 RADIOLIB_LR11X0_DIO6, RADIOLIB_NC,
+                                                 RADIOLIB_NC, RADIOLIB_NC};
+
+    static const Module::RfSwitchMode_t rfswitch_table[] = {
+        // mode                  DIO5  DIO6
+        {LR11x0::MODE_STBY, {LOW, LOW}},  {LR11x0::MODE_RX, {HIGH, LOW}},
+        {LR11x0::MODE_TX, {LOW, HIGH}},   {LR11x0::MODE_TX_HP, {LOW, HIGH}},
+        {LR11x0::MODE_TX_HF, {LOW, LOW}}, {LR11x0::MODE_GNSS, {LOW, LOW}},
+        {LR11x0::MODE_WIFI, {LOW, LOW}},  END_OF_MODE_TABLE,
+    };
+    radio.setRfSwitchTable(rfswitch_dio_pins, rfswitch_table);
+
+    // LR1121 TCXO Voltage 2.85~3.15V
+    radio.setTCXO(3.0);
 #else
     state = radio.beginFSK(freq);
 #endif
