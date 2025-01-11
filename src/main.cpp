@@ -597,8 +597,8 @@ float getRSSI(void *param)
     // Try getRssiInst
     float rssi;
     radio.getRssiInst(&rssi);
-    Serial.println("RSSI: " + String(rssi));
-    // pass the replies
+    // Serial.println("RSSI: " + String(rssi));
+    //   pass the replies
     return rssi;
 #else
     return radio.getRSSI(false);
@@ -666,6 +666,32 @@ int16_t initForScan(float freq)
     state = radio.beginFSK(freq);
 #endif
 
+    int gotoAcounter = 0;
+A:
+#ifdef METHOD_RSSI
+    // TODO: try RADIOLIB_SX126X_RX_TIMEOUT_INF
+#ifdef USING_SX1280PA
+    state = radio.startReceive(RADIOLIB_SX128X_RX_TIMEOUT_NONE);
+#else
+    state = radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_NONE);
+#endif
+
+    if (state != RADIOLIB_ERR_NONE)
+    {
+        Serial.print(F("Failed to start receive mode, error code: "));
+        display.drawString(0, 64 - 10, "E:startReceive");
+        display.display();
+        delay(10000);
+        Serial.println(state);
+        gotoAcounter++;
+        if (gotoAcounter < 5)
+        {
+            goto A;
+        }
+    }
+
+#endif
+
     return state;
 }
 
@@ -673,6 +699,7 @@ bool setFrequency(float curr_freq)
 {
     r.current_frequency = curr_freq;
     LOG("setFrequency:%f\n", r.current_frequency);
+    // Serial.println("setFrequency:" + String(curr_freq));
 
     int16_t state;
 #ifdef USING_SX1280PA
@@ -687,7 +714,35 @@ bool setFrequency(float curr_freq)
 
     state = state1;
 #elif USING_SX1276
-    state = radio.setFrequency(freq);
+    state = radio.setFrequency(r.current_frequency);
+#elif USING_LR1121
+    state = radio.setRfFrequency((uint32_t)(r.current_frequency * 1000000.0f));
+    // TODO: make calibration
+    // bool skipCalibration = false;
+    /**
+   if(!(((freq >= 150.0) && (freq <= 960.0)) ||
+     ((freq >= 1900.0) && (freq <= 2200.0)) ||
+     ((freq >= 2400.0) && (freq <= 2500.0)))) {
+       return(RADIOLIB_ERR_INVALID_FREQUENCY);
+   }**/
+
+    // check if we need to recalibrate image
+    // int16_t state;
+    /*
+    if (!skipCalibration && (fabsf(r.current_frequency - radio.freqMHz) >=
+                             RADIOLIB_LR11X0_CAL_IMG_FREQ_TRIG_MHZ))
+    {
+        state = radio.calibrateImageRejection(r.current_frequency, r.current_frequency);
+        RADIOLIB_ASSERT(state);
+    }
+
+    // set frequency
+    state = radio.setRfFrequency((uint32_t)(r.current_frequency * 1000000.0f));
+    RADIOLIB_ASSERT(state);
+    radio.freqMHz = r.current_frequency;
+    radio.highFreq = (r.current_frequency > 1000.0);
+    */
+
 #else
     state = radio.setFrequency(r.current_frequency,
                                true); // false = calibration is needed here
@@ -711,8 +766,11 @@ void init_radio()
 {
     // initialize SX1262 FSK modem at the initial frequency
     both.println("Init radio");
+#ifndef INIT_FREQ
     state = initForScan(CONF_FREQ_BEGIN);
-
+#else
+    state = initForScan(INIT_FREQ);
+#endif
     if (state == RADIOLIB_ERR_NONE)
     {
         radioIsScan = true;
@@ -1352,23 +1410,6 @@ void setup(void)
     init_fonts();
     Serial.println();
 
-#ifdef METHOD_RSSI
-    // TODO: try RADIOLIB_SX126X_RX_TIMEOUT_INF
-#ifdef USING_SX1280PA
-    state = radio.startReceive(RADIOLIB_SX128X_RX_TIMEOUT_NONE);
-#else
-    state = radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_NONE);
-#endif
-
-    if (state != RADIOLIB_ERR_NONE)
-    {
-        Serial.print(F("Failed to start receive mode, error code: "));
-        display.drawString(0, 64 - 10, "E:startReceive");
-        display.display();
-        delay(500);
-        Serial.println(state);
-    }
-#endif
     // waterfall start line y-axis
     w = WATERFALL_START;
 #ifdef OSD_ENABLED
@@ -1936,6 +1977,9 @@ void doScan()
     if (!radioIsScan)
     {
         radioIsScan = true;
+#ifdef INIT_FREQ
+        CONF_FREQ_BEGIN = INIT_FREQ;
+#endif
         initForScan(CONF_FREQ_BEGIN);
         state = radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_NONE);
     }
