@@ -29,6 +29,7 @@
 #include <ESPAsyncWebServer.h>
 #include <File.h>
 #include <LittleFS.h>
+#include <Wire.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <unordered_map>
@@ -112,12 +113,20 @@ unsigned int osdCyclesCount = 0;
 #define SIDEBAR_DB_LEVEL 80 // Absolute value without minus
 #define SIDEBAR_DB_DELTA 2  // detect changes <> threshold
 
+#ifdef LILYGO
+#define OSD_SCK 38
+#define OSD_CS 39
+#define OSD_MISO 40
+#define OSD_MOSI 41
+#else
 // SPI pins
+#define OSD_SCK 26
 #define OSD_CS 47
 #define OSD_MISO 33
 #define OSD_MOSI 34
-#define OSD_SCK 26
 #endif
+
+#endif // End OSD_ENABLED
 
 #define OSD_WIDTH 30
 #define OSD_HEIGHT 16
@@ -152,6 +161,10 @@ DFRobot_OSD osd(OSD_CS);
 #include "global_config.h"
 #include "ui.h"
 
+#ifdef COMPASS_ENABLED
+#include <HMC5883L_Simple.h>
+HMC5883L_Simple Compass;
+#endif
 // -----------------------------------------------------------------
 // CONFIGURATION OPTIONS
 // -----------------------------------------------------------------
@@ -1462,6 +1475,39 @@ void setup(void)
 
     r.addEventListener(ALL_EVENTS, eventListenerForReport, NULL);
 
+#ifdef COMPASS_ENABLED
+    Wire1.end();
+    Wire1.begin(46, 42);
+    // Wire1.begin();
+    Serial.println("Scanning...");
+    for (uint8_t addr = 1; addr < 127; addr++)
+    {
+        Wire1.beginTransmission(addr);
+        if (Wire1.endTransmission() == 0)
+        {
+            Serial.print("I2C device found at address 0x");
+            Serial.println(addr, HEX);
+        }
+    }
+    Serial.println("Done.");
+    Compass.SetDeclination(23, 35, 'E');
+    Compass.SetSamplingMode(COMPASS_SINGLE);
+    Compass.SetScale(COMPASS_SCALE_130);
+    // To allow you to mount the compass in different ways you can specify the
+    // orientation:
+    //   COMPASS_HORIZONTAL_X_NORTH (default), the compass is oriented horizontally,
+    //   top-side up. when pointing North the X silkscreen arrow will point North
+    //   COMPASS_HORIZONTAL_Y_NORTH, top-side up, Y is the needle,when pointing North the
+    //   Y silkscreen arrow will point North COMPASS_VERTICAL_X_EAST,    vertically
+    //   mounted (tall) looking at the top side, when facing North the X silkscreen arrow
+    //   will point East COMPASS_VERTICAL_Y_WEST,    vertically mounted (wide) looking at
+    //   the top side, when facing North the Y silkscreen arrow will point West
+    Compass.SetOrientation(COMPASS_HORIZONTAL_X_NORTH);
+
+    Serial.println("QMC5883L Compass Init Done");
+    Serial.println("Turn compass in all directions to calibrate....");
+#endif
+
 #ifdef UPTIME_CLOCK
     uptime = new UptimeClock(display, millis());
 #endif
@@ -1970,6 +2016,19 @@ void loop(void)
         doScan();
         reportScan();
     }
+#ifdef COMPASS_ENABLED
+    float heading = Compass.GetHeadingDegrees();
+    if (heading == 0)
+    {
+        /* Still calibrating, so measure but don't print */
+    }
+    else
+    {
+        Serial.println("Compass Heading: " + String(heading));
+        display.drawString(40, 0, String(heading));
+        display.display();
+    }
+#endif
 }
 
 void doScan()

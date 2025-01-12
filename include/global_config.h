@@ -25,6 +25,8 @@
 
 #ifdef LILYGO
 #define BUZZER_PIN 45
+#define COMPASS_SCL 42
+#define COMPASS_SDA 46
 #endif
 #ifdef T3_V1_6_SX1276
 #define BUZZER_PIN 35
