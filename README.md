@@ -336,6 +336,14 @@ Video Out - Video IN <br />
 #define OSD_MOSI 34
 #define OSD_SCK 26
 ```
+FOR LYLIGO board
+
+```
+#define OSD_SCK 38
+#define OSD_CS 39
+#define OSD_MISO 40
+#define OSD_MOSI 41
+```
 
 </details>
 

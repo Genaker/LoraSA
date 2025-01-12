@@ -162,8 +162,39 @@ DFRobot_OSD osd(OSD_CS);
 #include "ui.h"
 
 #ifdef COMPASS_ENABLED
-#include <HMC5883L_Simple.h>
-HMC5883L_Simple Compass;
+#include <Adafruit_HMC5883_U.h>
+#include <Adafruit_Sensor.h>
+/* Assign a unique ID to this sensor at the same time */
+Adafruit_HMC5883_Unified mag = Adafruit_HMC5883_Unified(12345);
+void displaySensorDetails(void)
+{
+    sensor_t sensor;
+    mag.getSensor(&sensor);
+    Serial.println("------------------------------------");
+    Serial.print("Sensor:       ");
+    Serial.println(sensor.name);
+    Serial.print("Driver Ver:   ");
+    Serial.println(sensor.version);
+    Serial.print("Unique ID:    ");
+    Serial.println(sensor.sensor_id);
+    Serial.print("Max Value:    ");
+    Serial.print(sensor.max_value);
+    Serial.println(" uT");
+    Serial.print("Min Value:    ");
+    Serial.print(sensor.min_value);
+    Serial.println(" uT");
+    Serial.print("Resolution:   ");
+    Serial.print(sensor.resolution);
+    Serial.println(" uT");
+    Serial.println("------------------------------------");
+    Serial.println("");
+    delay(500);
+}
+
+// Variables for dynamic calibration
+float x_min = 1000, x_max = -1000;
+float y_min = 1000, y_max = -1000;
+float z_min = 1000, z_max = -1000;
 #endif
 // -----------------------------------------------------------------
 // CONFIGURATION OPTIONS
@@ -1476,36 +1507,23 @@ void setup(void)
     r.addEventListener(ALL_EVENTS, eventListenerForReport, NULL);
 
 #ifdef COMPASS_ENABLED
+    Serial.println("Compass Init Start");
     Wire1.end();
     Wire1.begin(46, 42);
-    // Wire1.begin();
-    Serial.println("Scanning...");
-    for (uint8_t addr = 1; addr < 127; addr++)
-    {
-        Wire1.beginTransmission(addr);
-        if (Wire1.endTransmission() == 0)
-        {
-            Serial.print("I2C device found at address 0x");
-            Serial.println(addr, HEX);
-        }
-    }
-    Serial.println("Done.");
-    Compass.SetDeclination(23, 35, 'E');
-    Compass.SetSamplingMode(COMPASS_SINGLE);
-    Compass.SetScale(COMPASS_SCALE_130);
-    // To allow you to mount the compass in different ways you can specify the
-    // orientation:
-    //   COMPASS_HORIZONTAL_X_NORTH (default), the compass is oriented horizontally,
-    //   top-side up. when pointing North the X silkscreen arrow will point North
-    //   COMPASS_HORIZONTAL_Y_NORTH, top-side up, Y is the needle,when pointing North the
-    //   Y silkscreen arrow will point North COMPASS_VERTICAL_X_EAST,    vertically
-    //   mounted (tall) looking at the top side, when facing North the X silkscreen arrow
-    //   will point East COMPASS_VERTICAL_Y_WEST,    vertically mounted (wide) looking at
-    //   the top side, when facing North the Y silkscreen arrow will point West
-    Compass.SetOrientation(COMPASS_HORIZONTAL_X_NORTH);
 
-    Serial.println("QMC5883L Compass Init Done");
-    Serial.println("Turn compass in all directions to calibrate....");
+    Serial.println("Compass BEGIN");
+    Serial.println("HMC5883 Magnetometer Test");
+
+    /* Initialise the sensor */
+    if (!mag.begin())
+    {
+        /* There was a problem detecting the HMC5883 ... check your connections */
+        Serial.println("Ooops, no HMC5883 detected ... Check your wiring!");
+    }
+
+    /* Display some basic information on this sensor */
+    displaySensorDetails();
+    Serial.println("Compass Success!!!");
 #endif
 
 #ifdef UPTIME_CLOCK
@@ -2017,17 +2035,93 @@ void loop(void)
         reportScan();
     }
 #ifdef COMPASS_ENABLED
-    float heading = Compass.GetHeadingDegrees();
-    if (heading == 0)
-    {
-        /* Still calibrating, so measure but don't print */
-    }
-    else
-    {
-        Serial.println("Compass Heading: " + String(heading));
-        display.drawString(40, 0, String(heading));
-        display.display();
-    }
+    /* Get a new sensor event */
+    sensors_event_t event;
+    mag.getEvent(&event);
+
+#ifdef COMPASS_DEBUG
+    /* Display the results (magnetic vector values are in micro-Tesla (uT)) */
+    Serial.print("X: ");
+    Serial.print(event.magnetic.x);
+    Serial.print("  ");
+    Serial.print("Y: ");
+    Serial.print(event.magnetic.y);
+    Serial.print("  ");
+    Serial.print("Z: ");
+    Serial.print(event.magnetic.z);
+    Serial.print("  ");
+    Serial.println("uT");
+#endif
+
+    // Hold the module so that Z is pointing 'up' and you can measure the heading with x&y
+    // Calculate heading when the magnetometer is level, then correct for signs of axis.
+    // float heading = atan2(event.magnetic.y, event.magnetic.x);
+    // Use Y as the forward axis
+    // float heading = atan2(event.magnetic.x, event.magnetic.y);
+    /// If Z-axis is forward and Y-axis points upward:
+    // float heading = atan2(event.magnetic.x, event.magnetic.y);
+    //  If Z-axis is forward and X-axis points upward:
+    //  float heading = atan2(event.magnetic.y, -event.magnetic.x);
+
+    // heading based on the magnetic readings from the Z-axis (forward) and the X-axis
+    // (perpendicular to Z, horizontal).
+    // float heading = atan2(event.magnetic.z, event.magnetic.x);
+
+    // Dynamicly Calibrated out
+
+    // Read raw magnetometer data
+    float x = event.magnetic.x;
+    float y = event.magnetic.y;
+    float z = event.magnetic.z;
+
+    // Update min/max values dynamically
+    x_min = min(x_min, x);
+    x_max = max(x_max, x);
+    y_min = min(y_min, y);
+    y_max = max(y_max, y);
+    z_min = min(z_min, z);
+    z_max = max(z_max, z);
+
+    // Calculate offsets and scales in real-time
+    float x_offset = (x_max + x_min) / 2;
+    float y_offset = (y_max + y_min) / 2;
+    float z_offset = (z_max + z_min) / 2;
+
+    float x_scale = (x_max - x_min) / 2;
+    float y_scale = (y_max - y_min) / 2;
+    float z_scale = (z_max - z_min) / 2;
+
+    // Apply calibration to raw data
+    float calibrated_x = (x - x_offset) / x_scale;
+    float calibrated_y = (y - y_offset) / y_scale;
+    float calibrated_z = (z - z_offset) / z_scale;
+
+    // Calculate heading using Z-axis forward, X-axis horizontal
+    float heading = atan2(calibrated_z, calibrated_x);
+
+    // Once you have your heading, you must then add your 'Declination Angle', which is
+    // the 'Error' of the magnetic field in your location. Find yours here:
+    // http://www.magnetic-declination.com/ Mine is: -13* 2' W, which is ~13 Degrees, or
+    // (which we need) 0.22 radians If you cannot find your Declination, comment out these
+    // two lines, your compass will be slightly off.
+    float declinationAngle = 0.22;
+    heading += declinationAngle;
+
+    // Correct for when signs are reversed.
+    if (heading < 0)
+        heading += 2 * PI;
+
+    // Check for wrap due to addition of declination.
+    if (heading > 2 * PI)
+        heading -= 2 * PI;
+
+    // Convert radians to degrees for readability.
+    float headingDegrees = heading * 180 / M_PI;
+
+    Serial.println("Heading (degrees): " + String(headingDegrees));
+    /// Serial.println();
+    display.drawString(80, 0, String((int)headingDegrees));
+    display.display();
 #endif
 }
 
