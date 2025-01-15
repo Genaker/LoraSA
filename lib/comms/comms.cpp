@@ -392,6 +392,14 @@ Message *_parsePacket(String p)
         return m;
     }
 
+    if (cmd.equalsIgnoreCase("heading"))
+    {
+        Message *m = new Message();
+        m->type = MessageType::HEADING;
+        m->payload.heading.heading = _intParam(p, 0);
+        return m;
+    }
+
     return NULL;
 }
 
