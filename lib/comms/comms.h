@@ -90,6 +90,7 @@ struct Endpoint
 {
     union
     {
+
         struct
         {
             uint8_t loop : 1, // self
@@ -158,14 +159,35 @@ extern Comms *Comms0;
 
 extern Comms *Comms1;
 
+struct LoRaStats
+{
+    uint64_t t0;
+    int64_t rssi_60;
+    int64_t snr_60;
+
+    int16_t last_rssi;
+    int16_t last_snr;
+
+    int64_t messages_60;
+    int64_t errors_60;
+
+    LoRaStats()
+        : t0(0), rssi_60(0), snr_60(0), last_rssi(0), last_snr(0), messages_60(0),
+          errors_60(0)
+    {
+    }
+};
+
 struct RadioComms
 {
     String name;
     RADIO_TYPE &radio;
     LoRaConfig &loraCfg;
 
+    LoRaStats stats;
+
     RadioComms(String name, RADIO_TYPE &radio, LoRaConfig &cfg)
-        : name(name), radio(radio), loraCfg(cfg)
+        : name(name), radio(radio), loraCfg(cfg), stats()
     {
     }
 
@@ -175,6 +197,15 @@ struct RadioComms
     int16_t send(Message &);
     Message *receive(uint16_t timeout_ms);
 };
+
+uint16_t crc16(uint16_t poly, uint16_t c, size_t sz, uint8_t *v);
+
+/*
+ * Given halflife (i.e. time it takes the accumulator to decay to 50%), compute
+ * the updated cumulate at new time. That is, acc_now = decay(acc_t, inc).
+ */
+int64_t updateExpDecay(uint16_t halflife, int64_t acc, uint64_t t, uint64_t now,
+                       int64_t inc);
 
 extern RadioComms *RxComms;
 extern RadioComms *TxComms;

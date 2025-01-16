@@ -46,6 +46,8 @@ struct LoRaConfig
     uint16_t preamble_len;
     uint8_t sync_word;
     bool crc;
+    uint16_t crc_seed;
+    uint16_t crc_poly;
     uint8_t implicit_header;
 };
 
