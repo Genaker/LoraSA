@@ -146,6 +146,7 @@ int osd_steps = 12;
 int global_counter = 0;
 
 std::unordered_map<int, bool> accentFreq = {{950, true}, {915, true}};
+std::unordered_map<int, int> freqX = {};
 int accentSize = accentFreq.size();
 int indexAccent = 0;
 int rowDebug = 0;
@@ -244,7 +245,9 @@ uint64_t CONF_FREQ_END, CONF_FREQ_BEGIN; // To Enable Multi Screen scan
 //  Default Range on Menu Button Switch
 
 // multiplies STEPS * N to increase scan resolution.
+#if !defined(SCAN_RBW_FACTOR)
 #define SCAN_RBW_FACTOR 2
+#endif
 
 #ifdef USING_SX1280PA
 #define SCAN_RBW_FACTOR 2
@@ -265,6 +268,7 @@ bool ANIMATED_RELOAD = false;
 constexpr bool DRAW_DETECTION_TICKS = true;
 int16_t max_x_rssi[STEPS] = {999};
 int16_t max_x_window[STEPS / 14] = {999};
+int16_t xRSSI[STEPS];
 int x_window = 0;
 constexpr int WINDOW_SIZE = 15;
 // Number of samples for each frequency scan. Fewer samples = better temporal resolution.
@@ -626,23 +630,44 @@ void osdProcess()
 
 Config config;
 
+void setLRFreq(float freq)
+{
+    bool skipCalibration = false;
+    /**
+   if(!(((freq >= 150.0) && (freq <= 960.0)) ||
+     ((freq >= 1900.0) && (freq <= 2200.0)) ||
+     ((freq >= 2400.0) && (freq <= 2500.0)))) {
+       return(RADIOLIB_ERR_INVALID_FREQUENCY);
+   }**/
+
+    // check if we need to recalibrate image
+    // int16_t state;
+
+    if (!true && (fabsf(freq - radio.freqMHz) >= RADIOLIB_LR11X0_CAL_IMG_FREQ_TRIG_MHZ))
+    {
+        state = radio.calibrateImageRejection(freq - 4, freq + 4);
+        // RADIOLIB_ASSERT(state);
+    }
+
+    // set frequency
+    state = radio.setRfFrequency((uint32_t)(freq * 1000000.0f));
+    // RADIOLIB_ASSERT(state);
+    radio.freqMHz = freq;
+    radio.highFreq = (freq > 1000.0);
+}
+
 float getRSSI(void *param)
 {
     Scan *r = (Scan *)param;
 #if defined(USING_SX1280PA)
-    // radio.startReceive();
-    // get instantaneous RSSI value
-    // When PR will be merged we can use radi.getRSSI(false);
-    uint8_t data[3] = {0, 0, 0}; // RssiInst, Status, RFU
-    radio.mod->SPIreadStream(RADIOLIB_SX128X_CMD_GET_RSSI_INST, data, 3);
-    return ((float)data[0] / (-2.0));
-
+    // TODO: TEST new feature
+    radio.getRSSI(false);
 #elif defined(USING_LR1121)
     // Try getRssiInst
     float rssi;
     radio.getRssiInst(&rssi);
     // Serial.println("RSSI: " + String(rssi));
-    //   pass the replies
+    // pass the replies
     return rssi;
 #else
     return radio.getRSSI(false);
@@ -706,6 +731,7 @@ int16_t initForScan(float freq)
 
     // LR1121 TCXO Voltage 2.85~3.15V
     radio.setTCXO(3.0);
+    delay(1000);
 #else
     state = radio.beginFSK(freq);
 #endif
@@ -716,6 +742,8 @@ A:
     // TODO: try RADIOLIB_SX126X_RX_TIMEOUT_INF
 #ifdef USING_SX1280PA
     state = radio.startReceive(RADIOLIB_SX128X_RX_TIMEOUT_NONE);
+#elif USING_LR1121
+    state = radio.startReceive(RADIOLIB_LR11X0_RX_TIMEOUT_NONE);
 #else
     state = radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_NONE);
 #endif
@@ -725,7 +753,7 @@ A:
         Serial.print(F("Failed to start receive mode, error code: "));
         display.drawString(0, 64 - 10, "E:startReceive");
         display.display();
-        delay(10000);
+        delay(2000);
         Serial.println(state);
         gotoAcounter++;
         if (gotoAcounter < 5)
@@ -760,33 +788,11 @@ bool setFrequency(float curr_freq)
 #elif USING_SX1276
     state = radio.setFrequency(r.current_frequency);
 #elif USING_LR1121
-    state = radio.setRfFrequency((uint32_t)(r.current_frequency * 1000000.0f));
-    // TODO: make calibration
-    // bool skipCalibration = false;
-    /**
-   if(!(((freq >= 150.0) && (freq <= 960.0)) ||
-     ((freq >= 1900.0) && (freq <= 2200.0)) ||
-     ((freq >= 2400.0) && (freq <= 2500.0)))) {
-       return(RADIOLIB_ERR_INVALID_FREQUENCY);
-   }**/
-
-    // check if we need to recalibrate image
-    // int16_t state;
-    /*
-    if (!skipCalibration && (fabsf(r.current_frequency - radio.freqMHz) >=
-                             RADIOLIB_LR11X0_CAL_IMG_FREQ_TRIG_MHZ))
-    {
-        state = radio.calibrateImageRejection(r.current_frequency, r.current_frequency);
-        RADIOLIB_ASSERT(state);
-    }
-
-    // set frequency
-    state = radio.setRfFrequency((uint32_t)(r.current_frequency * 1000000.0f));
-    RADIOLIB_ASSERT(state);
-    radio.freqMHz = r.current_frequency;
-    radio.highFreq = (r.current_frequency > 1000.0);
-    */
-
+    // state = radio.setRfFrequency((uint32_t)(r.current_frequency * 1000000.0f));
+    //  TODO: make calibration, DONE!!
+    //  ToDO: check how RF switch works continues scanning when init on low doesn't work
+    //  for high freq
+    setLRFreq(r.current_frequency);
 #else
     state = radio.setFrequency(r.current_frequency,
                                true); // false = calibration is needed here
@@ -867,7 +873,7 @@ void init_radio()
     // TODO: check documentation (9.2.1) if we must calibrate in certain ranges
     setFrequency(CONF_FREQ_BEGIN);
 
-    delay(50);
+    delay(100);
 }
 
 struct frequency_scan_result
@@ -1035,6 +1041,49 @@ void logToSerialTask(void *parameter)
 #endif
 
 void drone_sound_alarm(void *arg, Event &e);
+
+void draw360Scale(int start = 0, int end = 360, int width = 128, int height = 64)
+{
+    float scale = 360 / width;
+    int scaleLength = width; // Full width of the display
+    int step = 90;           // Step size for labels (adjust for readability)
+    int stepPixel = width / (end / step);
+    int scaleY = (height / 2) + 15; // Vertical center for the scale
+
+    // Draw the scale line
+    display.setTextAlignment(TEXT_ALIGN_CENTER);
+    display.drawLine(0, scaleY, width, scaleY);
+
+    // Add ticks and labels
+    // 0   32    64   96  128 px
+    // 0   90   180  270  360 degree
+    // |____|____|____|_____|
+    int n = 0;
+    for (int x = 0; x <= width; x += stepPixel)
+    {
+        // int x = map(i, start, end, 0, scaleLength);
+        Serial.println("Tick: " + String(x));
+        if (x == 128)
+        {
+            x = x - 1;
+        }
+        // Draw tick mark
+        display.drawVerticalLine(x, scaleY - 5, 10);
+        // smaller tick
+        display.drawVerticalLine(x + (int)(stepPixel / 2), scaleY - 3, 7);
+
+        int degreeLegend = n * step;
+        // Draw label hj
+        // display.setFont(u8g2_font_6x10_tf); // Choose a readable font
+        display.drawString(x, scaleY + 5, String(degreeLegend));
+        n++;
+    }
+
+    // Optional: Add start and end labels
+    display.drawString(0, scaleY + 5, String(start));
+    display.display();
+    // display.drawString(width - 20, scaleY + 15, String(end));
+}
 
 void configurePages()
 {
@@ -1249,9 +1298,15 @@ void readConfigFile()
     both.println("C SAMPLES:" + String(CONF_SAMPLES));
 }
 
+StatusBar *statusBar;
+
 void setup(void)
 {
-
+    for (int i = 0; i < STEPS; i++)
+    {
+        xRSSI[i] = 999;
+        max_x_rssi[i] = 999;
+    }
 #ifdef LOG_DATA_JSON
     Serial.begin(115200);
 
@@ -1467,14 +1522,13 @@ void setup(void)
 
     r.trigger_level = TRIGGER_LEVEL;
     stacked.reset(0, 0, display.width(), display.height());
-
     bar = new DecoratedBarChart(display, 0, 0, display.width(), 0, CONF_FREQ_BEGIN,
                                 CONF_FREQ_END, LO_RSSI_THRESHOLD, HI_RSSI_THRESHOLD,
                                 r.trigger_level);
 
     size_t b = stacked.addChart(bar);
 
-    Chart *statusBar = new StatusBar(display, 0, 0, display.width(), r);
+    statusBar = new StatusBar(display, 0, 0, display.width(), r);
 
 #if (WATERFALL_ENABLED == true)
     size_t *multiples = new size_t[6]{5, 3, 4, 15, 4, 3};
@@ -1498,8 +1552,8 @@ void setup(void)
     stacked.setHeight(b, stacked.height);
 
     r.addEventListener(DETECTED, bar->bar);
-    r.addEventListener(DETECTED, drone_sound_alarm, &r);
     r.addEventListener(SCAN_TASK_COMPLETE, stacked);
+    r.addEventListener(DETECTED, drone_sound_alarm, &r);
 
     frequency_scan_result.readings_sz = 0;
     frequency_scan_result.dump.sz = 0;
@@ -1507,6 +1561,7 @@ void setup(void)
     r.addEventListener(ALL_EVENTS, eventListenerForReport, NULL);
 
 #ifdef COMPASS_ENABLED
+
     Serial.println("Compass Init Start");
     Wire1.end();
     Wire1.begin(46, 42);
@@ -1524,6 +1579,7 @@ void setup(void)
     /* Display some basic information on this sensor */
     displaySensorDetails();
     Serial.println("Compass Success!!!");
+
 #endif
 
 #ifdef UPTIME_CLOCK
@@ -2015,6 +2071,105 @@ void doScan();
 
 void reportScan();
 
+float getCompassHeading()
+{
+    /* code */
+
+    /* Get a new sensor event */
+    sensors_event_t event2;
+    mag.getEvent(&event2);
+
+#ifdef COMPASS_DEBUG
+    /* Display the results (magnetic vector values are in micro-Tesla (uT)) */
+    Serial.print("X: ");
+    Serial.print(event2.magnetic.x);
+    Serial.print("  ");
+    Serial.print("Y: ");
+    Serial.print(event2.magnetic.y);
+    Serial.print("  ");
+    Serial.print("Z: ");
+    Serial.print(event2.magnetic.z);
+    Serial.print("  ");
+    Serial.println("uT");
+#endif
+
+    // Hold the module so that Z is pointing 'up' and you can measure the heading with
+    // x&y Calculate heading when the magnetometer is level, then correct for signs of
+    // axis. float heading = atan2(event.magnetic.y, event.magnetic.x); Use Y as the
+    // forward axis float heading = atan2(event.magnetic.x, event.magnetic.y);
+    /// If Z-axis is forward and Y-axis points upward:
+    // float heading = atan2(event.magnetic.x, event.magnetic.y);
+    //  If Z-axis is forward and X-axis points upward:
+    //  float heading = atan2(event.magnetic.y, -event.magnetic.x);
+
+    // heading based on the magnetic readings from the Z-axis (forward) and the X-axis
+    // (perpendicular to Z, horizontal).
+    // float heading = atan2(event.magnetic.z, event.magnetic.x);
+
+    // Dynamicly Calibrated out
+
+    // Read raw magnetometer data
+    float x = event2.magnetic.x;
+    float y = event2.magnetic.y;
+    float z = event2.magnetic.z;
+
+    // Update min/max values dynamically
+    x_min = min(x_min, x);
+    x_max = max(x_max, x);
+    y_min = min(y_min, y);
+    y_max = max(y_max, y);
+    z_min = min(z_min, z);
+    z_max = max(z_max, z);
+
+    Serial.println("x_min:" + String(x_min) + " x_max: " + String(x_max) +
+                   " y_min: " + String(y_min));
+
+    // Calculate offsets and scales in real-time
+    float x_offset = (x_max + x_min) / 2;
+    float y_offset = (y_max + y_min) / 2;
+    float z_offset = (z_max + z_min) / 2;
+
+    float x_scale = (x_max - x_min) / 2;
+    float y_scale = (y_max - y_min) / 2;
+    float z_scale = (z_max - z_min) / 2;
+
+    // Apply calibration to raw data
+    float calibrated_x = (x - x_offset) / x_scale;
+    float calibrated_y = (y - y_offset) / y_scale;
+    float calibrated_z = (z - z_offset) / z_scale;
+
+    // Calculate heading using Z-axis forward, X-axis horizontal
+    float heading = atan2(calibrated_z, calibrated_x);
+
+    // Once you have your heading, you must then add your 'Declination Angle', which
+    // is the 'Error' of the magnetic field in your location. Find yours here:
+    // http://www.magnetic-declination.com/ Mine is: -13* 2' W, which is ~13 Degrees,
+    // or (which we need) 0.22 radians If you cannot find your Declination, comment
+    // out these two lines, your compass will be slightly off.
+    float declinationAngle = 0.22;
+    heading += declinationAngle;
+
+    // Correct for when signs are reversed.
+    if (heading < 0)
+        heading += 2 * PI;
+
+    // Check for wrap due to addition of declination.
+    if (heading > 2 * PI)
+        heading -= 2 * PI;
+
+    // Convert radians to degrees for readability.
+    float headingDegrees = heading * 180 / M_PI;
+    return headingDegrees;
+}
+
+float historicalCompassRssi[STEPS] = {999};
+int compassCounter = 0;
+// max_x_rssi[i] = 999;
+int maxRssiHist = 9999;
+int maxRssiHistX = 0;
+float maxRssiHeading = 0;
+int oldX = 0;
+
 void loop(void)
 {
     r.led_flag = false;
@@ -2035,94 +2190,269 @@ void loop(void)
         reportScan();
     }
 #ifdef COMPASS_ENABLED
-    /* Get a new sensor event */
-    sensors_event_t event;
-    mag.getEvent(&event);
+#if defined(COMPASS_FREQ)
+    delay(1000);
+    display.clear();
+#endif // COMPAS_FREQ
+    // Redraw Chart scale line
+    statusBar->ui_initialized = false;
+    int t = 1;
+#ifdef COMPASS_RSSI
+    t = 100;
 
-#ifdef COMPASS_DEBUG
-    /* Display the results (magnetic vector values are in micro-Tesla (uT)) */
-    Serial.print("X: ");
-    Serial.print(event.magnetic.x);
-    Serial.print("  ");
-    Serial.print("Y: ");
-    Serial.print(event.magnetic.y);
-    Serial.print("  ");
-    Serial.print("Z: ");
-    Serial.print(event.magnetic.z);
-    Serial.print("  ");
-    Serial.println("uT");
 #endif
-
-    // Hold the module so that Z is pointing 'up' and you can measure the heading with x&y
-    // Calculate heading when the magnetometer is level, then correct for signs of axis.
-    // float heading = atan2(event.magnetic.y, event.magnetic.x);
-    // Use Y as the forward axis
-    // float heading = atan2(event.magnetic.x, event.magnetic.y);
-    /// If Z-axis is forward and Y-axis points upward:
-    // float heading = atan2(event.magnetic.x, event.magnetic.y);
-    //  If Z-axis is forward and X-axis points upward:
-    //  float heading = atan2(event.magnetic.y, -event.magnetic.x);
-
-    // heading based on the magnetic readings from the Z-axis (forward) and the X-axis
-    // (perpendicular to Z, horizontal).
-    // float heading = atan2(event.magnetic.z, event.magnetic.x);
-
-    // Dynamicly Calibrated out
-
-    // Read raw magnetometer data
-    float x = event.magnetic.x;
-    float y = event.magnetic.y;
-    float z = event.magnetic.z;
-
-    // Update min/max values dynamically
-    x_min = min(x_min, x);
-    x_max = max(x_max, x);
-    y_min = min(y_min, y);
-    y_max = max(y_max, y);
-    z_min = min(z_min, z);
-    z_max = max(z_max, z);
-
-    // Calculate offsets and scales in real-time
-    float x_offset = (x_max + x_min) / 2;
-    float y_offset = (y_max + y_min) / 2;
-    float z_offset = (z_max + z_min) / 2;
-
-    float x_scale = (x_max - x_min) / 2;
-    float y_scale = (y_max - y_min) / 2;
-    float z_scale = (z_max - z_min) / 2;
-
-    // Apply calibration to raw data
-    float calibrated_x = (x - x_offset) / x_scale;
-    float calibrated_y = (y - y_offset) / y_scale;
-    float calibrated_z = (z - z_offset) / z_scale;
-
-    // Calculate heading using Z-axis forward, X-axis horizontal
-    float heading = atan2(calibrated_z, calibrated_x);
-
-    // Once you have your heading, you must then add your 'Declination Angle', which is
-    // the 'Error' of the magnetic field in your location. Find yours here:
-    // http://www.magnetic-declination.com/ Mine is: -13* 2' W, which is ~13 Degrees, or
-    // (which we need) 0.22 radians If you cannot find your Declination, comment out these
-    // two lines, your compass will be slightly off.
-    float declinationAngle = 0.22;
-    heading += declinationAngle;
-
-    // Correct for when signs are reversed.
-    if (heading < 0)
-        heading += 2 * PI;
-
-    // Check for wrap due to addition of declination.
-    if (heading > 2 * PI)
-        heading -= 2 * PI;
-
-    // Convert radians to degrees for readability.
-    float headingDegrees = heading * 180 / M_PI;
-
-    Serial.println("Heading (degrees): " + String(headingDegrees));
-    /// Serial.println();
-    display.drawString(80, 0, String((int)headingDegrees));
-    display.display();
+    draw360Scale(0, 360, 128, 64);
+    while (t > 0)
+    {
+        // ToDO: fix go to;
+    compass:
+        float headingDegrees = getCompassHeading();
+        // Serial.println("Heading (degrees): " + String(headingDegrees));
+#ifndef COMPASS_FREQ
+        t = 0;
+        display.setTextAlignment(TEXT_ALIGN_CENTER);
+        display.drawString(80, 0, String((int)headingDegrees));
+        display.display();
 #endif
+#ifdef COMPASS_FREQ
+
+        if (compassCounter == 0)
+        {
+            display.clear();
+            draw360Scale(0, 360, 128, 64);
+        }
+
+        float rssi = -122;
+        float rssiMax = -999;
+        if (headingDegrees >= 0 && headingDegrees <= 360)
+        {
+            float startFreq = COMPASS_FREQ - 1.0; // Start 2 MHz left
+            float endFreq = COMPASS_FREQ + 1.0;   // End 2 MHz right
+            float step = 0.5;                     // Step size in MHz
+#ifdef COMPASS_RSSI
+            for (int i = 0; i < SAMPLES_RSSI; i++)
+            {
+
+                for (float freq = startFreq; freq <= endFreq; freq += step)
+                {
+                    setFrequency(freq);
+                    // Serial.println("COMPASS FREQ SET: " + String(freq));
+                    draw360Scale(0, 360, 128, 64);
+                    // heltec_delay(5);
+#ifdef USING_LR1121
+                    radio.getRssiInst(&rssi);
+#else
+                    rssi = getRssi(false);
+#endif
+                    float headingDegreesAfter = getCompassHeading();
+                    float compassDiff = abs(headingDegreesAfter - headingDegrees);
+                    if (compassDiff >= 3)
+                    {
+                        goto compass;
+                    }
+                    if (rssi > rssiMax)
+                    {
+                        rssiMax = rssi;
+                    }
+                }
+            }
+#else  // end COMPASS RSSI
+            int rssiMax = 999;
+            /*for (const auto &pair : freqX)
+            {
+                Serial.println("freq: " + String(pair.first) +
+                               ", x: " + String(pair.second));
+            }
+            for (int i = 0; i < STEPS; i++)
+            {
+                Serial.println("X: " + String(i) + ", RSSI: " + String(xRSSI[i]));
+            }
+            */
+            for (int i = 0; i < STEPS; i++)
+            {
+                Serial.println("X pix: " + String(i) +
+                               ", RSSI: " + String(max_x_rssi[i]));
+            }
+            auto it = freqX.find(COMPASS_FREQ);
+            if (it != freqX.end())
+            {
+                int x = it->second;
+                Serial.println("RSSI X: " + String(x));
+                rssiMax = max_x_rssi[x];
+                // Add side pixels to the max +1-1Mhz
+                if (x - 1 > 0 && max_x_rssi[x - 1] < rssiMax)
+                {
+                    rssiMax = max_x_rssi[x - 1];
+                }
+                if (x + 1 < STEPS && max_x_rssi[x + 1] < rssiMax)
+                {
+                    rssiMax = max_x_rssi[x + 1];
+                }
+            }
+            else
+            {
+                rssiMax = 120;
+            }
+#endif // end COMPASS RSSI
+            button.update();
+            int gain = 20;
+            // Serial.println("RSSI: " + String(rssiMax));
+            rssiMax = abs((int)rssiMax);
+            float xResolution = (float)((float)360 / (float)128);
+            int newX = (float)((float)headingDegrees / (float)xResolution);
+
+            display.setTextAlignment(TEXT_ALIGN_CENTER);
+            display.setColor(BLACK);
+            display.drawString(oldX, 50, "^");
+            display.setColor(WHITE);
+            display.drawString(newX, 50, "^");
+            oldX = newX;
+            // Serial.println("COMPASS (" + String(headingDegrees) + " / " +
+            //                String(xResolution) + ") PIXEL: " + String(newX));
+            //  Showing not max but some live avarage
+            //  if (historicalCompassRssi[newX] > rssiMax)
+            {
+                // Remove old historical data
+                display.setColor(BLACK);
+                display.drawVerticalLine(newX, 10, 40);
+                display.setColor(WHITE);
+                if (historicalCompassRssi[newX] != 999 &&
+                    historicalCompassRssi[newX] != 0 &&
+                    abs(abs(historicalCompassRssi[newX]) - abs(rssiMax)) < 4)
+                {
+                    historicalCompassRssi[newX] =
+                        (rssiMax + historicalCompassRssi[newX]) / 2;
+                }
+                else
+                {
+                    historicalCompassRssi[newX] = rssiMax;
+                }
+            }
+            //  Historical compass RSSI
+            for (int i = 0; i < STEPS; i++)
+            {
+                display.setColor(BLACK);
+                display.drawString(i, 10, ".");
+                display.setColor(WHITE);
+
+                // Serial.println("Compass x: " + String(historicalCompassRssi[i]));
+                if (historicalCompassRssi[i] != 999 && historicalCompassRssi[i] != 0)
+                {
+                    int length2 = 80 - abs(historicalCompassRssi[i]);
+                    if (length2 > 0)
+                    {
+                        display.drawVerticalLine(i, 64 / 2 + 15 - length2, length2);
+                    }
+                    if (abs(historicalCompassRssi[i]) <= maxRssiHist)
+                    {
+                        display.setColor(BLACK);
+                        display.drawVerticalLine(maxRssiHistX, 10, 40);
+                        display.drawString(maxRssiHistX, 10, "^");
+                        display.setColor(WHITE);
+                        maxRssiHist = (maxRssiHist + abs(historicalCompassRssi[i])) / 2;
+                        maxRssiHeading = headingDegrees;
+                        maxRssiHistX = i;
+                    }
+
+                    // Experemental feature alowing fake max go out
+                    if (i == maxRssiHistX)
+                    {
+                        // we must push values out of max
+                        if (abs(abs(maxRssiHist) - abs(historicalCompassRssi[i]) < 4))
+                        {
+                            maxRssiHist =
+                                (maxRssiHist + abs(historicalCompassRssi[i])) / 2;
+                        }
+                        else
+                        {
+                            maxRssiHist = historicalCompassRssi[i];
+                        }
+                    }
+
+                    if (maxRssiHist == abs(historicalCompassRssi[i]))
+                    {
+                        display.drawString(i, 10, ".");
+                    }
+                }
+            }
+            // Draw max Position
+            display.drawVerticalLine(maxRssiHistX, 10, 40);
+            display.setTextAlignment(TEXT_ALIGN_CENTER);
+            display.drawString(maxRssiHistX, 10, "^");
+
+            display.setTextAlignment(TEXT_ALIGN_CENTER);
+
+            float coeficient = ((float)(64 / 2) + 15) / (130.0f + 20.0f);
+            // Curent compass reading
+            // show only above 80
+            int length = 80 - abs(rssiMax);
+            display.setColor(WHITE);
+            if (length > 0)
+            {
+                display.drawVerticalLine(newX, 64 / 2 + 15 - length, length);
+            }
+            // Serial.println("Compass x length: " + String(length));
+
+            display.setColor(BLACK);
+            display.fillRect(0, 0, 128, 10);
+            display.setColor(WHITE);
+            // Direction to turn drone
+            if (maxRssiHistX < newX)
+            {
+                display.setTextAlignment(TEXT_ALIGN_LEFT);
+                display.drawString(0, 0, "<<");
+            }
+            else if (maxRssiHistX > newX)
+            {
+                display.setTextAlignment(TEXT_ALIGN_RIGHT);
+                display.drawString(128, 0, ">>");
+            }
+            display.setTextAlignment(TEXT_ALIGN_CENTER);
+            display.drawString(60, 0,
+        "r:" + String((int)rssiMax) + "h:" + String((int)headingDegrees) + 
+        "|r:" + String((int)maxRssiHist) +"m:" + String((int)maxRssiHeading)
+                                    // DEBUG STUFF
+                                   /*String((int)headingDegrees) + "x:" + String(newX) +
+                                   "c:" + String(xResolution) + "l:" + String(length)*/);
+
+            display.display();
+            compassCounter++;
+            // Null counter
+            for (int timer = 0; timer < 20; timer++)
+            {
+                button.update();
+
+                if (button.pressed())
+                {
+                    compassCounter = 0;
+                    for (int i = 0; i < STEPS; i++)
+                    {
+                        historicalCompassRssi[i] = 999;
+                    }
+                    maxRssiHist = 9999;
+                    maxRssiHistX = 130;
+                    maxRssiHeading = 0;
+                    display.clear();
+                }
+#ifndef COMPASS_RSSI
+                heltec_delay(50);
+#else
+                t = 20;
+#endif
+            }
+            for (int i = 0; i < STEPS; i++)
+            {
+                max_x_rssi[i] = 999;
+            }
+        }
+#endif
+        t--;
+    }
+#if defined(COMPASS_FREQ)
+    display.clear();
+#endif // COMPASS_FREQ
+
+#endif // end COMPASS_ENABLED
 }
 
 void doScan()
@@ -2133,6 +2463,10 @@ void doScan()
 #ifdef INIT_FREQ
         CONF_FREQ_BEGIN = INIT_FREQ;
 #endif
+        /*#ifdef COMPASS_FREQ
+                CONF_FREQ_BEGIN = COMPASS_FREQ;
+                CONF_FREQ_END = COMPASS_FREQ + 1;
+        #endif*/
         initForScan(CONF_FREQ_BEGIN);
         state = radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_NONE);
     }
@@ -2237,7 +2571,7 @@ void doScan()
             // Because of the SCAN_RBW_FACTOR x is not a display coordinate anymore
             // x > STEPS on SCAN_RBW_FACTOR
             int display_x = x / SCAN_RBW_FACTOR;
-
+            freqX[(int)r.current_frequency] = display_x;
             setFrequency(curr_freq / 1000.0);
 
             LOG("Step:%d Freq: %f\n", x, r.current_frequency);
@@ -2294,13 +2628,21 @@ void doScan()
                 {
                     max_rssi = r.rssiMethod(g, &r, samples, result,
                                             RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE);
+                    /*Serial.print("xx: " + String(display_x));
+                    Serial.println(" RSSI: " + String(max_rssi));*/
+                    if (max_rssi != 0 && xRSSI[display_x] > (int)max_rssi)
+                    {
+                        xRSSI[display_x] = (int)max_rssi;
+                    }
                 }
                 else
                 {
                     // if ignored default RSSI value -120dB
                     max_rssi = 120;
                 }
-                if (max_x_rssi[display_x] > max_rssi)
+                // 0 is default after clear {999}
+                if (max_x_rssi[display_x] == 0 ||
+                    (max_x_rssi[display_x] > max_rssi && max_rssi != 0))
                 {
                     max_x_rssi[display_x] = max_rssi;
                 }
