@@ -26,7 +26,8 @@ enum MessageType
     SCAN_RESULT,
     SCAN_MAX_RESULT,
     CONFIG_TASK,
-    _MAX_MESSAGE_TYPE = CONFIG_TASK
+    HEADING,
+    _MAX_MESSAGE_TYPE = HEADING
 };
 
 enum ConfigTaskType
@@ -65,6 +66,11 @@ struct ConfigTask
     ConfigTaskType task_type;
 };
 
+struct Heading
+{
+    int16_t heading;
+};
+
 struct Message
 {
     MessageType type;
@@ -74,6 +80,7 @@ struct Message
         ConfigTask config;
         ScanTask scan;
         ScanTaskResult dump;
+        Heading heading;
     } payload;
 
     ~Message();
