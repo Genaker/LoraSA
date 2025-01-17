@@ -527,3 +527,16 @@ Use connector and solder to RPI or similar, I'm using a RPI Zero 2. The targets 
    - `-DSERIAL_OUT` to enable serial output
    - `-DSEEK_ON_X` to enable seek on jam
    - `-DBANDWIDTH=4.8` to set the bandwidth to 4.8 kHz
+
+ ### 12. Compass Integration:
+Lyligo only
+ ```
+X DROY(not used)
+GPIO46 -> SDA
+GPIO42 -> SCLA
+GND -> GND
+3.3V -> VCC
+ ```
+Module: GY-271
+
+https://www.amazon.com/HiLetgo-GY-271-QMC5883L-Compass-Magnetometer/dp/B008V9S64E
