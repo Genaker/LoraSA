@@ -512,7 +512,6 @@ Use connector and solder to RPI or similar, I'm using a RPI Zero 2. The targets 
 - **Chip Used**: LilyGO T3 S3 V1.2 with SX1280
 - **Frequency**: 2410 MHz to 2452 MHz (Mavic 3 frequency ranges)
 - **Unique Features**: 
-   - `-DLOG_DATA_JSON=1` for JSON logging
    - `-DDISABLE_SDCARD` to disable SD card and make boot faster
    - `-DSERIAL_OUT` to enable serial output
    - `-DSEEK_ON_X` to enable seek on jam
@@ -522,7 +521,6 @@ Use connector and solder to RPI or similar, I'm using a RPI Zero 2. The targets 
 - **Chip Used**: LilyGO T3 S3 V1.2 with LR1121
 - **Frequency**: 2410 MHz to 2452 MHz (Mavic 3 frequency ranges)
 - **Unique Features**:
-   - `-DLOG_DATA_JSON=1` for JSON logging
    - `-DDISABLE_SDCARD` to disable SD card and make boot faster
    - `-DSERIAL_OUT` to enable serial output
    - `-DSEEK_ON_X` to enable seek on jam

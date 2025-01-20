@@ -383,17 +383,6 @@ uint64_t scan_time = 0;
 uint64_t scan_start_time = 0;
 #endif
 
-// log data via serial console, JSON format:
-// Optionally it can be enabled via this flag, although its recommended to use
-// platformio config flag -DLOG_DATA_JSON
-// #define LOG_DATA_JSON true
-
-#ifdef SEEK_ON_X
-#define SERIAL_PORT 1
-
-HardwareSerial SerialPort(SERIAL_PORT);
-#endif
-
 // #define WEB_SERVER true
 
 uint64_t x, y, w = WATERFALL_START, i = 0;
@@ -977,7 +966,6 @@ struct frequency_scan_result
     size_t readings_sz;
 } frequency_scan_result;
 
-TaskHandle_t logToSerial = NULL;
 TaskHandle_t dumpToComms = NULL;
 
 void eventListenerForReport(void *arg, Event &e)
@@ -1040,11 +1028,6 @@ void eventListenerForReport(void *arg, Event &e)
     if (e.type == EventType::SCAN_TASK_COMPLETE)
     {
         // notify async communication that the data is ready
-        if (logToSerial != NULL)
-        {
-            xTaskNotifyGive(logToSerial);
-        }
-
         if (dumpToComms != NULL)
         {
             xTaskNotifyGive(dumpToComms);
@@ -1098,48 +1081,15 @@ void dumpToCommsTask(void *parameter)
                 Comms1->send(m);
         }
 
+#ifdef SEEK_ON_X
+        if (Comms1 != NULL)
+            Comms1->send(m);
+#endif
+
         m.payload.dump.sz =
             0; // dump is shared, so should not delete arrays in destructor
     }
 }
-
-#ifdef LOG_DATA_JSON
-void logToSerialTask(void *parameter)
-{
-    uint64_t last_epoch = frequency_scan_result.last_epoch;
-    frequency_scan_result.rssi = -999;
-
-    for (;;)
-    {
-        ulTaskNotifyTake(true, pdMS_TO_TICKS(config.log_data_json_interval));
-        if (frequency_scan_result.begin != frequency_scan_result.end ||
-            frequency_scan_result.last_epoch != last_epoch)
-        {
-            int16_t highest_value_scanned = frequency_scan_result.rssi;
-            frequency_scan_result.rssi = -999;
-            last_epoch = frequency_scan_result.last_epoch;
-            if (highest_value_scanned == -999)
-            {
-                continue;
-            }
-
-#ifdef SEEK_ON_X
-            SerialPort.printf("{\"low_range_freq\": %" PRIu64
-                              ", \"high_range_freq\": %" PRIu64 ", "
-                              "\"value\": \"%" PRIi16 "\"}\n",
-                              frequency_scan_result.begin, frequency_scan_result.end,
-                              highest_value_scanned);
-#else
-            Serial.printf("{\"low_range_freq\": %" PRIu64
-                          ", \"high_range_freq\": %" PRIu64 ", "
-                          "\"value\": \"%" PRIi16 "\"}\n",
-                          frequency_scan_result.begin, frequency_scan_result.end,
-                          highest_value_scanned);
-#endif
-        }
-    }
-}
-#endif
 
 void drone_sound_alarm(void *arg, Event &e);
 
@@ -1640,9 +1590,6 @@ void setup(void)
     osd.clear();
 #endif
 
-#ifdef LOG_DATA_JSON
-    xTaskCreate(logToSerialTask, "LOG_DATA_JSON", 2048, NULL, 1, &logToSerial);
-#endif
     xTaskCreate(dumpToCommsTask, "DUMP_RESPONSE_PROCESS", 2048, NULL, 1, &dumpToComms);
 
     r.trigger_level = TRIGGER_LEVEL;
@@ -2879,10 +2826,6 @@ void doScan()
                     // mark freq end ... will shift right to last detected range
                     drone_detected_frequency_end = r.current_frequency;
 
-#ifdef LOG_DATA_JSON
-                    frequency_scan_result.begin = drone_detected_frequency_start;
-                    frequency_scan_result.end = drone_detected_frequency_end;
-#endif
                     if (DRAW_DETECTION_TICKS == true)
                     {
 // draw vertical line on top of display for "drone detected"

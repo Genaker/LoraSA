@@ -116,12 +116,6 @@ bool Config::updateConfig(String key, String value)
 {
     UPDATE_BOOL(print_profile_time, key, value);
 
-    if (key.equalsIgnoreCase("log_data_json_interval"))
-    {
-        log_data_json_interval = value.toInt();
-        return true;
-    }
-
     if (key.equalsIgnoreCase("listen_on_serial0"))
     {
         listen_on_serial0 = value;
@@ -622,7 +616,6 @@ bool Config::write_config(const char *path)
     }
 
     f.println("print_profile_time = " + getConfig("print_profile_time"));
-    f.println("log_data_json_interval = " + getConfig("log_data_json_interval"));
     f.println("listen_on_serial0 = " + getConfig("listen_on_serial0"));
     f.println("listen_on_serial1 = " + getConfig("listen_on_serial1"));
     f.println("listen_on_usb = " + getConfig("listen_on_usb"));
@@ -650,11 +643,6 @@ String Config::getConfig(String key)
     if (key.equalsIgnoreCase("print_profile_time"))
     {
         return String(print_profile_time ? "true" : "false");
-    }
-
-    if (key.equalsIgnoreCase("log_data_json_interval"))
-    {
-        return String(log_data_json_interval);
     }
 
     if (key.equalsIgnoreCase("listen_on_serial0"))

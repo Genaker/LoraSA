@@ -75,6 +75,13 @@ bool Comms::initComms(Config &c)
         // if Serial is USBCDC...
         Serial.onEvent(ARDUINO_USB_CDC_RX_EVENT, _onUsbEvent0);
 #endif
+
+#if SEEK_ON_X
+#define SERIAL_PORT 1
+        HardwareSerial SerialPort(SERIAL_PORT);
+        SerialPort.begin(115200, SERIAL_8N1, RX_PIN, TX_PIN);
+        Comms1 = new ReadlineComms("Host", SerialPort);
+#endif
         Serial.begin();
 
         Serial.println("Initialized communications on Serial using readline protocol");

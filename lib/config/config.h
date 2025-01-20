@@ -202,7 +202,6 @@ struct Config
     int samples;
     size_t scan_ranges_sz;
     ScanRange *scan_ranges;
-    int log_data_json_interval;
     String listen_on_serial0;
     String listen_on_serial1;
     String listen_on_usb;
@@ -221,11 +220,10 @@ struct Config
     Config()
         : create_missing_config(CREATE_MISSING_CONFIG), print_profile_time(false),
           detection_strategy(String("RSSI")), samples(0), scan_ranges_sz(0),
-          scan_ranges(NULL), log_data_json_interval(1000),
-          listen_on_serial0(String("none")), listen_on_serial1(String("readline")),
-          listen_on_usb(String("readline")), rx_lora(configureLora(DEFAULT_RX)),
-          tx_lora(configureLora(DEFAULT_TX)), is_host(DEFAULT_IS_LORA_HOST),
-          uart0(BusConfig::configure(DEFAULT_UART0)),
+          scan_ranges(NULL), listen_on_serial0(String("none")),
+          listen_on_serial1(String("readline")), listen_on_usb(String("readline")),
+          rx_lora(configureLora(DEFAULT_RX)), tx_lora(configureLora(DEFAULT_TX)),
+          is_host(DEFAULT_IS_LORA_HOST), uart0(BusConfig::configure(DEFAULT_UART0)),
           uart1(BusConfig::configure(DEFAULT_UART1)),
           spi1(BusConfig::configure(DEFAULT_SPI1)),
           wire1(BusConfig::configure(DEFAULT_WIRE1)), lora_enabled(DEFAULT_LORA_ENABLED),
