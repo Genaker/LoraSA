@@ -79,6 +79,7 @@ bool Comms::initComms(Config &c)
 #if SEEK_ON_X
 #define SERIAL_PORT 1
         HardwareSerial SerialPort(SERIAL_PORT);
+        SerialPort.onReceive(_onReceive1, false);
         SerialPort.begin(115200, SERIAL_8N1, RX_PIN, TX_PIN);
         Comms1 = new ReadlineComms("Host", SerialPort);
 #endif
