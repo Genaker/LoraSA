@@ -41,14 +41,20 @@ SPIExClass SPIEx(VSPI);
 #endif //
 
 bool isSetCommand(const String &command);
+bool isGetCommand(const String &command);
 void processCommands(const String &command);
 bool parseSetCommand(const String &command, int &startFreq, int &endFreq);
+bool parseGetCommand(const String &command, int &freq);
+
+String uartGetResponse();
+
+void getRssi(float freq, float &rssi, float &rssi2);
 
 void setup()
 // https://github.com/ExpressLRS/ExpressLRS/blob/2e61e33723b3247300f95ed46ceee9648d536137/src/lib/LR1121Driver/LR1121_hal.cpp#L6
 {
-    // pinMode(0, INPUT_PULLUP); // Trying to enable auto boot mode. Notes it makes Boot
-    // mode always.
+    // pinMode(0, INPUT_PULLUP); // Trying to enable auto boot mode. Notes it makes
+    // Boot mode always.
     // TODO: make on button press without reset. or with reset :0
     pinMode(RADIO_BUSY, INPUT);
     pinMode(RADIO_DIO1, INPUT);
@@ -89,7 +95,7 @@ void setup()
                                                  RADIOLIB_NC, RADIOLIB_NC};
 
     static const Module::RfSwitchMode_t rfswitch_table[] = {
-        // mode                  DIO5  DIO6
+        // mode              DIO5  DIO6
         {LR11x0::MODE_STBY, {LOW, LOW}},  {LR11x0::MODE_RX, {HIGH, LOW}},
         {LR11x0::MODE_TX, {LOW, HIGH}},   {LR11x0::MODE_TX_HP, {LOW, HIGH}},
         {LR11x0::MODE_TX_HF, {LOW, LOW}}, {LR11x0::MODE_GNSS, {LOW, LOW}},
@@ -117,8 +123,13 @@ void setup()
     delay(1000);
 }
 
+float freq = 1200;
+// Scan Freq in KH
+int startFreq = 0, endFreq = 0;
+int getFreq = 0;
 void loop()
 {
+    getFreq = 0;
     if (Serial.available() > 0)
     {
         String command = Serial.readStringUntil('\n'); // Read until newline
@@ -127,10 +138,47 @@ void loop()
         // Process the command
         processCommands(command);
     }
+    if (getFreq != 0)
+    {
+        freq = (float)getFreq / 1000.0f;
+        float rssi = 0, rssi2 = 0;
+        getRssi(freq, rssi, rssi2);
+        Serial.println("[" + String(freq) + "Mhz]RSSI: " + String((float)rssi) +
+                       " RSSI2: " + String((float)rssi2));
+        Serial.println("RSSI1: " + String((float)rssi) +
+                       " RSSI2: " + String((float)rssi2));
+    }
+    if (startFreq != 0 && endFreq != 0)
+    {
+        if (startFreq > endFreq)
+        {
+            float temp = startFreq;
+            startFreq = endFreq;
+            endFreq = temp;
+        }
+        float step = 1000; // Step size in MHz
+        for (float freq = startFreq; freq <= endFreq; freq += step)
+        {
+            float rssi = 0, rssi2 = 0;
+            getRssi((float)freq / 1000.0f, rssi, rssi2); // Call the method to get RSSI
+            Serial.print("Frequency: ");
+            Serial.print(freq, 1); // Print frequency with 1 decimal place
+            Serial.print(" KHz, RSSI: ");
+            Serial.print(rssi);
+            Serial.print(" RSSI2: ");
+            Serial.println(rssi2);
+        }
+    }
+    delay(1);
+}
+
+void getRssi(float freq, float &rssi, float &rssi2)
+{
     int state, state2;
     // Print message periodically
-    Serial.println("Still running...");
-    state = radio.setFrequency((float)900);
+    Serial.println("Freq: " + String(freq));
+    state = radio.setFrequency((float)freq);
+    state2 = radio2.setFrequency((float)freq);
     if (state != RADIOLIB_ERR_NONE)
     {
         Serial.println("Error:setFrequency:" + String(state));
@@ -139,17 +187,15 @@ void loop()
     {
         Serial.println("Error2:setFrequency:" + String(state2));
     }
+
 #if defined(USING_LR1121)
     // Try getRssiInst
-    float rssi, rssi2;
+
     radio.getRssiInst(&rssi);
     radio2.getRssiInst(&rssi2);
     // Serial.println("RSSI: " + String(rssi));
     // pass the replies
 #endif
-    Serial.println("[900Mhz]RSSI: " + String((float)rssi) +
-                   " RSSI2: " + String((float)rssi2));
-    delay(1000);
 }
 
 // Function to process commands
@@ -157,7 +203,8 @@ void processCommands(const String &command)
 {
     if (isSetCommand(command))
     {
-        int startFreq, endFreq;
+        // Global freq range
+        startFreq = 0, endFreq = 0;
         if (parseSetCommand(command, startFreq, endFreq))
         {
             Serial.print("Parsed successfully: Start = ");
@@ -170,6 +217,20 @@ void processCommands(const String &command)
             Serial.println("Invalid SET command format!");
         }
     }
+    else if (isGetCommand(command))
+    {
+        int freq;
+        if (parseGetCommand(command, freq))
+        {
+            Serial.print("Parsed successfully: Freq = ");
+            Serial.println(freq);
+            getFreq = freq;
+        }
+        else
+        {
+            Serial.println("Invalid GET command format!");
+        }
+    }
     else
     {
         Serial.println("Unknown command received!");
@@ -179,7 +240,11 @@ void processCommands(const String &command)
 // Function to check if the command starts with "SET"
 bool isSetCommand(const String &command) { return command.startsWith("SET "); }
 
+// Function to check if the command starts with "GET"
+bool isGetCommand(const String &command) { return command.startsWith("GET "); }
+
 // Function to parse the "SET" command
+// Example: SET 915000-920000
 bool parseSetCommand(const String &command, int &startFreq, int &endFreq)
 {
     int dashIndex = command.indexOf('-');
@@ -201,4 +266,44 @@ bool parseSetCommand(const String &command, int &startFreq, int &endFreq)
         return false;
 
     return true;
+}
+
+// Function to parse the "GET" command with a large frequency value
+bool parseGetCommand(const String &command, int &freq)
+{
+    int spaceIndex = command.indexOf(' ');
+
+    if (spaceIndex == -1) // Ensure there's a space in the command
+        return false;
+
+    // Extract the frequency part
+    String freqStr = command.substring(spaceIndex + 1);
+
+    // Convert to a long integer
+    freq = freqStr.toInt();
+
+    // Validate the conversion
+    if (freq <= 0) // Invalid conversion or value
+        return false;
+
+    return true;
+}
+
+String uartGetResponse()
+{
+    String response = "";
+    unsigned long startTime = millis();
+    while (millis() - startTime < 1000)
+    { // Wait for up to 1 second
+        while (Serial1.available())
+        {                            // Check if data is available
+            char c = Serial1.read(); // Read one character
+            if (c == '\n')
+            { // Check for end of response (newline)
+                return response;
+            }
+            response += c; // Append character to response
+        }
+    }
+    return ""; // Return empty string if no response
 }
