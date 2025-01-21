@@ -630,6 +630,7 @@ void osdProcess()
 
 Config config;
 
+#ifdef USING_LR1121
 void setLRFreq(float freq)
 {
     bool skipCalibration = false;
@@ -655,6 +656,7 @@ void setLRFreq(float freq)
     radio.freqMHz = freq;
     radio.highFreq = (freq > 1000.0);
 }
+#endif
 
 float getRSSI(void *param)
 {
@@ -2071,6 +2073,7 @@ void doScan();
 
 void reportScan();
 
+#ifdef COMPASS_ENABLED
 float getCompassHeading()
 {
     /* code */
@@ -2161,6 +2164,7 @@ float getCompassHeading()
     float headingDegrees = heading * 180 / M_PI;
     return headingDegrees;
 }
+#endif
 
 float historicalCompassRssi[STEPS] = {999};
 int compassCounter = 0;
