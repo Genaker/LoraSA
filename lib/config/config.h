@@ -96,6 +96,52 @@ struct BusConfig
     String toStr();
 };
 
+#ifndef RADIO_MODULE_CS_PIN
+#define RADIO_MODULE_CS_PIN 38
+#endif
+
+#ifndef RADIO_MODULE_DIO1_PIN
+#define RADIO_MODULE_DIO1_PIN 40
+#endif
+
+#ifndef RADIO_MODULE_RST_PIN
+#define RADIO_MODULE_RST_PIN 41
+#endif
+
+#ifndef RADIO_MODULE_BUSY_PIN
+#define RADIO_MODULE_BUSY_PIN 39
+#endif
+
+#ifndef RADIO_MODULE_CLOCK_FREQ
+#define RADIO_MODULE_CLOCK_FREQ 16000000
+#endif
+
+#ifndef RADIO_MODULE_MSB_FIRST
+#define RADIO_MODULE_MSB_FIRST 1
+#endif
+
+#ifndef RADIO_MODULE_SPI_MODE
+#define RADIO_MODULE_SPI_MODE 0
+#endif
+
+struct RadioModuleSPIConfig
+{
+    bool enabled;
+    String module;
+    int8_t bus_num;
+    int8_t cs;
+    int8_t rst;
+    int8_t dio1;
+    int8_t busy;
+
+    uint32_t clock_freq;
+    bool msb_first;
+    int8_t spi_mode;
+
+    static RadioModuleSPIConfig configure(String cfg);
+    String toStr();
+};
+
 #ifndef FREQ_RX
 #define FREQ_RX 866
 #endif
@@ -136,11 +182,15 @@ struct BusConfig
 #endif
 
 #ifndef DEFAULT_SPI1
-#define DEFAULT_SPI1 "none"
+#define DEFAULT_SPI1 "s1:16000000,clk:42,mosi:46,miso:45"
 #endif
 
 #ifndef DEFAULT_WIRE1
 #define DEFAULT_WIRE1 "none"
+#endif
+
+#ifndef DEFAULT_RADIO2
+#define DEFAULT_RADIO2 "none"
 #endif
 
 #define CREATE_MISSING_CONFIG true
@@ -163,6 +213,7 @@ struct Config
     BusConfig uart1;
     BusConfig spi1;
     BusConfig wire1;
+    RadioModuleSPIConfig radio2;
 
     bool is_host;
     bool lora_enabled;
@@ -177,8 +228,8 @@ struct Config
           uart0(BusConfig::configure(DEFAULT_UART0)),
           uart1(BusConfig::configure(DEFAULT_UART1)),
           spi1(BusConfig::configure(DEFAULT_SPI1)),
-          wire1(BusConfig::configure(DEFAULT_WIRE1)),
-          lora_enabled(DEFAULT_LORA_ENABLED) {};
+          wire1(BusConfig::configure(DEFAULT_WIRE1)), lora_enabled(DEFAULT_LORA_ENABLED),
+          radio2(RadioModuleSPIConfig::configure(DEFAULT_RADIO2)) {};
 
     bool write_config(const char *path);
 

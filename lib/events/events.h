@@ -18,6 +18,7 @@ struct Event
         struct
         {
             float rssi;
+            float rssi2;
             float freq;
             bool trigger;
             bool detected;

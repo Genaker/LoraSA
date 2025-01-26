@@ -35,8 +35,8 @@ bool initSPIs(Config &config)
 
         // if all the pins are -1, then will use the default for SPI bus_num
         hspi.begin(config.spi1.clk, config.spi1.miso, config.spi1.mosi);
-        Serial.printf("Initialized SPI%d: SC:%d MISO:%d MOSI:%d clock:%d\n",
-                      (int)config.spi1.bus_num, (int)config.spi1.clk,
+        Serial.printf("Initialized SPI%d @ %x: SC:%d MISO:%d MOSI:%d clock:%d\n",
+                      (int)config.spi1.bus_num, (void *)&hspi, (int)config.spi1.clk,
                       (int)config.spi1.miso, (int)config.spi1.mosi,
                       (int)config.spi1.clock_freq);
     }

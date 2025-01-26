@@ -533,7 +533,7 @@ bool beginDisplay()
     Wire.beginTransmission(DISPLAY_ADDR);
     if (Wire.endTransmission() == 0)
     {
-        Serial.printf("Find Display model at 0x%X address\n", DISPLAY_ADDR);
+        Serial.printf("Found Display model at 0x%X address\n", DISPLAY_ADDR);
         u8g2 = new DISPLAY_MODEL(U8G2_R0, U8X8_PIN_NONE);
         u8g2->begin();
         u8g2->clearBuffer();
@@ -569,6 +569,7 @@ bool beginSDCard()
     else
     {
         Serial.println("Warning: Failed to init Sd Card");
+        SDCardSPI.end();
     }
 #endif
     return false;
@@ -792,10 +793,9 @@ void setupBoards(bool disable_u8g2)
     bool sdReady;
 
 #ifndef DISABLE_SDCARD
-    for (int i = 0; i < 5 && !(sdReady = beginSDCard()); i++)
+    if (!(sdReady = beginSDCard()))
     {
         Serial.println("SD card failed or not found");
-        delay(1000);
     }
 #endif
 

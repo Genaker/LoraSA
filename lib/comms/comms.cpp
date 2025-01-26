@@ -418,7 +418,7 @@ String _scan_result_str(ScanTaskResult &r)
     for (int i = 0; i < r.sz; i++)
     {
         p += (i == 0 ? "(" : ", (") + String(r.freqs_khz[i]) + ", " + String(r.rssis[i]) +
-             ")";
+             (r.rssis2 ? ", " + String(r.rssis2[i]) : "") + ")";
     }
 
     return p + " ]\n";

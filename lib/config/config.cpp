@@ -88,18 +88,6 @@ Config Config::init()
             continue;
         }
 
-        if (r.key.equalsIgnoreCase("rx_lora"))
-        {
-            c.rx_lora = configureLora(r.value);
-            continue;
-        }
-
-        if (r.key.equalsIgnoreCase("tx_lora"))
-        {
-            c.tx_lora = configureLora(r.value);
-            continue;
-        }
-
         Serial.printf("Unknown key '%s' will be ignored\n", r.key);
     }
 
@@ -191,6 +179,12 @@ bool Config::updateConfig(String key, String value)
     if (key.equalsIgnoreCase("wire1"))
     {
         wire1 = BusConfig::configure(value);
+        return true;
+    }
+
+    if (key.equalsIgnoreCase("radio2"))
+    {
+        radio2 = RadioModuleSPIConfig::configure(value);
         return true;
     }
 
@@ -523,6 +517,102 @@ void Config::configureDetectionStrategy(String cfg)
     }
 }
 
+RadioModuleSPIConfig RadioModuleSPIConfig::configure(String cfg)
+{
+    RadioModuleSPIConfig c;
+
+    c.bus_num = 1;
+    c.cs = RADIO_MODULE_CS_PIN;
+    c.rst = RADIO_MODULE_RST_PIN;
+    c.dio1 = RADIO_MODULE_DIO1_PIN;
+    c.busy = RADIO_MODULE_BUSY_PIN;
+
+    c.clock_freq = RADIO_MODULE_CLOCK_FREQ;
+    c.msb_first = RADIO_MODULE_MSB_FIRST;
+    c.spi_mode = RADIO_MODULE_SPI_MODE;
+
+    int begin = 0;
+    int end, i;
+
+    while ((i = findSepa(cfg, ",", begin, end)) >= 0)
+    {
+        String param = cfg.substring(begin, end);
+        begin = i;
+        int j = param.indexOf(":");
+        if (j < 0)
+        {
+            c.module = param;
+            c.enabled = !param.equalsIgnoreCase("none");
+            continue;
+        }
+
+        String k = param.substring(0, j);
+        param = param.substring(j + 1);
+
+        k.toLowerCase();
+        if (k.equals("bus"))
+        {
+            c.bus_num = param.toInt();
+            continue;
+        }
+
+        if (k.equals("rst"))
+        {
+            c.rst = param.toInt();
+            continue;
+        }
+
+        if (k.equals("dio1"))
+        {
+            c.dio1 = param.toInt();
+            continue;
+        }
+
+        if (k.equals("busy"))
+        {
+            c.busy = param.toInt();
+            continue;
+        }
+
+        if (k.equals("freq"))
+        {
+            c.clock_freq = param.toInt();
+            continue;
+        }
+
+        if (k.equals("msb"))
+        {
+            c.msb_first = !!param.toInt();
+            continue;
+        }
+
+        if (k.equals("spi_mode"))
+        {
+            c.spi_mode = param.toInt();
+            continue;
+        }
+
+        c.module = k;
+        c.cs = param.toInt();
+        c.enabled = true;
+    }
+
+    return c;
+}
+
+String RadioModuleSPIConfig::toStr()
+{
+    if (!enabled)
+    {
+        return "none";
+    }
+
+    return module + ":" + String(cs) + ",bus:" + String(bus_num) + ",rst:" + String(rst) +
+           ",dio1:" + String(dio1) + ",busy:" + String(busy) +
+           ",freq:" + String(clock_freq) + ",msb:" + String(msb_first ? 1 : 0) +
+           ",spi_mode:" + String(spi_mode);
+}
+
 bool Config::write_config(const char *path)
 {
     File f = SD.open(path, FILE_WRITE, /*create = */ true);
@@ -549,6 +639,7 @@ bool Config::write_config(const char *path)
     f.println("uart1 = " + getConfig("uart1"));
     f.println("spi1 = " + getConfig("spi1"));
     f.println("wire1 = " + getConfig("wire1"));
+    f.println("radio2 = " + getConfig("radio2"));
 
     f.close();
     return true;
@@ -619,6 +710,11 @@ String Config::getConfig(String key)
     if (key.equalsIgnoreCase("wire1"))
     {
         return wire1.toStr();
+    }
+
+    if (key.equalsIgnoreCase("radio2"))
+    {
+        return radio2.toStr();
     }
 
     return "";
