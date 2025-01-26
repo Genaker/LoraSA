@@ -77,7 +77,7 @@ void heltec_setup()
 
 #ifdef HELTEC
 #ifndef ARDUINO_heltec_wifi_32_lora_V3
-    hspi->begin(SCK, MISO, MOSI, SS);
+    vspi->begin(SCK, MISO, MOSI, SS);
 #endif
 #endif
 #ifndef HELTEC_NO_DISPLAY_INSTANCE
@@ -90,7 +90,7 @@ void heltec_setup()
 
 #ifdef HELTEC
 #ifndef ARDUINO_heltec_wifi_32_lora_V3
-SPIClass hspi = new SPIClass(2);
+SPIClass vspi = new SPIClass(2);
 #endif
 #endif
 

@@ -139,6 +139,7 @@ void sendBTData(float heading, float rssi)
 #include <LiLyGo.h>
 #endif // end LILYGO
 
+#include <bus.h>
 #include <heading.h>
 
 DroneHeading droneHeading;
@@ -1413,6 +1414,31 @@ void setup(void)
     wf_start = millis();
 
     config = Config::init();
+#if defined(HAS_SDCARD)
+    SD.end();
+    SDCardSPI.end(); // end SPI before other uses, eg radio2 over SPI
+#endif
+
+    pinMode(LED, OUTPUT);
+    pinMode(BUZZER_PIN, OUTPUT);
+    pinMode(REB_PIN, OUTPUT);
+    heltec_setup();
+
+    if (!initUARTs(config))
+    {
+        Serial.println("Failed to initialize UARTs");
+    }
+
+    if (!initSPIs(config))
+    {
+        Serial.println("Failed to initialize SPIs");
+    }
+
+    if (!initWires(config))
+    {
+        Serial.println("Failed to initialize I2Cs");
+    }
+
     r.comms_initialized = Comms::initComms(config);
     if (r.comms_initialized)
     {
@@ -1422,11 +1448,6 @@ void setup(void)
     {
         Serial.println("Comms did not initialize");
     }
-
-    pinMode(LED, OUTPUT);
-    pinMode(BUZZER_PIN, OUTPUT);
-    pinMode(REB_PIN, OUTPUT);
-    heltec_setup();
 
 #ifdef JOYSTICK_ENABLED
     calibrate_joy();
@@ -1653,20 +1674,27 @@ void setup(void)
 
 #endif
 
-    compass = new QMC5883LCompass();
-    if (!compass->begin())
+    if (wireDevices & QMC5883L || wire1Devices & QMC5883L)
     {
-        Serial.println("Failed to initialize Compass");
+        compass = new QMC5883LCompass(wireDevices & QMC5883L ? Wire : Wire1);
     }
 
-    String err = compass->selfTest();
-    if (err.startsWith("OK\n"))
+    if (compass)
     {
-        Serial.printf("Compass self-test passed: %s\n", err.c_str());
-    }
-    else
-    {
-        Serial.printf("Compass self-sets failed: %s\n", err.c_str());
+        if (!compass->begin())
+        {
+            Serial.println("Failed to initialize Compass");
+        }
+
+        String err = compass->selfTest();
+        if (err.startsWith("OK\n"))
+        {
+            Serial.printf("Compass self-test passed: %s\n", err.c_str());
+        }
+        else
+        {
+            Serial.printf("Compass self-sets failed: %s\n", err.c_str());
+        }
     }
 
 #ifdef UPTIME_CLOCK

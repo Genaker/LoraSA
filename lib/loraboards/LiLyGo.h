@@ -18,10 +18,10 @@
 #ifndef HELTEC_NO_RADIO_INSTANCE
 #ifndef ARDUINO_heltec_wifi_32_lora_V3
 // Assume MISO and MOSI being wrong when not using Heltec's board definition
-// and use hspi to make it work anyway. See heltec_setup() for the actual SPI setup.
+// and use vspi to make it work anyway. See heltec_setup() for the actual SPI setup.
 #include <SPI.h>
-extern SPIClass *hspi;
-#define RADIO_MODULE_INIT() new Module(SS, DIO1, RST_LoRa, BUSY_LoRa, *hspi);
+extern SPIClass *vspi;
+#define RADIO_MODULE_INIT() new Module(SS, DIO1, RST_LoRa, BUSY_LoRa, *vspi);
 #else  // ARDUINO_heltec_wifi_32_lora_V3
 #endif // end ARDUINO_heltec_wifi_32_lora_V3
 #endif // end HELTEC_NO_RADIO_INSTANCE
