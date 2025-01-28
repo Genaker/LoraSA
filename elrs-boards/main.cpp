@@ -453,6 +453,7 @@ void SetDioAsRfSwitch()
 void initRadio(float freq)
 {
     int state, state2;
+    radio.begin();
     state = radio.beginGFSK(freq, 4.8F, 5.0F, 156.2F, 10, 16U, 1.6F);
     state2 = radio2.beginGFSK(freq, 4.8F, 5.0F, 156.2F, 10, 16U, 1.6F);
     if (state != RADIOLIB_ERR_NONE)

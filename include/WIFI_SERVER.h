@@ -1,11 +1,3 @@
-#include <AsyncTCP.h>
-#include <ESPAsyncWebServer.h>
-#include <LittleFS.h>
-#include <WiFi.h>
-
-// Create AsyncWebServer object on port 80
-AsyncWebServer server(80);
-
 // Search for parameter in HTTP POST request
 const String SSID = "ssid";
 const String PASS = "pass";
@@ -20,6 +12,15 @@ const String FEND = "fend";
 // Variables to save values from HTML form
 String ssid = "LoraSA", pass = "1234567890", ip = "192.168.1.100",
        gateway = "192.168.1.1", fstart = "", fend = "", smpls = "";
+
+#ifdef WEB_SERVER
+#include <AsyncTCP.h>
+#include <ESPAsyncWebServer.h>
+#include <LittleFS.h>
+#include <WiFi.h>
+
+// Create AsyncWebServer object on port 80
+AsyncWebServer server(80);
 
 IPAddress localIP;
 // Set your Gateway IP address
@@ -71,25 +72,6 @@ bool initWiFi()
 
     Serial.println(WiFi.localIP());
     return true;
-}
-
-void writeParameterToFile(String value, String file)
-{
-    // Write file to save value
-    writeFile(LittleFS, file.c_str(), value.c_str());
-}
-
-void writeParameterToParameterFile(String param, String value)
-{
-    String file = String("/" + param + ".txt");
-    // Write file to save value
-    writeParameterToFile(value, file.c_str());
-}
-
-String readParameterFromParameterFile(String param)
-{
-    String file = String("/" + param + ".txt");
-    return readFile(LittleFS, file.c_str());
 }
 
 void serverServer()
@@ -202,4 +184,24 @@ void serverStart()
 
         serverServer();
     }
+}
+#endif
+
+void writeParameterToFile(String value, String file)
+{
+    // Write file to save value
+    writeFile(LittleFS, file.c_str(), value.c_str());
+}
+
+void writeParameterToParameterFile(String param, String value)
+{
+    String file = String("/" + param + ".txt");
+    // Write file to save value
+    writeParameterToFile(value, file.c_str());
+}
+
+String readParameterFromParameterFile(String param)
+{
+    String file = String("/" + param + ".txt");
+    return readFile(LittleFS, file.c_str());
 }

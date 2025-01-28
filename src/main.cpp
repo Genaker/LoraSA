@@ -23,10 +23,70 @@
 
 //  #define HELTEC_NO_DISPLAY
 
+#ifdef BT_MOBILE
+#include <NimBLEDevice.h>
+
+#define SERVICE_UUID "00001234-0000-1000-8000-00805f9b34fb"
+#define CHARACTERISTIC_UUID "00001234-0000-1000-8000-00805f9b34ac"
+
+NimBLEServer *pServer = nullptr;
+NimBLECharacteristic *pCharacteristic = nullptr;
+NimBLEAdvertising *pAdvertising = nullptr;
+
+void initBT()
+{
+    // Initialize BLE device
+    NimBLEDevice::init("RSSI_Radar");
+
+    // Get and print the MAC address
+    String macAddress = NimBLEDevice::getAddress().toString().c_str();
+    Serial.println("Bluetooth MAC Address: " + macAddress);
+
+    // Create BLE server
+    pServer = NimBLEDevice::createServer();
+
+    // Create a BLE service
+    NimBLEService *pService = pServer->createService(SERVICE_UUID);
+
+    // Create a BLE characteristic
+    pCharacteristic = pService->createCharacteristic(
+        CHARACTERISTIC_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
+
+    // Start the service
+    pService->start();
+
+    // Start advertising
+
+    pAdvertising = NimBLEDevice::getAdvertising();
+    pAdvertising->addServiceUUID(SERVICE_UUID);
+    pAdvertising->setName("ESP32_RSSI_Radar"); // Set the device name
+    pAdvertising->setMinInterval(300);
+    pAdvertising->setMaxInterval(350);
+    // pAdvertising->setScanResponse(true); // Allow scan responses
+
+    pAdvertising->start();
+
+    Serial.println("BLE server started.");
+}
+
+// Function to send RSSI and Heading Data
+void sendBTData(float heading, float rssi)
+{
+    String data =
+        "RSSI_HEADING: '{H:" + String(heading) + ",RSSI:-" + String(rssi) + "}'";
+    Serial.println("Sending data: " + data);
+    pCharacteristic->setValue(data.c_str()); // Set BLE characteristic value
+    pCharacteristic->notify();               // Notify connected client
+}
+
+#endif
+
 #include "FS.h"
 #include <Arduino.h>
+#ifdef WEB_SERVER
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
+#endif
 #include <File.h>
 #include <LittleFS.h>
 #include <Wire.h>
@@ -1416,6 +1476,10 @@ void setup(void)
     readConfigFile();
 #endif
 
+#ifdef BT_MOBILE
+    initBT();
+#endif
+
 #ifndef WEB_SERVER
     if (config.scan_ranges_sz == 0 && SCAN_RANGES.length() > 0)
     {
@@ -2414,6 +2478,9 @@ void loop(void)
                                     // DEBUG STUFF
                                    /*String((int)headingDegrees) + "x:" + String(newX) +
                                    "c:" + String(xResolution) + "l:" + String(length)*/);
+#ifdef BT_MOBILE
+            sendBTData(headingDegrees, rssiMax); // Send data to BLE client
+#endif
 
             display.display();
             compassCounter++;
@@ -2429,6 +2496,9 @@ void loop(void)
                     {
                         historicalCompassRssi[i] = 999;
                     }
+                    initForScan(FREQ_BEGIN);
+                    // Restart BT advert
+                    pAdvertising->start();
                     maxRssiHist = 9999;
                     maxRssiHistX = 130;
                     maxRssiHeading = 0;
