@@ -184,19 +184,18 @@ String _scan_str(ScanTask &);
 String _scan_result_str(ScanTaskResult &);
 String _wrap_str(String);
 
-#define POLY 0x1021
-uint16_t crc16(String v, uint16_t c)
+uint16_t crc16(uint16_t poly, uint16_t c, size_t sz, uint8_t *v)
 {
     c ^= 0xffff;
-    for (int i = 0; i < v.length(); i++)
+    for (int i = 0; i < sz; i++)
     {
-        uint16_t ch = v.charAt(i);
+        uint16_t ch = v[i];
         c = c ^ (ch << 8);
         for (int j = 0; j < 8; j++)
         {
             if (c & 0x8000)
             {
-                c = (c << 1) ^ POLY;
+                c = (c << 1) ^ poly;
             }
             else
             {
@@ -206,6 +205,12 @@ uint16_t crc16(String v, uint16_t c)
     }
 
     return c ^ 0xffff;
+}
+
+#define POLY 0x1021
+uint16_t crc16(String v, uint16_t c)
+{
+    return crc16(POLY, c, v.length(), (uint8_t *)v.c_str());
 }
 
 void ReadlineComms::_onReceive()

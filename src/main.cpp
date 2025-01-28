@@ -139,6 +139,11 @@ void sendBTData(float heading, float rssi)
 #include <LiLyGo.h>
 #endif // end LILYGO
 
+#include <heading.h>
+
+DroneHeading droneHeading;
+Compass *compass = NULL;
+
 #define BT_SCAN_DELAY 60 * 1 * 1000
 #define WF_SCAN_DELAY 60 * 2 * 1000
 long noDevicesMillis = 0, cycleCnt = 0;
@@ -690,6 +695,7 @@ void osdProcess()
 
 Config config;
 
+#ifdef USING_LR1121
 void setLRFreq(float freq)
 {
     bool skipCalibration = false;
@@ -715,6 +721,7 @@ void setLRFreq(float freq)
     radio.freqMHz = freq;
     radio.highFreq = (freq > 1000.0);
 }
+#endif
 
 float getRSSI(void *param)
 {
@@ -1646,6 +1653,22 @@ void setup(void)
 
 #endif
 
+    compass = new QMC5883LCompass();
+    if (!compass->begin())
+    {
+        Serial.println("Failed to initialize Compass");
+    }
+
+    String err = compass->selfTest();
+    if (err.startsWith("OK\n"))
+    {
+        Serial.printf("Compass self-test passed: %s\n", err.c_str());
+    }
+    else
+    {
+        Serial.printf("Compass self-sets failed: %s\n", err.c_str());
+    }
+
 #ifdef UPTIME_CLOCK
     uptime = new UptimeClock(display, millis());
 #endif
@@ -2026,6 +2049,9 @@ void sendMessage(RoutedMessage &m)
 #endif
             }
             break;
+        case HEADING:
+            droneHeading.setHeading(millis(), m.message->payload.heading.heading);
+            break;
         }
     }
 
@@ -2135,6 +2161,7 @@ void doScan();
 
 void reportScan();
 
+#ifdef COMPASS_ENABLED
 float getCompassHeading()
 {
     /* code */
@@ -2225,6 +2252,7 @@ float getCompassHeading()
     float headingDegrees = heading * 180 / M_PI;
     return headingDegrees;
 }
+#endif
 
 float historicalCompassRssi[STEPS] = {999};
 int compassCounter = 0;
@@ -2246,6 +2274,12 @@ void loop(void)
         routeMessage(mess);
         sendMessage(mess);
         delete mess.message;
+    }
+
+    if (compass != NULL)
+    {
+        int16_t heading = compass->heading();
+        Serial.printf("Heading: %" PRIi16 "\n", heading);
     }
 
     if (!config.is_host)

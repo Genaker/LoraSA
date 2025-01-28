@@ -189,7 +189,9 @@ String loraConfigToStr(LoRaConfig *cfg)
            String(",tx_power:") + String(cfg->tx_power) + String(",preamble_len:") +
            String(cfg->preamble_len) + String(",sync_word:") +
            String(cfg->sync_word, 16) + String(",crc:") + String(cfg->crc ? "1" : "0") +
-           String(",implicit_header:") + String(cfg->implicit_header);
+           String(",crc_seed:") + String(cfg->crc_seed, 16) + String(",crc_poly:") +
+           String(cfg->crc_poly, 16) + String(",implicit_header:") +
+           String(cfg->implicit_header);
 }
 
 String detectionStrategyToStr(Config &c)
@@ -356,6 +358,8 @@ LoRaConfig *configureLora(String cfg)
         preamble_len : 8,
         sync_word : 0x1e,
         crc : false,
+        crc_seed : 0,
+        crc_poly : 0x1021,
         implicit_header : 0
     });
 
@@ -380,6 +384,18 @@ LoRaConfig *configureLora(String cfg)
         if (k.equalsIgnoreCase("sync_word"))
         {
             lora->sync_word = (uint8_t)fromHex(param);
+            continue;
+        }
+
+        if (k.equalsIgnoreCase("crc_seed"))
+        {
+            lora->crc_seed = (uint16_t)fromHex(param);
+            continue;
+        }
+
+        if (k.equalsIgnoreCase("crc_poly"))
+        {
+            lora->crc_poly = (uint16_t)fromHex(param);
             continue;
         }
 
