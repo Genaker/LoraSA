@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RSSI Radar</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      margin: 0;
+      padding: 20px;
+      background-color: #0a0a0a;
+      color: white;
+    }
+
+    #radarCanvas {
+      margin: 20px auto;
+      display: block;
+      background-color: #001f00;
+      border-radius: 50%;
+      box-shadow: 0 0 20px rgba(0, 255, 0, 0.5);
+    }
+
+    #legend {
+      margin-top: 20px;
+      padding: 10px;
+      background-color: rgba(0, 255, 0, 0.1);
+      border-radius: 5px;
+      width: 300px;
+      margin-left: auto;
+      margin-right: auto;
+      border: 1px solid rgba(0, 255, 0, 0.5);
+    }
+
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      border: none;
+      border-radius: 5px;
+      background-color: #007bff;
+      color: white;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+      margin: 5px;
+    }
+
+    button:hover {
+      background-color: #0056b3;
+    }
+
+    button:disabled {
+      background-color: #a9a9a9;
+      cursor: not-allowed;
+    }
+
+    .info {
+      margin-top: 20px;
+      font-size: 18px;
+    }
+
+    #deviceList {
+      margin-top: 20px;
+      padding: 10px;
+      background-color: rgba(0, 255, 0, 0.1);
+      border-radius: 5px;
+      width: 300px;
+      margin-left: auto;
+      margin-right: auto;
+      border: 1px solid rgba(0, 255, 0, 0.5);
+    }
+
+    #deviceList ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      text-align: left;
+    }
+
+    #deviceList li {
+      padding: 5px;
+      cursor: pointer;
+    }
+
+    #deviceList li:hover {
+      background-color: rgba(0, 255, 0, 0.2);
+    }
+  </style>
+</head>
+
+<body>
+  <h1>RSSI Radar</h1>
+  <canvas id="radarCanvas" width="500" height="500"></canvas>
+  <!--
+  <div id="legend">
+    <p><strong>Legend:</strong></p>
+    <ul style="list-style: none; padding: 0; margin: 0; text-align: left;">
+      <li><span style="color: red;">Red</span>: RSSI Heading Vectors</li>
+      <li><span style="color: #e0ffe0;">Light Green</span>: Compass Directions (45° steps)</li>
+    </ul>
+  </div>-->
+  <div class="info">
+    <p>Heading: <span id="heading">0°</span></p>
+    <p>RSSI: <span id="rssi">-70 dBm</span></p>
+  </div>
+
+  <div class="info">
+    <p>Heading MAX: <span id="heading-max">0°</span></p>
+    <p>RSSI MAX: <span id="rssi-max">-70 dBm</span></p>
+  </div>
+  <p>Status: <span id="status">Disconnected</span></p>
+  <button id="scanBtn">Scan for Bluetooth Devices</button>
+  <button id="simulateBtn">Simulate Random Data</button>
+  <div id="deviceList" style="display: none;">
+    <p><strong>Available Devices:</strong></p>
+    <ul id="devices"></ul>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("radarCanvas");
+    const ctx = canvas.getContext("2d");
+    const headingDisplay = document.getElementById("heading");
+    const rssiDisplay = document.getElementById("rssi");
+    const headingDisplayMAX = document.getElementById("heading-max");
+    const rssiDisplayMAX = document.getElementById("rssi-max");
+    const scanBtn = document.getElementById("scanBtn");
+    const simulateBtn = document.getElementById("simulateBtn");
+    const deviceList = document.getElementById("deviceList");
+    const devicesUl = document.getElementById("devices");
+    const statusElem = document.getElementById("status");
+
+
+    let isSimulating = false; // Flag to track simulation state
+    let dataPoints = [{ angle: 0, rssi: -120 }]; // Array to store all received data
+    let currentPoint = { angle: 0, rssi: -120 }; // To track the most recently added point
+
+
+    // Draw radar function
+    function drawRadar() {
+      const centerX = canvas.width / 2;
+      const centerY = canvas.height / 2;
+      const radius = Math.min(centerX, centerY) - 10;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Radar background
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+      ctx.strokeStyle = "#00ff00";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // Concentric circles
+      for (let i = 1; i <= 3; i++) {
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, radius * (i / 3), 0, 2 * Math.PI);
+        ctx.strokeStyle = "rgba(0, 255, 0, 0.3)";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+
+      // Compass lines
+      for (let angle = 0; angle < 360; angle += 45) {
+        const rad = (angle * Math.PI) / 180;
+        ctx.beginPath();
+        ctx.moveTo(centerX, centerY);
+        ctx.lineTo(centerX + radius * Math.cos(rad), centerY + radius * Math.sin(rad));
+        ctx.strokeStyle = "#e0ffe0";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+
+      // Draw data points
+      dataPoints.forEach(({ angle, rssi }) => {
+        const rad = (angle * Math.PI) / 180;
+        const length = ((120 + rssi) / (radius / 2)) * radius; // Scale RSSI to fit within radar
+
+        const x = centerX + length * Math.cos(rad);
+        const y = centerY + length * Math.sin(rad);
+
+        ctx.beginPath();
+        ctx.moveTo(centerX, centerY);
+        ctx.lineTo(x, y);
+        ctx.strokeStyle = "red";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      });
+
+      const maxPoint = dataPoints.reduce((max, point) => (point.rssi > max.rssi ? point : max), { angle: 0, rssi: -120 });
+      const maxRad = (maxPoint.angle * Math.PI) / 180;
+      const maxLength = radius;
+      headingDisplayMAX.textContent = `${maxPoint.angle.toFixed(1)}°`;
+      rssiDisplayMAX.textContent = `${maxPoint.rssi.toFixed(1)} dBm`;
+
+      const maxX = centerX + maxLength * Math.cos(maxRad);
+      const maxY = centerY + maxLength * Math.sin(maxRad);
+
+      ctx.beginPath();
+      ctx.moveTo(centerX, centerY);
+      ctx.lineTo(maxX, maxY);
+      ctx.strokeStyle = "blue";
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      // Draw arrowhead
+      const arrowHeadLength = 10;
+      const arrowAngle = Math.PI / 6; // 30 degrees for the arrowhead
+
+      const arrowX1 = maxX - arrowHeadLength * Math.cos(maxRad - arrowAngle);
+      const arrowY1 = maxY - arrowHeadLength * Math.sin(maxRad - arrowAngle);
+
+      const arrowX2 = maxX - arrowHeadLength * Math.cos(maxRad + arrowAngle);
+      const arrowY2 = maxY - arrowHeadLength * Math.sin(maxRad + arrowAngle);
+
+      ctx.beginPath();
+      ctx.moveTo(maxX, maxY);
+      ctx.lineTo(arrowX1, arrowY1);
+      ctx.lineTo(arrowX2, arrowY2);
+      ctx.closePath();
+      ctx.fillStyle = "blue";
+      ctx.fill();
+      ctx.stroke();
+
+      // Draw current RSSI line in yellow
+      const currentRad = (currentPoint.angle * Math.PI) / 180;
+      const currentLength = ((120 + currentPoint.rssi) / (radius / 2)) * radius;
+
+      const currentX = centerX + currentLength * Math.cos(currentRad);
+      const currentY = centerY + currentLength * Math.sin(currentRad);
+
+      ctx.beginPath();
+      ctx.moveTo(centerX, centerY);
+      ctx.lineTo(currentX, currentY);
+      ctx.strokeStyle = "yellow";
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    }
+
+    // Handle canvas hover for pointer change
+    canvas.addEventListener("mousemove", (event) => {
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = event.clientX - rect.left;
+      const mouseY = event.clientY - rect.top;
+      const centerX = canvas.width / 2;
+      const centerY = canvas.height / 2;
+
+      let hovering = false;
+      dataPoints.forEach(({ angle, rssi }) => {
+        const rad = (angle * Math.PI) / 180;
+        const length = ((120 + rssi) / (centerX / 2)) * centerX; // Scale RSSI to fit within radar
+        const x = centerX + length * Math.cos(rad);
+        const y = centerY + length * Math.sin(rad);
+
+        const distance = Math.sqrt(Math.pow(mouseX - x, 2) + Math.pow(mouseY - y, 2));
+        if (distance < 10) {
+          hovering = true;
+        }
+      });
+
+      canvas.style.cursor = hovering ? "pointer" : "default";
+    });
+
+    // Handle canvas clicks
+    canvas.addEventListener("click", (event) => {
+      const rect = canvas.getBoundingClientRect();
+      const clickX = event.clientX - rect.left;
+      const clickY = event.clientY - rect.top;
+      const centerX = canvas.width / 2;
+      const centerY = canvas.height / 2;
+
+      dataPoints.forEach(({ angle, rssi }) => {
+        const rad = (angle * Math.PI) / 180;
+        const length = ((120 + rssi) / (centerX / 2)) * centerX; // Scale RSSI to fit within radar
+        const x = centerX + length * Math.cos(rad);
+        const y = centerY + length * Math.sin(rad);
+
+        const distance = Math.sqrt(Math.pow(clickX - x, 2) + Math.pow(clickY - y, 2));
+        if (distance < 10) { // If the click is close to the endpoint of the line
+          showPrompt(`Angle: ${angle}°`, `RSSI: ${rssi} dBm`);
+        }
+      });
+    });
+
+    // Show a custom prompt
+    function showPrompt(title, message) {
+      const promptDiv = document.createElement("div");
+      promptDiv.style.position = "fixed";
+      promptDiv.style.top = "50%";
+      promptDiv.style.left = "50%";
+      promptDiv.style.transform = "translate(-50%, -50%)";
+      promptDiv.style.backgroundColor = "#333";
+      promptDiv.style.color = "white";
+      promptDiv.style.padding = "20px";
+      promptDiv.style.border = "2px solid #00ff00";
+      promptDiv.style.borderRadius = "10px";
+      promptDiv.style.zIndex = "1000";
+
+      const titleElem = document.createElement("h2");
+      titleElem.textContent = title;
+      titleElem.style.margin = "0 0 10px 0";
+
+      const messageElem = document.createElement("p");
+      messageElem.textContent = message;
+      messageElem.style.margin = "0 0 20px 0";
+
+      const closeButton = document.createElement("button");
+      closeButton.textContent = "Close";
+      closeButton.style.padding = "10px 20px";
+      closeButton.style.backgroundColor = "#007bff";
+      closeButton.style.color = "white";
+      closeButton.style.border = "none";
+      closeButton.style.borderRadius = "5px";
+      closeButton.style.cursor = "pointer";
+      closeButton.addEventListener("click", () => {
+        document.body.removeChild(promptDiv);
+      });
+
+      promptDiv.appendChild(titleElem);
+      promptDiv.appendChild(messageElem);
+      promptDiv.appendChild(closeButton);
+      document.body.appendChild(promptDiv);
+    }
+
+    // Parse Bluetooth data
+    function parseBTData(data) {
+      // Match the data format and extract the heading and RSSI values
+      const match = data.match(/RSSI_HEADING: '\{H:(\d+\.\d+),RSSI:(-?\d+\.\d+|-?\d+)\}'/);
+
+      if (match) {
+        const heading = parseInt(match[1]);
+        const rssi = parseFloat(match[2]);
+        console.log("H:" + heading + " R:" + rssi);
+        dataPoints[parseInt(heading)] = { angle: parseInt(heading), rssi: rssi };
+        currentPoint = { angle: parseInt(heading), rssi: rssi };
+        //if (dataPoints.length > 50) dataPoints.shift(); // Keep only the last 50 points
+        headingDisplay.textContent = `${heading.toFixed(1)}°`;
+        rssiDisplay.textContent = `${rssi.toFixed(1)} dBm`;
+        drawRadar();
+      }
+    }
+
+    // Scan for Bluetooth devices
+    scanBtn.addEventListener("click", async () => {
+      try {
+        const device = await navigator.bluetooth.requestDevice({
+          acceptAllDevices: true,
+          optionalServices: ['00001234-0000-1000-8000-00805f9b34fb']
+        });
+
+        const server = await device.gatt.connect();
+        const service = await server.getPrimaryService('00001234-0000-1000-8000-00805f9b34fb');
+        const characteristic = await service.getCharacteristic('00001234-0000-1000-8000-00805f9b34ac');
+
+        // Save the device's ID to localStorage
+        localStorage.setItem("bluetoothDeviceId", device.id);
+
+        characteristic.addEventListener('characteristicvaluechanged', (event) => {
+          const value = new TextDecoder().decode(event.target.value); // Decode the data
+          console.log("Received data:", value); // For debugging
+          parseBTData(value); // Process the data with your existing function
+        });
+
+        await characteristic.startNotifications();
+        //alert(`Connected to ${device.name}`);
+        statusElem.textContent = "Connected";
+      } catch (error) {
+        console.error("Error scanning for devices:", error);
+        alert("Could not connect to any device.");
+        statusElem.textContent = "Connection Error";
+      }
+    });
+
+    // Simulate random data
+    simulateBtn.addEventListener("click", () => {
+      if (isSimulating) {
+        isSimulating = false;
+        simulateBtn.textContent = "Simulate Random Data";
+      } else {
+        isSimulating = true;
+        simulateBtn.textContent = "Stop Simulation";
+
+        (function simulate() {
+          if (!isSimulating) return;
+          const angle = Math.random() * 360;
+          const rssi = -70 + Math.random() * 30;
+          dataPoints.push({ angle, rssi });
+          currentPoint = { angle, rssi };
+          if (dataPoints.length > 360 * 5) dataPoints.shift();
+          headingDisplay.textContent = `${angle.toFixed(1)}°`;
+          rssiDisplay.textContent = `${rssi.toFixed(1)} dBm`;
+          drawRadar();
+          setTimeout(simulate, 100);
+        })();
+      }
+    });
+
+
+    // Function to reconnect to a previously paired device
+    async function reconnectBluetooth() {
+      try {
+        // Get the saved device ID from localStorage
+        const savedDeviceId = localStorage.getItem("bluetoothDeviceId");
+        if (!savedDeviceId) {
+          console.log("No saved device found.");
+          statusElem.textContent = "No saved device found.";
+          return;
+        }
+
+        // Find the saved device in the browser's cache
+        const devices = await navigator.bluetooth.getDevices();
+        bluetoothDevice = devices.find((device) => device.id === savedDeviceId);
+
+        if (!bluetoothDevice) {
+          console.log("Saved device not available.");
+          statusElem.textContent = "Saved device not available.";
+          return;
+        }
+
+        console.log(`Reconnecting to device: ${bluetoothDevice.name}`);
+        const server = await bluetoothDevice.gatt.connect();
+        console.log(`Reconnected to device: ${bluetoothDevice.name}`);
+        deviceNameElem.textContent = bluetoothDevice.name;
+        statusElem.textContent = "Reconnected";
+      } catch (error) {
+        console.error("Error reconnecting to Bluetooth device:", error);
+        statusElem.textContent = "Reconnection Failed";
+      }
+    }
+
+    // Automatically reconnect on page load
+    window.addEventListener("load", reconnectBluetooth);
+    // Initial draw
+    drawRadar();
+  </script>
+</body>
+
+</html
