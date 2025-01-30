@@ -5,13 +5,8 @@
 #include <LoRaBoards.h>
 
 #include <LiLyGo.h>
+#include <bus.h>
 #include <config.h>
-
-#ifndef ARDUINO_USB_CDC_ON_BOOT
-#define SERIAL0 Serial
-#else
-#define SERIAL0 Serial0
-#endif
 
 #ifndef SCAN_MAX_RESULT_KHZ_SCALE
 // kHz scale: round frequency, so it fits into 2 bytes
@@ -56,6 +51,7 @@ struct ScanTaskResult
     size_t sz;
     uint32_t *freqs_khz;
     int16_t *rssis;
+    int16_t *rssis2;
     int16_t prssi;
 };
 
@@ -135,7 +131,7 @@ struct Comms
 
 struct NoopComms : Comms
 {
-    NoopComms() : Comms("no-op", SERIAL0) {};
+    NoopComms() : Comms("no-op", Uart0) {};
 
     virtual bool send(Message &) { return true; };
     virtual void _onReceive() {};

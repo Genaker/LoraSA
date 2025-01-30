@@ -1,5 +1,4 @@
 #include "heading.h"
-#include <Wire.h>
 
 /*
  * QMC5883L Registers:
@@ -62,11 +61,6 @@ bool QMC5883LCompass::begin()
 {
     _lastErr = CompassStatus::COMPASS_UNINITIALIZED;
 
-    if (!Wire1.begin(46, 42)) /* SDA, SCL */
-    {
-        return false;
-    }
-
     String err = selfTest();
     if (!err.startsWith("OK\n"))
     {
@@ -77,16 +71,17 @@ bool QMC5883LCompass::begin()
     return true;
 }
 
-uint8_t _write_register(uint8_t addr, uint8_t reg, uint8_t value, bool skipValue = false)
+uint8_t _write_register(TwoWire &wire, uint8_t addr, uint8_t reg, uint8_t value,
+                        bool skipValue = false)
 {
-    Wire1.beginTransmission(addr);
-    size_t s = Wire1.write(reg);
+    wire.beginTransmission(addr);
+    size_t s = wire.write(reg);
     if (s == 1 && !skipValue)
     {
-        s = Wire1.write(value);
+        s = wire.write(value);
     }
 
-    size_t s1 = Wire1.endTransmission();
+    size_t s1 = wire.endTransmission();
     if (s != 1 && s1 == 0)
     {
         return 1; // "data too long to fit in transmit buffer"
@@ -95,30 +90,31 @@ uint8_t _write_register(uint8_t addr, uint8_t reg, uint8_t value, bool skipValue
     return s1;
 }
 
-int8_t _read_registers(uint8_t addr, uint8_t reg, uint8_t *v, size_t sz,
+int8_t _read_registers(TwoWire &wire, uint8_t addr, uint8_t reg, uint8_t *v, size_t sz,
                        bool skipRegister = false)
 {
     if (!skipRegister)
     {
-        uint8_t s = _write_register(addr, reg, 0, true);
+        uint8_t s = _write_register(wire, addr, reg, 0, true);
         if (s != 0)
         {
             return s;
         }
     }
 
-    uint8_t r = Wire1.requestFrom(addr, sz);
+    uint8_t r = wire.requestFrom(addr, sz);
     for (int i = 0; i < r; i++, v++)
     {
-        *v = Wire1.read();
+        *v = wire.read();
     }
 
     return r - sz;
 }
 
-uint8_t _read_register(uint8_t addr, uint8_t reg, uint8_t &v, bool skipRegister = false)
+uint8_t _read_register(TwoWire &wire, uint8_t addr, uint8_t reg, uint8_t &v,
+                       bool skipRegister = false)
 {
-    uint8_t r = _read_registers(addr, reg, &v, 1, skipRegister);
+    uint8_t r = _read_registers(wire, addr, reg, &v, 1, skipRegister);
     if (r != 0)
     {
         return 1;
@@ -127,10 +123,10 @@ uint8_t _read_register(uint8_t addr, uint8_t reg, uint8_t &v, bool skipRegister 
     return 0;
 }
 
-int8_t _read_xyz(CompassXYZ &xyz)
+int8_t _read_xyz(TwoWire &wire, CompassXYZ &xyz)
 {
     xyz.status = 0;
-    size_t s = _read_register(QMC5883_ADDR, QMC5883_STATUS_REG, xyz.status);
+    size_t s = _read_register(wire, QMC5883_ADDR, QMC5883_STATUS_REG, xyz.status);
     if (s != 0)
     {
         return s;
@@ -139,7 +135,7 @@ int8_t _read_xyz(CompassXYZ &xyz)
     if ((xyz.status & QMC5883_STATUS_DRDY) == 0)
     {
         delay(10);
-        s = _read_register(QMC5883_ADDR, QMC5883_STATUS_REG, xyz.status);
+        s = _read_register(wire, QMC5883_ADDR, QMC5883_STATUS_REG, xyz.status);
         if (s != 0)
         {
             return s;
@@ -148,7 +144,7 @@ int8_t _read_xyz(CompassXYZ &xyz)
 
     int16_t mags[3];
 
-    int8_t r = _read_registers(QMC5883_ADDR, 0, (uint8_t *)&mags, 6);
+    int8_t r = _read_registers(wire, QMC5883_ADDR, 0, (uint8_t *)&mags, 6);
     xyz.x = mags[0];
     xyz.y = mags[1];
     xyz.z = mags[1];
@@ -160,8 +156,8 @@ uint8_t QMC5883LCompass::setMode(CompassMode m)
 {
     if (m == CompassMode::COMPASS_IDLE)
     {
-        uint8_t s = _write_register(QMC5883_ADDR, QMC5883_FBR_REG, 0);
-        s |= _write_register(QMC5883_ADDR, QMC5883_CTR_REG, 0);
+        uint8_t s = _write_register(wire, QMC5883_ADDR, QMC5883_FBR_REG, 0);
+        s |= _write_register(wire, QMC5883_ADDR, QMC5883_CTR_REG, 0);
         return s;
     }
 
@@ -185,13 +181,14 @@ uint8_t QMC5883LCompass::setMode(CompassMode m)
         return 1;
     }
 
-    uint8_t s = _write_register(QMC5883_ADDR, QMC5883_FBR_REG, 1); // set/reset period
+    uint8_t s =
+        _write_register(wire, QMC5883_ADDR, QMC5883_FBR_REG, 1); // set/reset period
     if (s != 0)
     {
         return s;
     }
 
-    return _write_register(QMC5883_ADDR, QMC5883_CTR_REG,
+    return _write_register(wire, QMC5883_ADDR, QMC5883_CTR_REG,
                            (osr << 6) | (rng << 4) | (odr << 2) | mode);
 }
 
@@ -211,7 +208,7 @@ String QMC5883LCompass::selfTest()
     for (int i = 0; i < 100; i++)
     {
         CompassXYZ xyz;
-        int8_t r = _read_xyz(xyz);
+        int8_t r = _read_xyz(wire, xyz);
         if (r < 0)
         {
             errors = true;
@@ -238,7 +235,7 @@ String QMC5883LCompass::selfTest()
     return res;
 }
 
-int8_t QMC5883LCompass::readXYZ() { return _read_xyz(xyz); }
+int8_t QMC5883LCompass::readXYZ() { return _read_xyz(wire, xyz); }
 
 int64_t Compass::lastRead()
 {

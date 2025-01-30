@@ -1,5 +1,6 @@
 #pragma once
 #include <WString.h>
+#include <Wire.h>
 #include <cstdint>
 
 struct HeadingSensor
@@ -57,7 +58,8 @@ struct Compass : HeadingSensor
 
 struct QMC5883LCompass : Compass
 {
-    QMC5883LCompass() : Compass() {}
+    TwoWire &wire;
+    QMC5883LCompass(TwoWire &wire) : Compass(), wire(wire) {}
 
     bool begin() override;
     String selfTest() override;

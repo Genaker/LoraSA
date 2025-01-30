@@ -86,9 +86,8 @@ bool Comms::initComms(Config &c)
     if (c.listen_on_serial0.equalsIgnoreCase("readline"))
     {
         // comms using readline plaintext protocol
-        Comms0 = new ReadlineComms("UART0", SERIAL0);
-        SERIAL0.onReceive(_onReceive0, false);
-        SERIAL0.begin(115200);
+        Comms0 = new ReadlineComms("UART0", Uart0);
+        Uart0.onReceive(_onReceive0, false);
 
         Serial.println("Initialized communications on Serial0 using readline protocol");
     }
@@ -102,9 +101,8 @@ bool Comms::initComms(Config &c)
     if (c.listen_on_serial1.equalsIgnoreCase("readline"))
     {
         // comms using readline plaintext protocol
-        Comms1 = new ReadlineComms("UART1", Serial1);
-        Serial1.onReceive(_onReceive1, false);
-        Serial1.begin(115200);
+        Comms1 = new ReadlineComms("UART1", Uart1);
+        Uart1.onReceive(_onReceive1, false);
 
         Serial.println("Initialized communications on Serial1 using readline protocol");
     }
@@ -420,7 +418,7 @@ String _scan_result_str(ScanTaskResult &r)
     for (int i = 0; i < r.sz; i++)
     {
         p += (i == 0 ? "(" : ", (") + String(r.freqs_khz[i]) + ", " + String(r.rssis[i]) +
-             ")";
+             (r.rssis2 ? ", " + String(r.rssis2[i]) : "") + ")";
     }
 
     return p + " ]\n";

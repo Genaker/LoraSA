@@ -53,6 +53,95 @@ struct LoRaConfig
 
 LoRaConfig *configureLora(String cfg);
 
+struct BusConfig
+{
+    enum
+    {
+        NONE, // No bus
+        UART, // Serial
+        SPI,
+        WIRE // I2C
+    } bus_type;
+
+    int8_t bus_num;
+
+    bool enabled;
+
+    uint32_t clock_freq;
+
+    union
+    {
+        int8_t scl;
+        int8_t clk;
+    };
+
+    union
+    {
+        int8_t sda;
+        int8_t mosi;
+        int8_t tx;
+    };
+
+    union
+    {
+        int8_t miso;
+        int8_t rx;
+    };
+
+    BusConfig()
+        : bus_type(NONE), bus_num(-1), enabled(false), clock_freq(115200), clk(-1),
+          rx(-1), tx(-1) {};
+
+    static BusConfig configure(String cfg);
+    String toStr();
+};
+
+#ifndef RADIO_MODULE_CS_PIN
+#define RADIO_MODULE_CS_PIN 38
+#endif
+
+#ifndef RADIO_MODULE_DIO1_PIN
+#define RADIO_MODULE_DIO1_PIN 40
+#endif
+
+#ifndef RADIO_MODULE_RST_PIN
+#define RADIO_MODULE_RST_PIN 41
+#endif
+
+#ifndef RADIO_MODULE_BUSY_PIN
+#define RADIO_MODULE_BUSY_PIN 39
+#endif
+
+#ifndef RADIO_MODULE_CLOCK_FREQ
+#define RADIO_MODULE_CLOCK_FREQ 16000000
+#endif
+
+#ifndef RADIO_MODULE_MSB_FIRST
+#define RADIO_MODULE_MSB_FIRST 1
+#endif
+
+#ifndef RADIO_MODULE_SPI_MODE
+#define RADIO_MODULE_SPI_MODE 0
+#endif
+
+struct RadioModuleSPIConfig
+{
+    bool enabled;
+    String module;
+    int8_t bus_num;
+    int8_t cs;
+    int8_t rst;
+    int8_t dio1;
+    int8_t busy;
+
+    uint32_t clock_freq;
+    bool msb_first;
+    int8_t spi_mode;
+
+    static RadioModuleSPIConfig configure(String cfg);
+    String toStr();
+};
+
 #ifndef FREQ_RX
 #define FREQ_RX 866
 #endif
@@ -84,6 +173,26 @@ LoRaConfig *configureLora(String cfg);
 #define DEFAULT_LORA_SF 7
 #endif
 
+#ifndef DEFAULT_UART0
+#define DEFAULT_UART0 "none"
+#endif
+
+#ifndef DEFAULT_UART1
+#define DEFAULT_UART1 "u1:115200"
+#endif
+
+#ifndef DEFAULT_SPI1
+#define DEFAULT_SPI1 "s1:16000000,clk:42,mosi:46,miso:45"
+#endif
+
+#ifndef DEFAULT_WIRE1
+#define DEFAULT_WIRE1 "none"
+#endif
+
+#ifndef DEFAULT_RADIO2
+#define DEFAULT_RADIO2 "none"
+#endif
+
 #define CREATE_MISSING_CONFIG true
 struct Config
 {
@@ -100,6 +209,12 @@ struct Config
     LoRaConfig *rx_lora;
     LoRaConfig *tx_lora;
 
+    BusConfig uart0;
+    BusConfig uart1;
+    BusConfig spi1;
+    BusConfig wire1;
+    RadioModuleSPIConfig radio2;
+
     bool is_host;
     bool lora_enabled;
 
@@ -110,7 +225,11 @@ struct Config
           listen_on_serial0(String("none")), listen_on_serial1(String("readline")),
           listen_on_usb(String("readline")), rx_lora(configureLora(DEFAULT_RX)),
           tx_lora(configureLora(DEFAULT_TX)), is_host(DEFAULT_IS_LORA_HOST),
-          lora_enabled(DEFAULT_LORA_ENABLED) {};
+          uart0(BusConfig::configure(DEFAULT_UART0)),
+          uart1(BusConfig::configure(DEFAULT_UART1)),
+          spi1(BusConfig::configure(DEFAULT_SPI1)),
+          wire1(BusConfig::configure(DEFAULT_WIRE1)), lora_enabled(DEFAULT_LORA_ENABLED),
+          radio2(RadioModuleSPIConfig::configure(DEFAULT_RADIO2)) {};
 
     bool write_config(const char *path);
 

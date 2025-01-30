@@ -139,10 +139,14 @@ void sendBTData(float heading, float rssi)
 #include <LiLyGo.h>
 #endif // end LILYGO
 
+#include <bus.h>
 #include <heading.h>
+#include <radio.h>
 
 DroneHeading droneHeading;
 Compass *compass = NULL;
+
+RadioModule *radio2;
 
 #define BT_SCAN_DELAY 60 * 1 * 1000
 #define WF_SCAN_DELAY 60 * 2 * 1000
@@ -941,6 +945,25 @@ void init_radio()
     setFrequency(CONF_FREQ_BEGIN);
 
     delay(100);
+
+    if (config.radio2.enabled && config.radio2.module.equalsIgnoreCase("SX1262"))
+    {
+        radio2 = new SX1262Module(config.radio2);
+        state = radio2->beginScan(CONF_FREQ_BEGIN, BANDWIDTH, RADIOLIB_SHAPING_NONE);
+        if (state == RADIOLIB_ERR_NONE)
+        {
+            both.println("Initialized additional module OK");
+            radio2->setRxBandwidth(BANDWIDTH);
+        }
+        else
+        {
+            Serial.printf("Error initializing additional module: %d\n", state);
+            if (state == RADIOLIB_ERR_CHIP_NOT_FOUND)
+            {
+                Serial.println("Radio2: CHIP NOT FOUND");
+            }
+        }
+    }
 }
 
 struct frequency_scan_result
@@ -972,12 +995,19 @@ void eventListenerForReport(void *arg, Event &e)
             frequency_scan_result.readings_sz = frequency_scan_result.dump.sz + 1;
             uint32_t *f = new uint32_t[frequency_scan_result.readings_sz];
             int16_t *r = new int16_t[frequency_scan_result.readings_sz];
+            int16_t *r2 = radio2 ? new int16_t[frequency_scan_result.readings_sz] : NULL;
 
             if (old_sz > 0)
             {
                 memcpy(f, frequency_scan_result.dump.freqs_khz,
                        old_sz * sizeof(uint32_t));
                 memcpy(r, frequency_scan_result.dump.rssis, old_sz * sizeof(int16_t));
+                if (radio2)
+                {
+                    memcpy(r2, frequency_scan_result.dump.rssis2,
+                           old_sz * sizeof(int16_t));
+                    delete[] frequency_scan_result.dump.rssis2;
+                }
 
                 delete[] frequency_scan_result.dump.freqs_khz;
                 delete[] frequency_scan_result.dump.rssis;
@@ -985,12 +1015,16 @@ void eventListenerForReport(void *arg, Event &e)
 
             frequency_scan_result.dump.freqs_khz = f;
             frequency_scan_result.dump.rssis = r;
+            frequency_scan_result.dump.rssis2 = r2;
         }
 
         frequency_scan_result.dump.freqs_khz[frequency_scan_result.dump.sz] =
             e.detected.freq * 1000; // convert to kHz
         frequency_scan_result.dump.rssis[frequency_scan_result.dump.sz] =
             max(e.detected.rssi, -999.0f);
+        if (radio2)
+            frequency_scan_result.dump.rssis2[frequency_scan_result.dump.sz] =
+                max(e.detected.rssi2, -999.0f);
         frequency_scan_result.dump.sz++;
 
         if (e.epoch != frequency_scan_result.last_epoch ||
@@ -1413,6 +1447,31 @@ void setup(void)
     wf_start = millis();
 
     config = Config::init();
+#if defined(HAS_SDCARD)
+    SD.end();
+    SDCardSPI.end(); // end SPI before other uses, eg radio2 over SPI
+#endif
+
+    pinMode(LED, OUTPUT);
+    pinMode(BUZZER_PIN, OUTPUT);
+    pinMode(REB_PIN, OUTPUT);
+    heltec_setup();
+
+    if (!initUARTs(config))
+    {
+        Serial.println("Failed to initialize UARTs");
+    }
+
+    if (!initSPIs(config))
+    {
+        Serial.println("Failed to initialize SPIs");
+    }
+
+    if (!initWires(config))
+    {
+        Serial.println("Failed to initialize I2Cs");
+    }
+
     r.comms_initialized = Comms::initComms(config);
     if (r.comms_initialized)
     {
@@ -1422,11 +1481,6 @@ void setup(void)
     {
         Serial.println("Comms did not initialize");
     }
-
-    pinMode(LED, OUTPUT);
-    pinMode(BUZZER_PIN, OUTPUT);
-    pinMode(REB_PIN, OUTPUT);
-    heltec_setup();
 
 #ifdef JOYSTICK_ENABLED
     calibrate_joy();
@@ -1653,20 +1707,27 @@ void setup(void)
 
 #endif
 
-    compass = new QMC5883LCompass();
-    if (!compass->begin())
+    if (wireDevices & QMC5883L || wire1Devices & QMC5883L)
     {
-        Serial.println("Failed to initialize Compass");
+        compass = new QMC5883LCompass(wireDevices & QMC5883L ? Wire : Wire1);
     }
 
-    String err = compass->selfTest();
-    if (err.startsWith("OK\n"))
+    if (compass)
     {
-        Serial.printf("Compass self-test passed: %s\n", err.c_str());
-    }
-    else
-    {
-        Serial.printf("Compass self-sets failed: %s\n", err.c_str());
+        if (!compass->begin())
+        {
+            Serial.println("Failed to initialize Compass");
+        }
+
+        String err = compass->selfTest();
+        if (err.startsWith("OK\n"))
+        {
+            Serial.printf("Compass self-test passed: %s\n", err.c_str());
+        }
+        else
+        {
+            Serial.printf("Compass self-sets failed: %s\n", err.c_str());
+        }
     }
 
 #ifdef UPTIME_CLOCK
@@ -2677,6 +2738,14 @@ void doScan()
             int display_x = x / SCAN_RBW_FACTOR;
             freqX[(int)r.current_frequency] = display_x;
             setFrequency(curr_freq / 1000.0);
+            if (radio2 != NULL)
+            {
+                state = radio2->setFrequency(curr_freq / 1000.0);
+                if (state != RADIOLIB_ERR_NONE)
+                {
+                    Serial.printf("Radio2: Failed to set freq: %d\n", state);
+                }
+            }
 
             LOG("Step:%d Freq: %f\n", x, r.current_frequency);
             // SpectralScan Method
@@ -2708,6 +2777,8 @@ void doScan()
 #endif
 #ifdef METHOD_RSSI
             // Spectrum analyzer using getRSSI
+            float rssi2 = -999;
+
             {
                 LOG("METHOD RSSI");
 
@@ -2727,6 +2798,7 @@ void doScan()
                 else
                     g = &getRSSI;
                 uint16_t max_rssi = 120;
+
                 // Scan if not in the ignore list
                 if (ignoredFreq.find((int)r.current_frequency) == ignoredFreq.end())
                 {
@@ -2737,6 +2809,11 @@ void doScan()
                     if (max_rssi != 0 && xRSSI[display_x] > (int)max_rssi)
                     {
                         xRSSI[display_x] = (int)max_rssi;
+                    }
+
+                    for (int i = 0; radio2 != NULL && i < samples; i++)
+                    {
+                        rssi2 = max(rssi2, radio2->getRSSI());
                     }
                 }
                 else
@@ -2773,6 +2850,7 @@ void doScan()
             Event event = r.detect(result, filtered_result,
                                    RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE, samples);
             event.time_ms = millis();
+            event.detected.rssi2 = rssi2;
 
             size_t detected_at = event.detected.detected_at;
             if (max_rssi_x > detected_at)
