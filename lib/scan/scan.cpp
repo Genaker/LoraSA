@@ -25,7 +25,7 @@ uint16_t Scan::rssiMethod(float (*getRSSI)(void *), void *param, size_t samples,
             rssi = -65535;
 
         uint16_t abs_rssi = abs(rssi);
-        if (abs_rssi < max_signal)
+        if (abs_rssi < max_signal && max_signal != 0)
         {
             max_signal = abs_rssi;
         }

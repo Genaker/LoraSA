@@ -23,64 +23,6 @@
 
 //  #define HELTEC_NO_DISPLAY
 
-#ifdef BT_MOBILE
-#include <NimBLEDevice.h>
-
-#define SERVICE_UUID "00001234-0000-1000-8000-00805f9b34fb"
-#define CHARACTERISTIC_UUID "00001234-0000-1000-8000-00805f9b34ac"
-
-NimBLEServer *pServer = nullptr;
-NimBLECharacteristic *pCharacteristic = nullptr;
-NimBLEAdvertising *pAdvertising = nullptr;
-
-void initBT()
-{
-    // Initialize BLE device
-    NimBLEDevice::init("RSSI_Radar");
-
-    // Get and print the MAC address
-    String macAddress = NimBLEDevice::getAddress().toString().c_str();
-    Serial.println("Bluetooth MAC Address: " + macAddress);
-
-    // Create BLE server
-    pServer = NimBLEDevice::createServer();
-
-    // Create a BLE service
-    NimBLEService *pService = pServer->createService(SERVICE_UUID);
-
-    // Create a BLE characteristic
-    pCharacteristic = pService->createCharacteristic(
-        CHARACTERISTIC_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
-
-    // Start the service
-    pService->start();
-
-    // Start advertising
-
-    pAdvertising = NimBLEDevice::getAdvertising();
-    pAdvertising->addServiceUUID(SERVICE_UUID);
-    pAdvertising->setName("ESP32_RSSI_Radar"); // Set the device name
-    pAdvertising->setMinInterval(300);
-    pAdvertising->setMaxInterval(350);
-    // pAdvertising->setScanResponse(true); // Allow scan responses
-
-    pAdvertising->start();
-
-    Serial.println("BLE server started.");
-}
-
-// Function to send RSSI and Heading Data
-void sendBTData(float heading, float rssi)
-{
-    String data =
-        "RSSI_HEADING: '{H:" + String(heading) + ",RSSI:-" + String(rssi) + "}'";
-    Serial.println("Sending data: " + data);
-    pCharacteristic->setValue(data.c_str()); // Set BLE characteristic value
-    pCharacteristic->notify();               // Notify connected client
-}
-
-#endif
-
 #include "FS.h"
 #include <Arduino.h>
 #ifdef WEB_SERVER
@@ -119,6 +61,187 @@ void sendBTData(float heading, float rssi)
 #include <events.h>
 #include <scan.h>
 #include <stdlib.h>
+
+#ifdef BT_MOBILE
+#include "esp_task_wdt.h"
+#include <NimBLEDevice.h>
+
+#define LOG_LOCAL_LEVEL ESP_LOG_VERBOSE
+#include "esp_log.h"
+
+NimBLEServer *pServer = nullptr;
+NimBLECharacteristic *pCharacteristic = nullptr;
+NimBLEAdvertising *pAdvertising = nullptr;
+bool deviceConnected = false;
+
+#define SERVICE_UUID "00001234-0000-1000-8000-00805f9b34fb"
+#define CHARACTERISTIC_UUID "00001234-0000-1000-8000-00805f9b34ac"
+
+class BTServerCallbacks : public NimBLEServerCallbacks
+{
+  public:
+    void onConnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo) override
+    {
+        deviceConnected = true;
+        Serial.printf("Device Connected | Free Heap: %d kByte\n",
+                      ESP.getFreeHeap() / 1000);
+        Serial.printf("Client address: %s\n", connInfo.getAddress().toString().c_str());
+        /**
+         *  We can use the connection handle here to ask for different connection
+         * parameters. Args: connection handle, min connection interval, max connection
+         * interval latency, supervision timeout. Units; Min/Max Intervals: 1.25
+         * millisecond increments. Latency: number of intervals allowed to skip. Timeout:
+         * 10 millisecond increments.
+         */
+        pServer->updateConnParams(connInfo.getConnHandle(), 24, 48, 0, 180);
+    }
+
+    void onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo,
+                      int reason) override
+    {
+        deviceConnected = false;
+        Serial.println("Device Disconnected");
+        NimBLEDevice::startAdvertising(); // Restart advertising
+    }
+
+    void onMTUChange(uint16_t MTU, NimBLEConnInfo &connInfo) override
+    {
+        Serial.printf("MTU updated: %u for connection ID: %u\n", MTU,
+                      connInfo.getConnHandle());
+    }
+} BTServerCallbacks;
+
+/** Handler class for characteristic actions */
+class CharacteristicCallbacks : public NimBLECharacteristicCallbacks
+{
+    void onRead(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo) override
+    {
+        Serial.printf("%s : onRead(), value: %s\n",
+                      pCharacteristic->getUUID().toString().c_str(),
+                      pCharacteristic->getValue().c_str());
+    }
+
+    void onWrite(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo) override
+    {
+        Serial.printf("%s : onWrite(), value: %s\n",
+                      pCharacteristic->getUUID().toString().c_str(),
+                      pCharacteristic->getValue().c_str());
+    }
+
+    /**
+     *  The value returned in code is the NimBLE host return code.
+     */
+    void onStatus(NimBLECharacteristic *pCharacteristic, int code) override
+    {
+        Serial.printf("Notification/Indication return code: %d, %s\n", code,
+                      NimBLEUtils::returnCodeToString(code));
+    }
+
+    /** Peer subscribed to notifications/indications */
+    void onSubscribe(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo,
+                     uint16_t subValue) override
+    {
+        std::string str = "Client ID: ";
+        str += connInfo.getConnHandle();
+        str += " Address: ";
+        str += connInfo.getAddress().toString();
+        if (subValue == 0)
+        {
+            str += " Unsubscribed to ";
+        }
+        else if (subValue == 1)
+        {
+            str += " Subscribed to notifications for ";
+        }
+        else if (subValue == 2)
+        {
+            str += " Subscribed to indications for ";
+        }
+        else if (subValue == 3)
+        {
+            str += " Subscribed to notifications and indications for ";
+        }
+        str += std::string(pCharacteristic->getUUID());
+
+        Serial.printf("%s\n", str.c_str());
+    }
+} chrCallbacks;
+
+/** Handler class for descriptor actions */
+class DescriptorCallbacks : public NimBLEDescriptorCallbacks
+{
+    void onWrite(NimBLEDescriptor *pDescriptor, NimBLEConnInfo &connInfo) override
+    {
+        std::string dscVal = pDescriptor->getValue();
+        Serial.printf("Descriptor written value: %s\n", dscVal.c_str());
+    }
+
+    void onRead(NimBLEDescriptor *pDescriptor, NimBLEConnInfo &connInfo) override
+    {
+        Serial.printf("%s Descriptor read\n", pDescriptor->getUUID().toString().c_str());
+    }
+} dscCallbacks;
+
+void initBT()
+{
+    esp_log_level_set("*", ESP_LOG_VERBOSE);
+    ESP_LOGI("DEBUG", "Starting ESP32 Debugging...");
+
+    // Initialize BLE device
+    NimBLEDevice::init("RSSI_Radar");
+
+    // Get and print the MAC address
+    String macAddress = NimBLEDevice::getAddress().toString().c_str();
+    Serial.println("Bluetooth MAC Address: " + macAddress);
+
+    // Create BLE server
+    pServer = NimBLEDevice::createServer();
+
+    if (!pServer)
+    {
+        Serial.println("Failed to create BLE Server");
+    }
+
+    pServer->setCallbacks(&BTServerCallbacks);
+
+    // Create a BLE service
+    NimBLEService *pService = pServer->createService(SERVICE_UUID);
+
+    // Create a BLE characteristic
+    pCharacteristic = pService->createCharacteristic(
+        CHARACTERISTIC_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
+    pCharacteristic->setCallbacks(&chrCallbacks);
+
+    // Start the service
+    pService->start();
+
+    // esp_task_wdt_init(20, true); // Increase timeout to 10 seconds
+    // esp_task_wdt_add(NULL);
+
+    // Start advertising
+    pAdvertising = NimBLEDevice::getAdvertising();
+    pAdvertising->addServiceUUID(SERVICE_UUID);
+    pAdvertising->setName("ESP32_RSSI_Radar"); // Set the device name
+    // pAdvertising->setMinInterval(300);
+    // pAdvertising->setMaxInterval(350);
+    pAdvertising->enableScanResponse(true);
+    // pAdvertising->setScanResponse(true); // Allow scan responses
+
+    pAdvertising->start();
+
+    Serial.println("BLE server started.");
+}
+
+// Function to send RSSI and Heading Data
+void sendBTData(float heading, float rssi)
+{
+    String data =
+        "RSSI_HEADING: '{H:" + String(heading) + ",RSSI:-" + String(rssi) + "}'";
+    Serial.println("Sending data: " + data);
+    pCharacteristic->setValue(data.c_str()); // Set BLE characteristic value
+    pCharacteristic->notify();               // Notify connected client
+}
+#endif
 
 #ifndef LILYGO
 #include <heltec_unofficial.h>
@@ -865,7 +988,7 @@ bool setFrequency(float curr_freq)
         Serial.println("E(" + String(state) +
                        "):setFrequency:" + String(r.current_frequency));
         display.display();
-        delay(2);
+        // delay(2);
         return false;
     }
 
@@ -2134,10 +2257,15 @@ int max_rssi_x = 999;
 void doScan();
 
 void reportScan();
+long calStart = 0;
 
 float getCompassHeading()
 {
-    /* code */
+    if (calStart == 0)
+    {
+        calStart = millis();
+    }
+#ifdef COMPASS_ENABLED
 
     /* Get a new sensor event */
     sensors_event_t event2;
@@ -2177,16 +2305,22 @@ float getCompassHeading()
     float y = event2.magnetic.y;
     float z = event2.magnetic.z;
 
-    // Update min/max values dynamically
-    x_min = min(x_min, x);
-    x_max = max(x_max, x);
-    y_min = min(y_min, y);
-    y_max = max(y_max, y);
-    z_min = min(z_min, z);
-    z_max = max(z_max, z);
+    // Doing calibration first 1 minute
+    if (millis() - calStart < 60000)
+    {
+        // Update min/max values dynamically
+        x_min = min(x_min, x);
+        x_max = max(x_max, x);
+        y_min = min(y_min, y);
+        y_max = max(y_max, y);
+        z_min = min(z_min, z);
+        z_max = max(z_max, z);
+    }
 
+#ifdef COMPASS_DEBUG
     Serial.println("x_min:" + String(x_min) + " x_max: " + String(x_max) +
                    " y_min: " + String(y_min));
+#endif
 
     // Calculate offsets and scales in real-time
     float x_offset = (x_max + x_min) / 2;
@@ -2224,6 +2358,7 @@ float getCompassHeading()
     // Convert radians to degrees for readability.
     float headingDegrees = heading * 180 / M_PI;
     return headingDegrees;
+#endif
 }
 
 float historicalCompassRssi[STEPS] = {999};
@@ -2255,7 +2390,7 @@ void loop(void)
     }
 #ifdef COMPASS_ENABLED
 #if defined(COMPASS_FREQ)
-    delay(1000);
+    // delay(1000);
     display.clear();
 #endif // COMPAS_FREQ
     // Redraw Chart scale line
@@ -2294,14 +2429,14 @@ void loop(void)
             float endFreq = COMPASS_FREQ + 1.0;   // End 2 MHz right
             float step = 0.5;                     // Step size in MHz
 #ifdef COMPASS_RSSI
+            draw360Scale(0, 360, 128, 64);
             for (int i = 0; i < SAMPLES_RSSI; i++)
             {
-
                 for (float freq = startFreq; freq <= endFreq; freq += step)
                 {
                     setFrequency(freq);
                     // Serial.println("COMPASS FREQ SET: " + String(freq));
-                    draw360Scale(0, 360, 128, 64);
+
                     // heltec_delay(5);
 #ifdef USING_LR1121
                     radio.getRssiInst(&rssi);
@@ -2310,7 +2445,7 @@ void loop(void)
 #endif
                     float headingDegreesAfter = getCompassHeading();
                     float compassDiff = abs(headingDegreesAfter - headingDegrees);
-                    if (compassDiff >= 3)
+                    if (compassDiff >= 2)
                     {
                         goto compass;
                     }
@@ -3069,6 +3204,17 @@ void loraSendMessage(Message &msg)
 
 void reportScan()
 {
+#ifdef BT_MOBILE
+#ifndef COMPASS_ENABLED
+    // String p = _scan_result_str(m.payload.dump, 10);
+    if (pServer->getConnectedCount())
+    {
+        pCharacteristic->setValue("Test"); // Set BLE characteristic value
+        pCharacteristic->notify();         // Notify connected client
+    }
+    delay(1000);
+#endif
+#endif
     if (!config.lora_enabled)
         return;
 
