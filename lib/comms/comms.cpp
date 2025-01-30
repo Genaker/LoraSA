@@ -86,9 +86,8 @@ bool Comms::initComms(Config &c)
     if (c.listen_on_serial0.equalsIgnoreCase("readline"))
     {
         // comms using readline plaintext protocol
-        Comms0 = new ReadlineComms("UART0", SERIAL0);
-        SERIAL0.onReceive(_onReceive0, false);
-        SERIAL0.begin(115200);
+        Comms0 = new ReadlineComms("UART0", Uart0);
+        Uart0.onReceive(_onReceive0, false);
 
         Serial.println("Initialized communications on Serial0 using readline protocol");
     }
@@ -102,9 +101,8 @@ bool Comms::initComms(Config &c)
     if (c.listen_on_serial1.equalsIgnoreCase("readline"))
     {
         // comms using readline plaintext protocol
-        Comms1 = new ReadlineComms("UART1", Serial1);
-        Serial1.onReceive(_onReceive1, false);
-        Serial1.begin(115200);
+        Comms1 = new ReadlineComms("UART1", Uart1);
+        Uart1.onReceive(_onReceive1, false);
 
         Serial.println("Initialized communications on Serial1 using readline protocol");
     }
@@ -184,19 +182,18 @@ String _scan_str(ScanTask &);
 String _scan_result_str(ScanTaskResult &);
 String _wrap_str(String);
 
-#define POLY 0x1021
-uint16_t crc16(String v, uint16_t c)
+uint16_t crc16(uint16_t poly, uint16_t c, size_t sz, uint8_t *v)
 {
     c ^= 0xffff;
-    for (int i = 0; i < v.length(); i++)
+    for (int i = 0; i < sz; i++)
     {
-        uint16_t ch = v.charAt(i);
+        uint16_t ch = v[i];
         c = c ^ (ch << 8);
         for (int j = 0; j < 8; j++)
         {
             if (c & 0x8000)
             {
-                c = (c << 1) ^ POLY;
+                c = (c << 1) ^ poly;
             }
             else
             {
@@ -206,6 +203,12 @@ uint16_t crc16(String v, uint16_t c)
     }
 
     return c ^ 0xffff;
+}
+
+#define POLY 0x1021
+uint16_t crc16(String v, uint16_t c)
+{
+    return crc16(POLY, c, v.length(), (uint8_t *)v.c_str());
 }
 
 void ReadlineComms::_onReceive()
@@ -415,7 +418,7 @@ String _scan_result_str(ScanTaskResult &r)
     for (int i = 0; i < r.sz; i++)
     {
         p += (i == 0 ? "(" : ", (") + String(r.freqs_khz[i]) + ", " + String(r.rssis[i]) +
-             ")";
+             (r.rssis2 ? ", " + String(r.rssis2[i]) : "") + ")";
     }
 
     return p + " ]\n";

@@ -188,6 +188,11 @@ int16_t RadioComms::send(Message &m)
     size_t p = MAX_MSG;
     uint8_t *msg = NULL;
 
+    if (loraCfg.crc)
+    {
+        p -= 2;
+    }
+
     if (m.type == SCAN_RESULT)
     {
         msg = _serialize_scan_result(m, p, msg_buf);
@@ -205,6 +210,13 @@ int16_t RadioComms::send(Message &m)
     {
         Serial.printf("Failed to encode message\n");
         return RADIOLIB_ERR_INVALID_FUNCTION;
+    }
+
+    if (loraCfg.crc)
+    {
+        uint16_t c = loraCfg.crc_seed ^ 0xffff;
+        c = crc16(loraCfg.crc_poly, c, p, msg);
+        _write(msg, MAX_MSG, p, (uint8_t *)&c, 2);
     }
 
     int16_t status = radio.transmit(msg, p);
@@ -385,7 +397,7 @@ Message *RadioComms::receive(uint16_t timeout_ms)
     radio.clearDio1Action();
 
     packetRssi = radio.getRSSI(true);
-    Serial.println("LORA_RSSI: " + String(packetRssi));
+    // Serial.println("LORA_RSSI:" + String(packetRssi));
     size_t len = radio.getPacketLength(true);
     uint8_t *packet = msg;
 
