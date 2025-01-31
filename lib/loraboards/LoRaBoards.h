@@ -23,12 +23,12 @@
 
 #include <Arduino.h>
 #include <SPI.h>
-#include <U8g2lib.h>
+// #include <U8g2lib.h>
 #include <Wire.h>
 #include <XPowersLib.h>
 
 #ifndef DISPLAY_MODEL
-#define DISPLAY_MODEL U8G2_SSD1306_128X64_NONAME_F_HW_I2C
+// #define DISPLAY_MODEL U8G2_SSD1306_128X64_NONAME_F_HW_I2C
 #endif
 
 #ifndef OLED_WIRE_PORT
@@ -57,7 +57,7 @@ typedef struct
     uint8_t flashSpeed;
 } DevInfo_t;
 
-void setupBoards(bool disable_u8g2 = false);
+void setupBoards(bool disable_u8g2 = true);
 
 bool beginSDCard();
 
@@ -81,7 +81,7 @@ void loopPMU();
 extern XPowersLibInterface *PMU;
 extern bool pmuInterrupt;
 #endif
-extern DISPLAY_MODEL *u8g2;
+// extern DISPLAY_MODEL *u8g2;
 
 #define U8G2_HOR_ALIGN_CENTER(t) ((u8g2->getDisplayWidth() - (u8g2->getUTF8Width(t))) / 2)
 #define U8G2_HOR_ALIGN_RIGHT(t) (u8g2->getDisplayWidth() - u8g2->getUTF8Width(t))

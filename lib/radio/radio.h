@@ -13,7 +13,7 @@ struct RadioModule
     virtual float getRSSI() = 0;
 };
 
-#ifdef USING_SX1262
+#ifndef USING_SX1262_no
 struct SX1262Module : RadioModule
 {
     SX1262 *_radio;

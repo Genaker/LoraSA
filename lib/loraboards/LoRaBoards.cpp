@@ -111,7 +111,7 @@ HardwareSerial SerialGPS(GPS_RX_PIN, GPS_TX_PIN);
 #include "driver/gpio.h"
 #endif // ARDUINO_ARCH_ESP32
 
-DISPLAY_MODEL *u8g2 = NULL;
+// DISPLAY_MODEL *u8g2 = NULL;
 static DevInfo_t devInfo;
 
 #ifdef HAS_GPS
@@ -530,6 +530,7 @@ void loopPMU()
 
 bool beginDisplay()
 {
+    /**
     Wire.beginTransmission(DISPLAY_ADDR);
     if (Wire.endTransmission() == 0)
     {
@@ -552,7 +553,7 @@ bool beginDisplay()
     }
 
     Serial.printf("Warning: Failed to find Display at 0x%0X address\n", DISPLAY_ADDR);
-    return false;
+    return false;*/
 }
 
 bool beginSDCard()
@@ -847,7 +848,7 @@ void printResult(bool radio_online)
     Serial.println((psramFound()) ? "+" : "-");
 
     Serial.print("Display      : ");
-    Serial.println((u8g2) ? "+" : "-");
+    // Serial.println((u8g2) ? "+" : "-");
 
 #ifdef HAS_SDCARD
     Serial.print("Sd Card      : ");
@@ -866,7 +867,7 @@ void printResult(bool radio_online)
 #endif
 #endif
 
-    if (u8g2)
+    /*if (u8g2)
     {
 
         u8g2->clearBuffer();
@@ -895,6 +896,7 @@ void printResult(bool radio_online)
 
         delay(2000);
     }
+    */
 #endif
 }
 
