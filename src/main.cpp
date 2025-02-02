@@ -946,6 +946,7 @@ void init_radio()
 
     delay(100);
 
+#ifdef USING_SX1262
     if (config.radio2.enabled && config.radio2.module.equalsIgnoreCase("SX1262"))
     {
         radio2 = new SX1262Module(config.radio2);
@@ -964,6 +965,7 @@ void init_radio()
             }
         }
     }
+#endif
 }
 
 struct frequency_scan_result

@@ -2,6 +2,7 @@
 #include <LoRaBoards.h>
 #include <bus.h>
 
+#ifdef USING_SX1262
 SX1262Module::SX1262Module(RadioModuleSPIConfig radio2) : RadioModule()
 {
     _radio = new SX1262(new Module(
@@ -47,3 +48,4 @@ int16_t SX1262Module::setFrequency(float freq)
 int16_t SX1262Module::setRxBandwidth(float bw) { return _radio->setRxBandwidth(bw); }
 
 float SX1262Module::getRSSI() { return _radio->getRSSI(false); }
+#endif
