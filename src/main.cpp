@@ -1358,15 +1358,6 @@ void setup(void)
         xRSSI[i] = 999;
         max_x_rssi[i] = 999;
     }
-#ifdef LOG_DATA_JSON
-    Serial.begin(115200);
-
-#ifdef SEEK_ON_X
-    // Initialize custom Serial port on the hardware using pins
-    // Parameters: baud rate, serial config, RX pin, TX pin
-    SerialPort.begin(115200, SERIAL_8N1, RX_PIN, TX_PIN);
-#endif
-#endif
 
 #ifdef LILYGO
     setupBoards(); // true for disable U8g2 display library
