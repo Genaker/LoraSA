@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <FreeRTOS.h>
 #include <cmath>
+#include <esp_system.h>
 #include <map>
 #include <sbus.h>
 #include <stdexcept>
@@ -53,6 +54,14 @@
 #define LORA_DATA_BYTE 2
 #endif
 
+#define SBUS 1 // Doesn't work
+#define IBUS 2
+#define CROS 3
+
+#ifndef PROTOCOL
+#define PROTOCOL CROS // IBUS // SBUS
+#endif
+
 #ifndef LORA_PREAMBLE
 // 8 is default
 #if LORA_SF == 6 || LORA_SF == 5
@@ -86,213 +95,30 @@
 #define TXD1 39 // Transmit pin for Serial1
 #define RXD2 40 // Receive pin for Serial2
 
-// SBUS packet structure
-#define SBUS_PACKET_SIZE 25
-
-uint16_t channels[16];
-bool failSafe;
-bool lostFrame;
-
-void readSbusData();
-void writeSbusData(uint16_t channels[]);
-
 String readSerialInput();
 std::map<int, int> processSerialCommand(const String &input);
 
-#include <pt.h>
-
-// Define the protothread control structure
-static struct pt ptWriteSbusData;
-
-/*
-commands      sending message              comments
------------------------------------------------------
-roll	      rc 1 <value>	        // 	move left or right
-pitch         rc 2 <value>          // move forward or backwards
-yaw	          rc 4 <value>	        // turn left or right
-throttle      rc 3 <value>  	    // move up or down
-*/
-enum Command
-{
-    HEART_BEAT = 0, // Corresponds to rc 0
-    ROLL = 1,       // Corresponds to rc 1
-    PITCH = 2,      // Corresponds to rc 2
-    THROTTLE = 3,   // Corresponds to rc 3
-    YAW = 4,        // Corresponds to rc 4
-    ////  ----- Not Assigned Yet -----
-    AUX1 = 5, // Corresponds to rc 5
-    AUX2 = 6, // Corresponds to rc 6
-    AUX3 = 7, // Corresponds to rc 7
-    AUX4 = 8, // Corresponds to rc 8
-    AUX5 = 9, // Corresponds to rc 9
-    AUX6 = 10 // Corresponds to rc 10
-};
-
-// Create a map from Command to string
-std::unordered_map<Command, String> commandToStringMap = {{HEART_BEAT, "HEART_BEAT"},
-                                                          {ROLL, "ROLL"},
-                                                          {PITCH, "PITCH"},
-                                                          {YAW, "YAW"},
-                                                          {THROTTLE, "THROTTLE"}};
-
-// Define the mapping table
-std::vector<std::pair<uint8_t, uint16_t>> channelValueMappingTable = {
-    {0, 1300},  {1, 1325},  {2, 1350},  {3, 1375}, {4, 1400},  {5, 1425},
-    {6, 1450},  {7, 1475},  {8, 1500},  {9, 1525}, {10, 1550}, {11, 1575},
-    {12, 1600}, {13, 1625}, {14, 1650}, {15, 1675}};
-// 0 - 1300 0
-// 1300 - 1325 1
-// 1325 - 1350 2
-// 1350 - 1375 3
-// 1375 - 1400 4
-// 1400 - 1425 5
-// 1425 - 1450 6
-// 1450 - 1475 7
-// 1475 - 1500 8
-// 1500 - 1525 9
-// 1525 - 1550 10
-// 1550 - 1575 11
-// 1575 - 1600 12
-// 1600 - 1625 13
-// 1625 - 1650 14
-// 1650 - 1675 15
-
-#define INIT_SBUS_ARRAY                                                                  \
-    {1500, 1500, 1500, 1500, 1500, 1500, 1500, 1500,                                     \
-     1500, 1500, 1500, 1500, 1500, 1500, 1500, 1500}
-
-// Create SBUS objects for reading and writing
-// Create SBUS objects for reading and writing
-bfs::SbusTx sbusWrite(&Serial1, -1, TXD1, true); // Use Serial1 for SBUS transmission
-bfs::SbusRx sbusRead(&Serial2, RXD2, -1, true);  // Use Serial2 for SBUS reception
-
-// Data structure to hold channel data
-bfs::SbusData sbusDataRead;
-bfs::SbusData sbusDataWrite;
-// print command details
-uint16_t getCommandValue(Command cmd)
-{
-    String commandName =
-        commandToStringMap.count(cmd) ? commandToStringMap[cmd] : "UNKNOWN";
-    Serial.println("RC " + commandName + " : " + String(sbusDataRead.ch[cmd]));
-    return sbusDataRead.ch[cmd];
-}
-
-uint16_t testChannels[16] = {1500, 2000, 1350, 1400, 1505, 1506, 1507, 1508,
-                             1509, 1510, 1511, 1512, 1513, 1514, 1515, 1516};
-
 long int lastWriteTime = 0;
-// Protothread function to write SBUS data
-int writeSbusDataThread(struct pt *pt)
-{
-    PT_BEGIN(pt);
 
-    while (1)
-    {
-        writeSbusData(testChannels); // Call your SBUS data writing function
-        PT_WAIT_UNTIL(pt, millis() - lastWriteTime >= 100);
-        lastWriteTime = millis();
-    }
+#if PROTOCOL == IBUS
+#include "i-bus.h"
+// Create an instance of the Ibus class
+Ibus ibus;
+// Test data list with all control values set to 1700
+uint8_t testControlValues[IBUS_CHANNELS_COUNT * 2];
+#endif
 
-    PT_END(pt);
-}
+#if PROTOCOL == SBUS
+#include "s-bus.h"
+#endif
 
-// P:2:15:4:2
-// BP:0010:1111:0100:0010
-uint8_t convertTo4Bit(uint16_t value11Bit);
-int16_t map4BitTo11Bit(uint8_t value4Bit);
+#include "FHSS.h"
 
-void clearSbusData();
-
-#define SYNC_FREQUENCY 915.000
-
-#define MAX_HOP_CHANNELS 5000              // 20 MHz range with 10 kHz step
-#define PACKET_SEND_DURATION 1 * 60 * 1000 // 1 minutes in milliseconds
-
-float hopTable[MAX_HOP_CHANNELS];
-uint64_t packetNumber = 0;
-long int receivedPacketCounter = 0;
-
-uint32_t syncWord = 0x1A2B3C4D; // Example sync word (can be any 32-bit value)
-int numChannels = 0;
-// Function to generate a frequency hopping table, adapting if channels are fewer
-int generateFrequencies(uint32_t syncWord, float startFreq, float stepKHz,
-                        float maxWidthMHz)
-{
-    float stepMHz = stepKHz / 1000.0; // Convert kHz to MHz
-    numChannels = int((maxWidthMHz * 1e3) /
-                      stepKHz); // Calculate number of channels within max width
-
-    // If fewer channels are available, adjust dynamically
-    if (numChannels < 10)
-    { // Less than 10 channels is not good for FHSS
-        Serial.println("Warning: Too few channels! FHSS may not work well.");
-        numChannels = 10; // Ensure a minimum of 10 channels
-    }
-
-    if (numChannels > MAX_HOP_CHANNELS)
-    {
-        Serial.println("Warning: Reducing channels to MAX_HOP_CHANNELS.");
-        numChannels = MAX_HOP_CHANNELS; // Prevent overflow
-    }
-
-    // Generate sequential frequencies within max width
-    for (int i = 0; i < numChannels; i++)
-    {
-        hopTable[i] = startFreq + (i * stepMHz);
-    }
-
-    // Shuffle using sync word (randomize the order)
-    for (int i = 0; i < numChannels; i++)
-    {
-        syncWord = (syncWord * 1103515245 + 12345) & 0x7FFFFFFF;
-        int swapIndex = syncWord % numChannels;
-
-        // Swap values
-        float temp = hopTable[i];
-        hopTable[i] = hopTable[swapIndex];
-        hopTable[swapIndex] = temp;
-    }
-
-    return numChannels; // Return actual number of channels generated
-}
-
-// Function to print the generated table (for debugging)
-void printHopTable(int numChannels)
-{
-    delay(100);
-    Serial.println("------");
-    Serial.println("Generated Frequency Hopping Table [" + String(numChannels) + "]:");
-    /*for (int i = 0; i < numChannels; i++)
-    {
-        Serial.println(String(i) + ": " + hopTable[i] + " MHz\n");
-    }*/
-    delay(1000);
-}
-
-// Get the next frequency from the hopping table
-int hopIndex = 0;
-unsigned long lastHopTime = 0;
-unsigned long dwellTime = 500; // 500ms dwell time
-float currentFreq = 999;
-void updateFrequency()
-{
-    unsigned long currentTime = millis();
-
-    if (currentTime - lastHopTime >= dwellTime)
-    {
-        if (hopIndex == numChannels)
-        {
-            hopIndex = 0;
-        }
-        hopIndex = hopIndex + 1;
-        // packetNumber = hopIndex;
-        currentFreq = hopTable[hopIndex];
-        radio.setFrequency(hopTable[hopIndex]);
-
-        lastHopTime = currentTime;
-    }
-}
+#if PROTOCOL == CROS
+#include "CRSF.h"
+CRSF crsf(Serial1, TXD1, -1, 420000); // Use Serial1, TX_PIN, RX_PIN, BAUD_RATE
+#endif
+// Example usage
 
 int packetSave = 0;
 bool packetReceived = false;
@@ -424,24 +250,37 @@ bool radioIsRX = false;
 long int startTime = 0;
 void setup()
 {
-    clearSbusData();
+
     Serial.begin(115200);
+
+    // Initialize Serial1 for iBUS communication with a custom TX pin
+#if PROTOCOL == IBUS
+    ibus.begin(Serial1, TXD1);
+    ibus.enable();
+#endif
+
+#if PROTOCOL == SBUS
+    clearSbusData();
+#if LORA_RX
+    sbusWrite.Begin();
+#endif
+#endif
+
+#if PROTOCOL == CROS
+    crsf.begin();
+#endif // end CRSF
+
 #if RUN_TESTS
     testMap11BitTo4Bit();
     testMap4BitTo11Bit();
 #endif
     // testMap11BitTo4Bit();
     //  Initialize SBUS communication
-#if LORA_RX
-    sbusWrite.Begin();
-#endif
+
 #if LORA_TX
     sbusRead.Begin();
 #endif
     Serial.println("SBUS write and read are ready");
-
-    // Initialize the protothread
-    PT_INIT(&ptWriteSbusData);
 
     heltec_setup();
     startTime = millis();
@@ -550,6 +389,7 @@ void setup()
 
 void forceRestartLoRa();
 String toBinary(int num, int bitSize = 4);
+
 unsigned long lastPacketTime = 0;
 long int packetN = 0;
 void loop()
@@ -569,8 +409,51 @@ void loop()
     {
         Serial.println("The map contains data.");
     }
-    // Run the protothread
-    // writeSbusDataThread(&ptWriteSbusData);
+#if PROTOCOL == IBUS
+    uint32_t seed = esp_random() ^ millis();
+    randomSeed(seed);
+    String str = "";
+    // Set all control values to 1700
+    for (int i = 0; i < IBUS_CHANNELS_COUNT; i++)
+    {
+        uint16_t randomValue =
+            random(1200, 1900); // Generate random values between 1200 and 1900
+        str += String(randomValue) + ",";
+        testControlValues[i * 2] = randomValue & 0xFF;            // Low byte
+        testControlValues[i * 2 + 1] = (randomValue >> 8) & 0xFF; // High byte
+    }
+    Serial.println("I-BUS:" + str);
+
+    ibus.setControlValuesList(testControlValues);
+    ibus.sendPacket();
+#endif // end IBUS
+
+#if PROTOCOL == SBUS
+    uint32_t seed = esp_random() ^ millis();
+
+    randomSeed(seed);
+    //  Set all control values to 1700
+
+    uint16_t sbusSend[16] = INIT_SBUS_ARRAY;
+
+    for (int i = 0; i < 12; i++)
+    {
+        uint16_t randomValue = random(1200, 1900);
+        sbusSend[i] = randomValue; // map4BitTo11Bit(randomValue);
+    }
+    writeSbusData(sbusSend);
+    // delay(500);
+    //   Read data for test purpose
+    //  readSbusData();
+#endif // end SBUS
+
+#if PROTOCOL == CROS
+    // Example: Set channel values
+    uint16_t channels[] = {1700, 1800, 1600, 1200,
+                           1580, 1600, 1300, 1900}; // Example channel values
+    crsf.setChannels(channels, sizeof(channels) / sizeof(channels[0]));
+#endif // end CRSF
+
     uint8_t cmd1 = 0;  // Example command 1
     uint8_t val1 = 5;  // Example value 1
     uint8_t cmd2 = 1;  // Example command 2
@@ -812,17 +695,6 @@ void onReceive(void)
                                 String(cmd4) + ":" + (val4));
             }
 
-            uint16_t sbusSend[16] = INIT_SBUS_ARRAY;
-            sbusSend[cmd1] = map4BitTo11Bit(val1);
-            sbusSend[cmd2] = map4BitTo11Bit(val2);
-            if (len == 4 && cmd3 != 0 && cmd4 != 0)
-            {
-                sbusSend[cmd3] = map4BitTo11Bit(val3);
-                sbusSend[cmd4] = map4BitTo11Bit(val4);
-            }
-            writeSbusData(sbusSend);
-            //  Read data for test purpose
-            // readSbusData();
 #if DEBUG
             // Print received data
             Serial.print("[LoRa Receiver] Data: ");
@@ -902,212 +774,6 @@ void forceRestartLoRa()
     radio.begin();
     radio.startReceive();
     lastPacketTime = millis(); // Reset timeout
-}
-
-void readSbusData()
-{
-    // Read SBUS data from Serial2
-    if (false && sbusRead.Read())
-    {
-        sbusDataRead = sbusRead.data();
-
-        Serial.println("Received SBUS data:");
-        for (int i = 0; i < bfs::SbusData::NUM_CH; i++)
-        {
-            Serial.print("Channel ");
-            Serial.print(i);
-            Serial.print(": ");
-            Serial.println(sbusDataRead.ch[i]);
-        }
-        Serial.print("FailSafe: ");
-        Serial.println(sbusDataRead.failsafe);
-        Serial.print("Lost Frame: ");
-        Serial.println(sbusDataRead.lost_frame);
-    }
-    if (bool test = true)
-    {
-        for (int i = 0; i < 16; i++)
-        {
-            sbusDataRead.ch[i] = testChannels[i];
-            Serial.print("Channel ");
-            Serial.print(i);
-            Serial.print(": ");
-            Serial.println(sbusDataRead.ch[i]);
-        }
-    }
-}
-
-void writeSbusData(uint16_t channels[])
-{
-    // Example: Send SBUS data over Serial1
-    for (int i = 0; i < bfs::SbusData::NUM_CH; i++)
-    {
-        sbusDataWrite.ch[i] = channels[i]; // Example data
-    }
-    sbusWrite.data(sbusDataWrite);
-    sbusWrite.Write();
-}
-
-void clearSbusData()
-{
-    // Assuming bfs::SbusData has a member array `ch` and boolean members `failsafe` and
-    // `lost_frame`
-    for (int i = 0; i < bfs::SbusData::NUM_CH; i++)
-    {
-        sbusDataRead.ch[i] = 1500;
-        sbusDataWrite.ch[i] = 1500;
-    }
-    sbusDataRead.failsafe = false;
-    sbusDataRead.lost_frame = false;
-    sbusDataWrite.failsafe = false;
-    sbusDataWrite.lost_frame = false;
-}
-
-uint8_t map11BitTo4Bit(uint16_t value11Bit)
-{
-    // Initialize variables to track the closest match
-    uint8_t closest4BitValue = 0;
-    uint16_t smallestDifference = UINT16_MAX;
-
-    const auto &lastEntry = channelValueMappingTable.back();
-    // Find the closest match in the table
-    for (const auto &entry : channelValueMappingTable)
-    {
-
-        uint8_t key = entry.first;     // Access the key
-        uint16_t value = entry.second; // Access the value
-        if (value11Bit >= lastEntry.second)
-        {
-            closest4BitValue = lastEntry.first;
-            break;
-        }
-        else if (value11Bit <= value)
-        {
-            closest4BitValue = key;
-            break;
-        }
-    }
-
-    return closest4BitValue;
-}
-
-int16_t map4BitTo11Bit(uint8_t value4Bit)
-{
-    // Iterate through the mapping table to find the corresponding 11-bit value
-    for (const auto &entry : channelValueMappingTable)
-    {
-        uint8_t key = entry.first;     // Access the 4-bit key
-        uint16_t value = entry.second; // Access the 11-bit value
-
-        if (key == value4Bit)
-        {
-            return value; // Return the 11-bit value if the key matches
-        }
-    }
-
-    // If no match is found, return a default value or handle the error
-    // For example, return 0 - 1500 or throw an exception
-    return 1500; // Or handle the error as needed
-}
-
-uint8_t convertTo4Bit(uint16_t value11Bit) { return map11BitTo4Bit(value11Bit); }
-
-// Test function
-void testMap11BitTo4Bit()
-{
-    Serial.println("Test Mapping 11-bit to 4-bit");
-
-    // Test cases: {input, expected_output}
-    std::vector<std::pair<uint16_t, uint8_t>> testCases = {
-        {1290, 0}, {1300, 0},  {1310, 1},  {1325, 1},  {1340, 2},
-        {1500, 8}, {1600, 12}, {1700, 15}, {1675, 15}, {1800, 15}};
-    // 0 - 1300 0
-    // 1300 - 1325 1
-    // 1325 - 1350 2
-    // 1350 - 1375 3
-    // 1375 - 1400 4
-    // 1400 - 1425 5
-    // 1425 - 1450 6
-    // 1450 - 1475 7
-    // 1475 - 1500 8
-    // 1500 - 1525 9
-    // 1525 - 1550 10
-    // 1550 - 1575 11
-    // 1575 - 1600 12
-    // 1600 - 1625 13
-    // 1625 - 1650 14
-    // 1650 - 1675 15
-    bool failed = false;
-
-    for (const auto &testCase : testCases)
-    {
-        uint16_t input = testCase.first;
-        uint8_t expectedOutput = testCase.second;
-        uint8_t actualOutput = map11BitTo4Bit(input);
-        bool assert = actualOutput == expectedOutput;
-        if (!assert)
-        {
-            Serial.print("Test Failed->");
-            failed = true;
-        }
-        Serial.println("Test input " + String(input) + ": expected " +
-                       String(expectedOutput) + ", got " + String(actualOutput));
-        delay(100);
-    }
-    if (failed)
-    {
-        Serial.println("Test Failed");
-        delay(500);
-    }
-}
-
-// Test function
-void testMap4BitTo11Bit()
-{
-    Serial.println("Testing map4BitTo11Bit");
-    // Test cases: {input, expected_output}
-    std::vector<std::pair<uint8_t, uint16_t>> testCases = {
-        {0, 1300}, {0, 1300},  {1, 1325},  {1, 1325},  {2, 1350},
-        {8, 1500}, {12, 1600}, {15, 1675}, {14, 1650}, {18, 1500}};
-
-    // 1300 0
-    // 1325 1
-    // 1350 2
-    // 1375 3
-    // 1400 4
-    // 1425 5
-    // 1450 6
-    // 1475 7
-    // 1500 8
-    // 1525 9
-    // 1550 10
-    // 1575 11
-    // 1600 12
-    // 1625 13
-    // 1650 14
-    // 1675 15
-    bool failed = false;
-
-    for (const auto &testCase : testCases)
-    {
-        uint16_t input = testCase.first;
-        uint16_t expectedOutput = testCase.second;
-        uint16_t actualOutput = map4BitTo11Bit(input);
-        bool assert = actualOutput == expectedOutput;
-        if (!assert)
-        {
-            Serial.print("Test Failed->");
-            failed = true;
-        }
-        Serial.println("Test input " + String(input) + ": expected " +
-                       String(expectedOutput) + ", got " + String(actualOutput));
-        delay(100);
-    }
-    if (failed)
-    {
-        Serial.println("Test Failed");
-        delay(500);
-    }
 }
 
 String readSerialInput()
