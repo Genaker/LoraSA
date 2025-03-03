@@ -4,7 +4,13 @@ float hopTable[MAX_HOP_CHANNELS];
 uint64_t packetNumber = 0;
 long int receivedPacketCounter = 0;
 
-uint32_t syncWord = 0x1A2B3C4D; // Example sync word (can be any 32-bit value)
+uint32_t syncWord = 98754386857476; // Example sync word
+// uint32_t syncWord = 0x1A2B3C4D; // Example sync word (can be any 32-bit value)
+
+float maxWidthMHz = 5.0;                        // Max hopping width of 20 MHz
+float startFreq = LORA_BASE_FREQ - maxWidthMHz; // Start at 900 MHz
+float stepKHz = 10.0;                           // 10 kHz step size
+
 int numChannels = 0;
 
 // Get the next frequency from the hopping table

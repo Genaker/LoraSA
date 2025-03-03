@@ -1,106 +1,11 @@
-#include "RadioCommands.h"
-#include <cmath>
-#include <map>
-#include <sbus.h>
-#include <stdexcept>
-#include <unordered_map>
-#include <vector>
+#include <Arduino.h>
+#include <RadioCommands.h>
 
-#define TXD1 39
-#define RXD2 40
-// SBUS packet structure
-#define SBUS_PACKET_SIZE 25
-
-uint16_t channels[16];
-bool failSafe;
-bool lostFrame;
-
-void readSbusData();
-void writeSbusData(uint16_t channels[]);
-
-// Data structure to hold channel data
-bfs::SbusData sbusDataRead;
-bfs::SbusData sbusDataWrite;
-
-bfs::SbusTx sbusWrite(&Serial1, -1, TXD1, true); // Use Serial1 for SBUS transmission
-bfs::SbusRx sbusRead(&Serial2, RXD2, -1, true);  // Use Serial2 for SBUS reception
-
-// P:2:15:4:2
-// BP:0010:1111:0100:0010
 uint8_t convertTo4Bit(uint16_t value11Bit);
 int16_t map4BitTo11Bit(uint8_t value4Bit);
+uint8_t map11BitTo4Bit(uint16_t value11Bit);
 
-// print command details
-uint16_t getCommandValue(Command cmd)
-{
-    String commandName =
-        commandToStringMap.count(cmd) ? commandToStringMap[cmd] : "UNKNOWN";
-    Serial.println("RC " + commandName + " : " + String(sbusDataRead.ch[cmd]));
-    return sbusDataRead.ch[cmd];
-}
-
-void readSbusData()
-{
-    // Read SBUS data from Serial2
-    if (false && sbusRead.Read())
-    {
-        sbusDataRead = sbusRead.data();
-
-        Serial.println("Received SBUS data:");
-        for (int i = 0; i < bfs::SbusData::NUM_CH; i++)
-        {
-            Serial.print("Channel ");
-            Serial.print(i);
-            Serial.print(": ");
-            Serial.println(sbusDataRead.ch[i]);
-        }
-        Serial.print("FailSafe: ");
-        Serial.println(sbusDataRead.failsafe);
-        Serial.print("Lost Frame: ");
-        Serial.println(sbusDataRead.lost_frame);
-    }
-    if (bool test = true)
-    {
-        for (int i = 0; i < 16; i++)
-        {
-            sbusDataRead.ch[i] = testChannels[i];
-            Serial.print("Channel ");
-            Serial.print(i);
-            Serial.print(": ");
-            Serial.println(sbusDataRead.ch[i]);
-        }
-    }
-}
-
-void writeSbusData(uint16_t channels[])
-{
-    String str = "";
-    // Example: Send SBUS data over Serial1
-    for (int i = 0; i < bfs::SbusData::NUM_CH; i++)
-    {
-        str += (String(channels[i]) + "-");
-        sbusDataWrite.ch[i] = channels[i]; // Example data
-    }
-    Serial.println(str);
-
-    sbusWrite.data(sbusDataWrite);
-    sbusWrite.Write();
-}
-
-void clearSbusData()
-{
-    // Assuming bfs::SbusData has a member array `ch` and boolean members `failsafe` and
-    // `lost_frame`
-    for (int i = 0; i < bfs::SbusData::NUM_CH; i++)
-    {
-        sbusDataRead.ch[i] = 1500;
-        sbusDataWrite.ch[i] = 1500;
-    }
-    sbusDataRead.failsafe = false;
-    sbusDataRead.lost_frame = false;
-    sbusDataWrite.failsafe = false;
-    sbusDataWrite.lost_frame = false;
-}
+uint8_t convertTo4Bit(uint16_t value11Bit) { return map11BitTo4Bit(value11Bit); }
 
 uint8_t map11BitTo4Bit(uint16_t value11Bit)
 {
@@ -148,8 +53,6 @@ int16_t map4BitTo11Bit(uint8_t value4Bit)
     // For example, return 0 - 1500 or throw an exception
     return 1500; // Or handle the error as needed
 }
-
-uint8_t convertTo4Bit(uint16_t value11Bit) { return map11BitTo4Bit(value11Bit); }
 
 // Test function
 void testMap11BitTo4Bit()

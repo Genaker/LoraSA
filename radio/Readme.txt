@@ -18,3 +18,11 @@ Download the appropriate version for your operating system (Windows, macOS, or L
 go to Port -> select port -> check Serial RX
 
 Go to 
+
+# SBUS tested
+
+ESP32 39 -> SBUS(R2) Any of them
+GND -> G
+Article explains : https://speedybee.zendesk.com/hc/en-us/articles/19968381088795-How-to-set-up-your-SBUS-receiver-in-Betaflight-configurator-on-SpeedyBee-F405MINI-flight-controller
+
+

@@ -1,3 +1,4 @@
+#include "config.h"
 #include <Arduino.h>
 #include <LiLyGo.h>
 #include <LoRaBoards.h>
@@ -19,6 +20,11 @@ extern int hopIndex;
 extern unsigned long lastHopTime;
 extern unsigned long dwellTime; // 500ms dwell time
 extern float currentFreq;
+
+extern uint32_t syncWord; // Example sync word
+extern float maxWidthMHz; // Max hopping width of 20 MHz
+extern float startFreq;   // Start at 900 MHz
+extern float stepKHz;     // 10 kHz step size
 
 // Function to generate a frequency hopping table, adapting if channels are fewer
 int generateFrequencies(uint32_t syncWord, float startFreq, float stepKHz,

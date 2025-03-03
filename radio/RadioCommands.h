@@ -1,4 +1,6 @@
 
+#pragma once
+
 #include <Arduino.h>
 #include <map>
 #include <unordered_map>
