@@ -171,11 +171,16 @@
         ctx.stroke();
       }
 
+      let lineCoef = 2.5;
       // Draw data points
       dataPoints.forEach(({ angle, rssi }) => {
         const rad = (angle * Math.PI) / 180;
-        const length = ((120 + rssi) / (radius / 2)) * radius; // Scale RSSI to fit within radar
-
+        //const length = (120 + rssi) / (radius / 2) * radius;
+        const length = ((120 - 90) + (rssi + 90)) * lineCoef; // Scale RSSI to fit within radar
+        if (length > radius) {
+          length = radius;
+        }
+        console.log("Length: " + length);
         const x = centerX + length * Math.cos(rad);
         const y = centerY + length * Math.sin(rad);
 
@@ -224,7 +229,7 @@
 
       // Draw current RSSI line in yellow
       const currentRad = (currentPoint.angle * Math.PI) / 180;
-      const currentLength = ((120 + currentPoint.rssi) / (radius / 2)) * radius;
+      const currentLength = ((120 + currentPoint.rssi) / (radius / 2)) * radius * 1.2;
 
       const currentX = centerX + currentLength * Math.cos(currentRad);
       const currentY = centerY + currentLength * Math.sin(currentRad);
@@ -420,7 +425,7 @@
         console.log(`Reconnecting to device: ${bluetoothDevice.name}`);
         const server = await bluetoothDevice.gatt.connect();
         console.log(`Reconnected to device: ${bluetoothDevice.name}`);
-        deviceNameElem.textContent = bluetoothDevice.name;
+        //deviceNameElem.textContent = bluetoothDevice.name;
         statusElem.textContent = "Reconnected";
       } catch (error) {
         console.error("Error reconnecting to Bluetooth device:", error);

@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spectrum Analyzer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background-color: black;
+            color: white;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 80%;
+            margin: auto;
+        }
+
+        .chart-container {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .chart {
+            height: 40vh;
+            border: 1px solid white;
+            position: relative;
+        }
+
+        .waterfall {
+            height: 40vh;
+            border: 1px solid white;
+        }
+
+        .console {
+            height: 20vh;
+            width: 100%;
+            background-color: black;
+            color: white;
+            overflow-y: auto;
+            padding: 10px;
+            text-align: left;
+            border: 1px solid white;
+        }
+
+        .labels {
+            position: absolute;
+            left: -50px;
+            top: 0;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .freq-labels {
+            display: flex;
+            justify-content: space-between;
+            position: absolute;
+            bottom: -20px;
+            width: 100%;
+        }
+
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+            image-rendering: crisp-edges;
+        }
+
+        button {
+            margin: 10px;
+            padding: 10px;
+            font-size: 16px;
+            background-color: white;
+            color: black;
+            border: none;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: gray;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Spectrum Analyzer</h1>
+    <button id="simulationButton" onclick="toggleSimulation()">Start Simulation</button>
+    <button onclick="connectBluetooth()">Connect Bluetooth</button>
+    <div class="container">
+        <div class="chart-container">
+            <div class="labels" id="dbLabels"></div>
+            <canvas id="chartCanvas" class="chart"></canvas>
+            <div class="freq-labels" id="freqLabels"></div>
+        </div>
+        <canvas id="waterfallCanvas" class="waterfall"></canvas>
+        <div class="console" id="consoleOutput"></div>
+    </div>
+    <script>
+        const chartCanvas = document.getElementById('chartCanvas');
+        const chartCtx = chartCanvas.getContext('2d');
+        const waterfallCanvas = document.getElementById('waterfallCanvas');
+        const waterfallCtx = waterfallCanvas.getContext('2d');
+        const dbLabels = document.getElementById('dbLabels');
+        const freqLabels = document.getElementById('freqLabels');
+        const simulationButton = document.getElementById('simulationButton');
+
+        const scaleFactor = 1; //window.devicePixelRatio || 2;
+        chartCanvas.width = chartCanvas.clientWidth * scaleFactor;
+        chartCanvas.height = chartCanvas.clientHeight * scaleFactor;
+        chartCtx.scale(scaleFactor, scaleFactor);
+
+        waterfallCanvas.width = waterfallCanvas.clientWidth * scaleFactor;
+        waterfallCanvas.height = waterfallCanvas.clientHeight * scaleFactor;
+        waterfallCtx.scale(scaleFactor, scaleFactor);
+
+        let RSSI = {};
+        let spectrumData = Array.from({ length: 80 }, () => new Array(900).fill(0));
+        let waterfallHistory = Array.from({ length: 80 }, () => new Array(900).fill("black"));
+        let simulationInterval;
+        let isSimulationRunning = false;
+        let bluetoothDevice;
+        let bluetoothCharacteristic;
+
+        async function connectBluetooth() {
+            try {
+                const bluetoothDevice = await navigator.bluetooth.requestDevice({
+                    acceptAllDevices: true,
+                    optionalServices: ['00001234-0000-1000-8000-00805f9b34fb']
+                });
+
+                const server = await bluetoothDevice.gatt.connect();
+                const service = await server.getPrimaryService('00001234-0000-1000-8000-00805f9b34fb');
+                const bluetoothCharacteristic = await service.getCharacteristic('00001234-0000-1000-8000-00805f9b34ac');
+
+                // Save the device's ID to localStorage
+                localStorage.setItem("bluetoothDeviceId", bluetoothDevice.id);
+
+                bluetoothCharacteristic.addEventListener('characteristicvaluechanged', handleBluetoothData)
+
+                await bluetoothCharacteristic.startNotifications();
+
+                //statusElem.textContent = "Connected";
+            } catch (error) {
+                console.error("Error scanning for devices:", error);
+                alert("Could not connect to device.");
+                // statusElem.textContent = "Connection Error";
+            }
+        }
+
+        function handleBluetoothData(event) {
+            const decoder = new TextDecoder("utf-8");
+            const value = decoder.decode(event.target.value);
+            console.log("Received data:", value); // For debugging
+            console.log(value);
+            parseBluetoothData(value);
+        }
+
+        function parseBluetoothData(data) {
+            let matches = data.match(/\((\d+),\s*(-?\d+)\)/g);
+            if (!matches) return;
+
+            RSSI = {};
+            matches.forEach(match => {
+                let [_, freq, rssi] = match.match(/\((\d+),\s*(-?\d+)\)/);
+                RSSI[freq] = { freq: parseInt(freq), rssi: parseInt(rssi) };
+            });
+
+            spectrumData.pop();
+            spectrumData.unshift(Object.values(RSSI).map(d => d.rssi));
+            updateConsole();
+            drawChart();
+            drawWaterfall();
+        }
+
+        function generateRSSI() {
+            for (let freq = 100; freq < 1000; freq++) {
+                RSSI[freq] = { freq, rssi: Math.random() * -120 - 30 };
+            }
+            spectrumData.pop();
+            spectrumData.unshift(Object.values(RSSI).map(d => d.rssi));
+            updateConsole();
+        }
+
+        function getColor(rssi) {
+            if (rssi > -40) return "red";
+            if (rssi > -50) return "magenta";
+            if (rssi > -60) return "yellow";
+            if (rssi > -70) return "green";
+            return "blue";
+        }
+
+        function drawChart() {
+            chartCtx.clearRect(0, 0, chartCanvas.width, chartCanvas.height);
+            let keys = Object.keys(RSSI).map(Number);
+            console.log("chartCanvas.height: " + chartCanvas.height);
+            keys.forEach((freq, index) => {
+                let rssi = RSSI[freq].rssi;
+                let color = getColor(rssi);
+                chartCtx.fillStyle = color;
+                const x = ((freq - 100) / 900) * chartCanvas.width;
+                let minRssi = -90;
+                let maxRssi = -30;
+                let rssiDiapason = Math.abs(minRssi) - Math.abs(maxRssi);
+                let yCoef = (chartCanvas.height / rssiDiapason);
+
+                let y = 0;
+                if (rssi < minRssi) {
+                    y = chartCanvas.height;
+                } else {
+                    y = (rssiDiapason - (rssiDiapason - Math.abs(Math.abs(rssi) - Math.abs(maxRssi)))) * yCoef;
+                    // y = chartCanvas.height * 0.1;
+                }
+                console.log(freq + ":" + rssi + " Y height: " + y);
+                console.log("Y height: " + chartCanvas.height + "Coef: " + yCoef);
+                /* x - The x-axis coordinate of the rectangle's starting point.
+                y - The y-axis coordinate of the rectangle's starting point.
+                width - The rectangle's width. Positive values are to the right, and negative to the left.
+                height - The rectangle's height. Positive values are down, and negative are up.
+                */
+
+                chartCtx.fillRect(x, chartCanvas.height, chartCanvas.width / keys.length, -chartCanvas.height + y);
+                waterfallHistory[0][index] = color;
+            });
+        }
+
+        function drawWaterfall() {
+            waterfallCtx.clearRect(0, 0, waterfallCanvas.width, waterfallCanvas.height);
+            waterfallHistory.pop();
+            waterfallHistory.unshift([...waterfallHistory[0]]);
+            for (let y = 0; y < waterfallHistory.length; y++) {
+                for (let x = 0; x < waterfallHistory[y].length; x++) {
+                    waterfallCtx.fillStyle = waterfallHistory[y][x];
+                    waterfallCtx.fillRect(
+                        (x / waterfallHistory[y].length) * waterfallCanvas.width,
+                        (y / waterfallHistory.length) * waterfallCanvas.height,
+                        waterfallCanvas.width / waterfallHistory[y].length,
+                        waterfallCanvas.height / waterfallHistory.length
+                    );
+                }
+            }
+        }
+
+        function updateScales() {
+            dbLabels.innerHTML = "";
+            for (let db = 30; db <= 80; db += 10) {
+                let div = document.createElement("div");
+                div.textContent = "-" + db + " dB";
+                div.style.flexGrow = "1";
+                dbLabels.appendChild(div);
+            }
+
+            freqLabels.innerHTML = "";
+            for (let freq = 100; freq <= 1000; freq += 100) {
+                let div = document.createElement("div");
+                div.textContent = freq + " MHz";
+                freqLabels.appendChild(div);
+            }
+        }
+
+        function updateConsole() {
+            const consoleOutput = document.getElementById('consoleOutput');
+            consoleOutput.innerHTML = Object.values(RSSI)
+                .map(entry => `Freq: ${entry.freq} MHz | RSSI: ${entry.rssi.toFixed(2)} dB`)
+                .join('<br>');
+        }
+
+        function startSimulation() {
+            updateScales();
+            simulationInterval = setInterval(() => {
+                generateRSSI();
+                drawChart();
+                drawWaterfall();
+            }, 100);
+        }
+
+        function stopSimulation() {
+            clearInterval(simulationInterval);
+            simulationInterval = null;
+        }
+
+        function toggleSimulation() {
+            if (isSimulationRunning) {
+                stopSimulation();
+                simulationButton.textContent = "Start Simulation";
+            } else {
+                startSimulation();
+                simulationButton.textContent = "Stop Simulation";
+            }
+            isSimulationRunning = !isSimulationRunning;
+        }
+    </script>
+</body>
+
+</html>
