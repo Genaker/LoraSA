@@ -19,9 +19,5 @@ jobs:
           python-version: '3.11'
       - name: Install PlatformIO Core
         run: pip install --upgrade platformio
-
-      - name: Install PlatformIO Expressif board package
-        run: pio pkg update -g -p espressif32
-
       - name: Build PlatformIO Project
         run: pio run --environment heltec_wifi_lora_32_V3
