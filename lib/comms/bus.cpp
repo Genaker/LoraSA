@@ -44,7 +44,7 @@ bool initSPIs(Config &config)
                       (int)config.spi1.miso, (int)config.spi1.mosi,
                       (int)config.spi1.clock_freq);
 #else
-        Serial.println("SPI not supported on Heltec");
+        Serial.println("Custom SPI initializer not supported on Heltec");
 #endif
     }
 
