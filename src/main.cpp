@@ -1618,6 +1618,10 @@ void setup(void)
     pinMode(REB_PIN, OUTPUT);
     heltec_setup();
 
+#ifdef HELTEC_WIFI_LORA_32_V3_2
+    heltec_ve(true);
+#endif
+
     if (!initUARTs(config))
     {
         Serial.println("Failed to initialize UARTs");

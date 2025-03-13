@@ -17,7 +17,9 @@ enum I2CDevices
 extern uint8_t wireDevices;
 extern uint8_t wire1Devices;
 
+#ifndef HELTEC
 extern SPIClass &hspi;
+#endif
 
 // abstract away a reference to Serial vs Serial0 vs Serial1, so it compiles
 #ifndef ARDUINO_USB_CDC_ON_BOOT
