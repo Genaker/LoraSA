@@ -13,6 +13,8 @@
     "files.insertFinalNewline": true,
     "files.autoSave": "onFocusChange",
     "files.associations": {
-        "cstdint": "cpp"
+        "cstdint": "cpp",
+        "system_error": "cpp",
+        "*.tpp": "cpp"
     },
 }
