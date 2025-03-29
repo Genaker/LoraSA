@@ -147,7 +147,7 @@ int8_t _read_xyz(TwoWire &wire, CompassXYZ &xyz)
     int8_t r = _read_registers(wire, QMC5883_ADDR, 0, (uint8_t *)&mags, 6);
     xyz.x = mags[0];
     xyz.y = mags[1];
-    xyz.z = mags[1];
+    xyz.z = mags[2];
 
     return r;
 }
