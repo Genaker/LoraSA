@@ -1,4 +1,5 @@
 #include "heading.h"
+#include <bus.h>
 
 /*
  * QMC5883L Registers:
@@ -69,58 +70,6 @@ bool QMC5883LCompass::begin()
 
     _lastErr = CompassStatus::COMPASS_OK;
     return true;
-}
-
-uint8_t _write_register(TwoWire &wire, uint8_t addr, uint8_t reg, uint8_t value,
-                        bool skipValue = false)
-{
-    wire.beginTransmission(addr);
-    size_t s = wire.write(reg);
-    if (s == 1 && !skipValue)
-    {
-        s = wire.write(value);
-    }
-
-    size_t s1 = wire.endTransmission();
-    if (s != 1 && s1 == 0)
-    {
-        return 1; // "data too long to fit in transmit buffer"
-    }
-
-    return s1;
-}
-
-int8_t _read_registers(TwoWire &wire, uint8_t addr, uint8_t reg, uint8_t *v, size_t sz,
-                       bool skipRegister = false)
-{
-    if (!skipRegister)
-    {
-        uint8_t s = _write_register(wire, addr, reg, 0, true);
-        if (s != 0)
-        {
-            return s;
-        }
-    }
-
-    uint8_t r = wire.requestFrom(addr, sz);
-    for (int i = 0; i < r; i++, v++)
-    {
-        *v = wire.read();
-    }
-
-    return r - sz;
-}
-
-uint8_t _read_register(TwoWire &wire, uint8_t addr, uint8_t reg, uint8_t &v,
-                       bool skipRegister = false)
-{
-    uint8_t r = _read_registers(wire, addr, reg, &v, 1, skipRegister);
-    if (r != 0)
-    {
-        return 1;
-    }
-
-    return 0;
 }
 
 int8_t _read_xyz(TwoWire &wire, CompassXYZ &xyz)
