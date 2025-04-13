@@ -1149,6 +1149,8 @@ void eventListenerForReport(void *arg, Event &e)
         if (e.epoch != frequency_scan_result.last_epoch)
         {
             frequency_scan_result.dump.sz = 0;
+            frequency_scan_result.dump.heading_min = -999;
+            frequency_scan_result.dump.heading_max = -999;
         }
 
         if (frequency_scan_result.dump.sz >= frequency_scan_result.readings_sz)
@@ -1194,6 +1196,29 @@ void eventListenerForReport(void *arg, Event &e)
         {
             frequency_scan_result.last_epoch = e.epoch;
             frequency_scan_result.rssi = e.detected.rssi;
+        }
+
+        HeadingSensor *sensor = &droneHeading;
+        if (compass != NULL && compass->lastRead() > sensor->lastRead())
+        {
+            sensor = compass;
+        }
+
+        if (sensor->lastRead() > -1)
+        {
+            int16_t heading = sensor->heading();
+            if (frequency_scan_result.dump.heading_min == -999)
+            {
+                frequency_scan_result.dump.heading_min = heading;
+                frequency_scan_result.dump.heading_max = heading;
+            }
+            else
+            {
+                frequency_scan_result.dump.heading_min =
+                    min(frequency_scan_result.dump.heading_min, heading);
+                frequency_scan_result.dump.heading_max =
+                    min(frequency_scan_result.dump.heading_max, heading);
+            }
         }
 
         return;
@@ -2072,7 +2097,8 @@ void routeMessage(RoutedMessage &m)
     }
 
     if (m.message->type == MessageType::SCAN_RESULT ||
-        m.message->type == MessageType::SCAN_MAX_RESULT)
+        m.message->type == MessageType::SCAN_MAX_RESULT ||
+        m.message->type == MessageType::SCAN_HEADING_MAX)
     {
         m.to.host = 1;
         return;
@@ -2266,6 +2292,7 @@ void sendMessage(RoutedMessage &m)
         break;
         case SCAN_RESULT:
         case SCAN_MAX_RESULT:
+        case SCAN_HEADING_MAX:
             if (config.is_host)
             {
 #ifdef DISPLAY_RAW_SCAN
@@ -3411,6 +3438,8 @@ void reportScan()
     Message m;
     m.type = SCAN_RESULT;
     m.payload.dump.sz = 0;
+    m.payload.dump.rssis2 = NULL;
+    m.payload.dump.heading_min = -999;
 
     if (config.detection_strategy.equalsIgnoreCase("RSSI"))
     {
@@ -3427,6 +3456,13 @@ void reportScan()
     else if (config.detection_strategy.equalsIgnoreCase("RSSI_MAX"))
     {
         m.type = SCAN_MAX_RESULT;
+
+        m.payload.dump.heading_min = frequency_scan_result.dump.heading_min;
+        m.payload.dump.heading_max = frequency_scan_result.dump.heading_max;
+        if (m.payload.dump.heading_min > -999)
+        {
+            m.type = SCAN_HEADING_MAX;
+        }
 
         size_t sz = config.scan_ranges_sz;
         m.payload.dump.sz = sz;

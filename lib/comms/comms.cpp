@@ -432,12 +432,16 @@ String _wrap_str(String v)
 
 Message::~Message()
 {
-    if (type == SCAN_RESULT || type == SCAN_MAX_RESULT)
+    if (type == SCAN_RESULT || type == SCAN_MAX_RESULT || type == SCAN_HEADING_MAX)
     {
         if (payload.dump.sz > 0)
         {
             delete[] payload.dump.freqs_khz;
             delete[] payload.dump.rssis;
+            if (payload.dump.rssis2)
+            {
+                delete[] payload.dump.rssis2;
+            }
             payload.dump.sz = 0;
         }
 

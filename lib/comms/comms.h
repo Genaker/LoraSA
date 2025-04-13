@@ -20,6 +20,7 @@ enum MessageType
     SCAN,
     SCAN_RESULT,
     SCAN_MAX_RESULT,
+    SCAN_HEADING_MAX,
     CONFIG_TASK,
     HEADING,
     _MAX_MESSAGE_TYPE = HEADING
@@ -53,6 +54,8 @@ struct ScanTaskResult
     int16_t *rssis;
     int16_t *rssis2;
     int16_t prssi;
+    int16_t heading_min;
+    int16_t heading_max;
 };
 
 struct ConfigTask
