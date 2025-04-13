@@ -304,6 +304,7 @@ void sendBTData(float heading, float rssi)
 
 DroneHeading droneHeading;
 Compass *compass = NULL;
+HeadingSensor &headingSensor = droneHeading;
 
 RadioModule *radio2;
 
@@ -390,41 +391,14 @@ DFRobot_OSD osd(OSD_CS);
 #include "global_config.h"
 #include "ui.h"
 
-#ifdef COMPASS_ENABLED
-#include <Adafruit_HMC5883_U.h>
-#include <Adafruit_Sensor.h>
-/* Assign a unique ID to this sensor at the same time */
-Adafruit_HMC5883_Unified mag = Adafruit_HMC5883_Unified(12345);
 void displaySensorDetails(void)
 {
-    sensor_t sensor;
-    mag.getSensor(&sensor);
-    Serial.println("------------------------------------");
-    Serial.print("Sensor:       ");
-    Serial.println(sensor.name);
-    Serial.print("Driver Ver:   ");
-    Serial.println(sensor.version);
-    Serial.print("Unique ID:    ");
-    Serial.println(sensor.sensor_id);
-    Serial.print("Max Value:    ");
-    Serial.print(sensor.max_value);
-    Serial.println(" uT");
-    Serial.print("Min Value:    ");
-    Serial.print(sensor.min_value);
-    Serial.println(" uT");
-    Serial.print("Resolution:   ");
-    Serial.print(sensor.resolution);
-    Serial.println(" uT");
-    Serial.println("------------------------------------");
-    Serial.println("");
+    if (compass == NULL)
+        return;
+
+    Serial.println(compass->selfTest());
     heltec_delay(500);
 }
-
-// Variables for dynamic calibration
-float x_min = 1000, x_max = -1000;
-float y_min = 1000, y_max = -1000;
-float z_min = 1000, z_max = -1000;
-#endif
 // -----------------------------------------------------------------
 // CONFIGURATION OPTIONS
 // -----------------------------------------------------------------
@@ -1198,15 +1172,9 @@ void eventListenerForReport(void *arg, Event &e)
             frequency_scan_result.rssi = e.detected.rssi;
         }
 
-        HeadingSensor *sensor = &droneHeading;
-        if (compass != NULL && compass->lastRead() > sensor->lastRead())
+        int16_t heading = headingSensor.heading();
+        if (heading > -999)
         {
-            sensor = compass;
-        }
-
-        if (sensor->lastRead() > -1)
-        {
-            int16_t heading = sensor->heading();
             if (frequency_scan_result.dump.heading_min == -999)
             {
                 frequency_scan_result.dump.heading_min = heading;
@@ -1875,31 +1843,13 @@ void setup(void)
 
     r.addEventListener(ALL_EVENTS, eventListenerForReport, NULL);
 
-#ifdef COMPASS_ENABLED
-
-    Serial.println("Compass Init Start");
-    Wire1.end();
-    Wire1.begin(46, 42);
-
-    Serial.println("Compass BEGIN");
-    Serial.println("HMC5883 Magnetometer Test");
-
-    /* Initialise the sensor */
-    if (!mag.begin())
-    {
-        /* There was a problem detecting the HMC5883 ... check your connections */
-        Serial.println("Ooops, no HMC5883 detected ... Check your wiring!");
-    }
-
-    /* Display some basic information on this sensor */
-    displaySensorDetails();
-    Serial.println("Compass Success!!!");
-
-#endif
-
     if (wireDevices & QMC5883L || wire1Devices & QMC5883L)
     {
         compass = new QMC5883LCompass(wireDevices & QMC5883L ? Wire : Wire1);
+    }
+    else if (wireDevices & HMC5883L)
+    {
+        compass = new HMC5883LCompass();
     }
 
     if (compass)
@@ -1913,6 +1863,7 @@ void setup(void)
         if (err.startsWith("OK\n"))
         {
             Serial.printf("Compass self-test passed: %s\n", err.c_str());
+            headingSensor = *compass;
         }
         else
         {
@@ -2413,111 +2364,8 @@ int max_rssi_x = 999;
 void doScan();
 
 void reportScan();
-long calStart = 0;
 
-#ifdef COMPASS_ENABLED
-float getCompassHeading()
-{
-    if (calStart == 0)
-    {
-        calStart = millis();
-    }
-
-    /* Get a new sensor event */
-    sensors_event_t event2;
-    mag.getEvent(&event2);
-    sensors_event_t event3;
-    mag.getEvent(&event3);
-
-#ifdef COMPASS_DEBUG
-    /* Display the results (magnetic vector values are in micro-Tesla (uT)) */
-    Serial.print("X: ");
-    Serial.print(event2.magnetic.x);
-    Serial.print("  ");
-    Serial.print("Y: ");
-    Serial.print(event2.magnetic.y);
-    Serial.print("  ");
-    Serial.print("Z: ");
-    Serial.print(event2.magnetic.z);
-    Serial.print("  ");
-    Serial.println("uT");
-#endif
-
-    // Hold the module so that Z is pointing 'up' and you can measure the heading with
-    // x&y Calculate heading when the magnetometer is level, then correct for signs of
-    // axis. float heading = atan2(event.magnetic.y, event.magnetic.x); Use Y as the
-    // forward axis float heading = atan2(event.magnetic.x, event.magnetic.y);
-    /// If Z-axis is forward and Y-axis points upward:
-    // float heading = atan2(event.magnetic.x, event.magnetic.y);
-    //  If Z-axis is forward and X-axis points upward:
-    //  float heading = atan2(event.magnetic.y, -event.magnetic.x);
-
-    // heading based on the magnetic readings from the Z-axis (forward) and the X-axis
-    // (perpendicular to Z, horizontal).
-    // float heading = atan2(event.magnetic.z, event.magnetic.x);
-
-    // Dynamicly Calibrated out
-
-    // Read raw magnetometer data
-    float x = (event2.magnetic.x + event3.magnetic.x) / 2;
-    float y = (event2.magnetic.y + event3.magnetic.y) / 2;
-    float z = (event2.magnetic.z + event3.magnetic.z) / 2;
-
-    // Doing calibration first 1 minute
-    if (millis() - calStart < 60000)
-    {
-        // Update min/max values dynamically
-        x_min = min(x_min, x);
-        x_max = max(x_max, x);
-        y_min = min(y_min, y);
-        y_max = max(y_max, y);
-        z_min = min(z_min, z);
-        z_max = max(z_max, z);
-    }
-
-#ifdef COMPASS_DEBUG
-    Serial.println("x_min:" + String(x_min) + " x_max: " + String(x_max) +
-                   " y_min: " + String(y_min));
-#endif
-
-    // Calculate offsets and scales in real-time
-    float x_offset = (x_max + x_min) / 2;
-    float y_offset = (y_max + y_min) / 2;
-    float z_offset = (z_max + z_min) / 2;
-
-    float x_scale = (x_max - x_min) / 2;
-    float y_scale = (y_max - y_min) / 2;
-    float z_scale = (z_max - z_min) / 2;
-
-    // Apply calibration to raw data
-    float calibrated_x = (x - x_offset) / x_scale;
-    float calibrated_y = (y - y_offset) / y_scale;
-    float calibrated_z = (z - z_offset) / z_scale;
-
-    // Calculate heading using Z-axis forward, X-axis horizontal
-    float heading = atan2(calibrated_z, calibrated_x);
-
-    // Once you have your heading, you must then add your 'Declination Angle', which
-    // is the 'Error' of the magnetic field in your location. Find yours here:
-    // http://www.magnetic-declination.com/ Mine is: -13* 2' W, which is ~13 Degrees,
-    // or (which we need) 0.22 radians If you cannot find your Declination, comment
-    // out these two lines, your compass will be slightly off.
-    float declinationAngle = 0.22;
-    heading += declinationAngle;
-
-    // Correct for when signs are reversed.
-    if (heading < 0)
-        heading += 2 * PI;
-
-    // Check for wrap due to addition of declination.
-    if (heading > 2 * PI)
-        heading -= 2 * PI;
-
-    // Convert radians to degrees for readability.
-    float headingDegrees = heading * 180 / M_PI;
-    return headingDegrees;
-}
-#endif
+void processHeading();
 
 float historicalCompassRssi[STEPS] = {999};
 int compassCounter = 0;
@@ -2596,8 +2444,14 @@ void loop(void)
     }
 #endif
 #endif
+    if (compass != NULL || droneHeading.lastRead() > -1)
+    {
+        processHeading();
+    }
+}
 
-#ifdef COMPASS_ENABLED
+void processHeading()
+{
 #if defined(COMPASS_FREQ)
     // delay(1000);
     display.clear();
@@ -2614,7 +2468,7 @@ void loop(void)
     {
         // ToDO: fix go to;
     compass:
-        float headingDegrees = getCompassHeading();
+        float headingDegrees = headingSensor.heading();
         // Serial.println("Heading (degrees): " + String(headingDegrees));
 #ifndef COMPASS_FREQ
         t = 0;
@@ -2652,7 +2506,7 @@ void loop(void)
 #else
                     rssi = getRssi(false);
 #endif
-                    float headingDegreesAfter = getCompassHeading();
+                    float headingDegreesAfter = headingSensor.heading();
                     float compassDiff = abs(headingDegreesAfter - headingDegrees);
                     if (compassDiff >= 3)
                     {
@@ -2865,8 +2719,6 @@ void loop(void)
 #if defined(COMPASS_FREQ)
     display.clear();
 #endif // COMPASS_FREQ
-
-#endif // end COMPASS_ENABLED
 }
 
 void doScan()

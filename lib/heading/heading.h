@@ -68,12 +68,50 @@ struct QMC5883LCompass : Compass
     int8_t readXYZ() override;
 };
 
+struct UninitializedCompass : Compass
+{
+    UninitializedCompass() : Compass() {}
+    bool begin() override;
+    String selfTest() override;
+
+    uint8_t setMode(CompassMode m) override;
+    int8_t readXYZ() override;
+};
+
+#ifdef COMPASS_ENABLED
+#include <Adafruit_HMC5883_U.h>
+#include <Adafruit_Sensor.h>
+#define HMC5883Type Adafruit_HMC5883_Unified
+#else
+#define HMC5883Type UninitializedCompass
+#endif
+
+extern HMC5883Type _mag;
+
+struct HMC5883LCompass : Compass
+{
+    HMC5883Type &mag;
+    long calStart = 0;
+    // Variables for dynamic calibration
+    float x_min = 1000, x_max = -1000;
+    float y_min = 1000, y_max = -1000;
+    float z_min = 1000, z_max = -1000;
+
+    HMC5883LCompass() : Compass(), mag(_mag) {}
+
+    bool begin() override;
+    String selfTest() override;
+
+    uint8_t setMode(CompassMode m) override;
+    int8_t readXYZ() override;
+};
+
 struct DroneHeading : HeadingSensor
 {
     int64_t _lastRead;
     int16_t _heading;
 
-    DroneHeading() : HeadingSensor(), _lastRead(-1) {}
+    DroneHeading() : HeadingSensor(), _lastRead(-1), _heading(-999) {}
 
     void setHeading(int64_t now, int16_t heading);
 
