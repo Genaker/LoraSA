@@ -2246,6 +2246,10 @@ void sendMessage(RoutedMessage &m)
         case SCAN_HEADING_MAX:
             if (config.is_host)
             {
+                if (msg->type == SCAN_HEADING_MAX)
+                {
+                    droneHeading.setHeading(millis(), msg->payload.heading.heading);
+                }
 #ifdef DISPLAY_RAW_SCAN
                 display_raw_scan(m.message->payload.dump);
 #else
