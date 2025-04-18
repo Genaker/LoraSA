@@ -336,8 +336,32 @@
         const heading = parseInt(match[1]);
         const rssi = parseFloat(match[2]);
         console.log("H:" + heading + " R:" + rssi);
-        dataPoints[parseInt(heading)] = { angle: parseInt(heading), rssi: rssi };
-        currentPoint = { angle: parseInt(heading), rssi: rssi };
+        data = '{"SCAN_RESULT":{"Hmin":' + match[1] + ',"Hmax":' + match[1] + ',"Spectrum":[{"F":0,"R":' + match[2] + '}]}}';
+      }
+
+      try {
+        data = JSON.parse(data);
+      } catch (e) {
+        console.log("Skipping broken JSON:", e, "in", data);
+        return;
+      }
+
+      if (data["SCAN_RESULT"]) {
+        scanResult = data["SCAN_RESULT"];
+        const spectrum = scanResult["Spectrum"];
+        if (spectrum.length == 0) {
+          console.log("Skipping scan result with no spectrum:", data);
+          return;
+        }
+
+        const headingMin = scanResult.Hmin;
+        const headingMax = scanResult.Hmax;
+
+        const heading = ((headingMax + headingMin + 720 + (headingMax - headingMin > 180 ? 360 : 0)) / 2) % 360;
+        const rssi = spectrum[0]["R"];
+
+        dataPoints[heading] = { angle: heading, rssi: rssi };
+        currentPoint = { angle: heading, rssi: rssi };
         //if (dataPoints.length > 50) dataPoints.shift(); // Keep only the last 50 points
         headingDisplay.textContent = `${heading.toFixed(1)}°`;
         rssiDisplay.textContent = `${rssi.toFixed(1)} dBm`;

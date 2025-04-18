@@ -62,9 +62,9 @@
 #include <scan.h>
 #include <stdlib.h>
 
-#ifdef BT_MOBILE
+bool bleDeviceConnected = false;
 
-bool deviceConnected = false;
+#ifdef BT_MOBILE
 #define SERVICE_UUID "00001234-0000-1000-8000-00805f9b34fb"
 #define CHARACTERISTIC_UUID "00001234-0000-1000-8000-00805f9b34ac"
 
@@ -80,11 +80,11 @@ BLEAdvertising *pAdvertising = NULL;
 
 class MyServerCallbacks : public BLEServerCallbacks
 {
-    void onConnect(BLEServer *pServer) { deviceConnected = true; };
+    void onConnect(BLEServer *pServer) { bleDeviceConnected = true; };
 
     void onDisconnect(BLEServer *pServer)
     {
-        deviceConnected = false;
+        bleDeviceConnected = false;
         BLEDevice::startAdvertising(); // Restart advertising after disconnect
     }
 };
@@ -101,7 +101,7 @@ class BTServerCallbacks : public NimBLEServerCallbacks
   public:
     void onConnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo) override
     {
-        deviceConnected = true;
+        bleDeviceConnected = true;
         Serial.printf("Device Connected | Free Heap: %d kByte\n",
                       ESP.getFreeHeap() / 1000);
         Serial.printf("Client address: %s\n", connInfo.getAddress().toString().c_str());
@@ -112,7 +112,7 @@ class BTServerCallbacks : public NimBLEServerCallbacks
     void onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo,
                       int reason) override
     {
-        deviceConnected = false;
+        bleDeviceConnected = false;
         Serial.println("Device Disconnected");
         NimBLEDevice::startAdvertising(); // Restart advertising
     }
@@ -265,6 +265,8 @@ void initBT()
 #endif
 }
 
+#endif
+
 // Function to send RSSI and Heading Data
 void sendBTData(float heading, float rssi)
 {
@@ -274,10 +276,45 @@ void sendBTData(float heading, float rssi)
 #ifdef COMPASS_DEBUG
     Serial.println("Sending data: " + data);
 #endif
+#ifdef BT_MOBILE
     pCharacteristic->setValue(data.c_str()); // Set BLE characteristic value
     pCharacteristic->notify();               // Notify connected client
-}
 #endif
+}
+
+// Send Scan Result to BLE
+void sendBTData(Message &msg)
+{
+    if (msg.type != SCAN_HEADING_MAX && msg.type != SCAN_MAX_RESULT &&
+        msg.type != SCAN_RESULT)
+    {
+        Serial.println("Unsupported message type: " + String(msg.type));
+        return;
+    }
+
+    String data = "{\"SCAN_RESULT\":{\"Hmin\":" + String(msg.payload.dump.heading_min) +
+                  ",\"Hmax\":" + String(msg.payload.dump.heading_max) + ",\"Spectrum\":[";
+
+    for (int i = 0; i < msg.payload.dump.sz; i++)
+    {
+        data += String(i == 0 ? "" : ",") +
+                "{\"F\":" + String(msg.payload.dump.freqs_khz[i]) +
+                ",\"R\":" + String(msg.payload.dump.rssis[i]) +
+                (msg.payload.dump.rssis2 == NULL
+                     ? ""
+                     : ",\"R2\":" + String(msg.payload.dump.rssis2[i])) +
+                "}";
+    }
+
+    data += "]}}";
+#ifdef COMPASS_DEBUG
+    Serial.println("Sending data: " + data);
+#endif
+#ifdef BT_MOBILE
+    pCharacteristic->setValue(data.c_str()); // Set BLE characteristic value
+    pCharacteristic->notify();               // Notify connected client
+#endif
+}
 
 #ifndef LILYGO
 #include <heltec_unofficial.h>
@@ -2248,13 +2285,19 @@ void sendMessage(RoutedMessage &m)
             {
                 if (msg->type == SCAN_HEADING_MAX)
                 {
-                    droneHeading.setHeading(millis(), msg->payload.heading.heading);
+                    droneHeading.setHeading(millis(),
+                                            meanHeading(msg->payload.dump.heading_min,
+                                                        msg->payload.dump.heading_max));
                 }
 #ifdef DISPLAY_RAW_SCAN
                 display_raw_scan(m.message->payload.dump);
 #else
                 display_scan_result(m.message->payload.dump);
 #endif
+                if (bleDeviceConnected)
+                {
+                    sendBTData(*msg);
+                }
             }
             break;
         case HEADING:

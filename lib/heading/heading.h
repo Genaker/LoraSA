@@ -119,6 +119,8 @@ struct DroneHeading : HeadingSensor
     int16_t heading() override;
 };
 
+int16_t meanHeading(int16_t m, int16_t mm);
+
 #define QMC5883_ADDR 0xD
 #define QMC5883_X_LSB_REG 0
 #define QMC5883_X_MSB_REG 1
