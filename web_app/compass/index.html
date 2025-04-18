@@ -176,7 +176,7 @@
       dataPoints.forEach(({ angle, rssi }) => {
         const rad = (angle * Math.PI) / 180;
         //const length = (120 + rssi) / (radius / 2) * radius;
-        const length = ((120 - 90) + (rssi + 90)) * lineCoef; // Scale RSSI to fit within radar
+        var length = ((120 - 90) + (rssi + 90)) * lineCoef; // Scale RSSI to fit within radar
         if (length > radius) {
           length = radius;
         }
@@ -327,6 +327,14 @@
       document.body.appendChild(promptDiv);
     }
 
+    function simulateRssi(fox) {
+      if (fox > 35) {
+        return -90;
+      }
+
+      return -Math.sin((Math.PI / 2) * fox / 35) * 80 - Math.random() * 3 - 10;
+    }
+
     // Parse Bluetooth data
     function parseBTData(data) {
       // Match the data format and extract the heading and RSSI values
@@ -360,7 +368,7 @@
         const heading = ((headingMax + headingMin + 720 + (headingMax - headingMin > 180 ? 360 : 0)) / 2) % 360;
         const rssi = spectrum[0]["R"];
 
-        dataPoints[heading] = { angle: heading, rssi: rssi };
+        dataPoints[Math.trunc(heading)] = { angle: heading, rssi: rssi };
         currentPoint = { angle: heading, rssi: rssi };
         //if (dataPoints.length > 50) dataPoints.shift(); // Keep only the last 50 points
         headingDisplay.textContent = `${heading.toFixed(1)}°`;
@@ -409,18 +417,20 @@
         isSimulating = true;
         simulateBtn.textContent = "Stop Simulation";
 
-        (function simulate() {
+        dataPoints = [];
+        for (i = 0; i < 360; i++) {
+          dataPoints[i] = { angle: i, rssi: -120 };
+        }
+
+        (function simulate(fox, prevAngle, prevRssi) {
           if (!isSimulating) return;
-          const angle = Math.random() * 360;
-          const rssi = -70 + Math.random() * 30;
-          dataPoints.push({ angle, rssi });
-          currentPoint = { angle, rssi };
-          if (dataPoints.length > 360 * 5) dataPoints.shift();
-          headingDisplay.textContent = `${angle.toFixed(1)}°`;
-          rssiDisplay.textContent = `${rssi.toFixed(1)} dBm`;
-          drawRadar();
-          setTimeout(simulate, 100);
-        })();
+          const angle = (prevAngle - 12 + Math.random() * 30) % 360; // bias slightly to scan on
+          const rssi = simulateRssi(Math.abs(angle - fox));
+
+          const data = "RSSI_HEADING: '{H:" + angle + ",RSSI:" + rssi + "}'"
+          parseBTData(data); // test actual BT data processing
+          setTimeout(simulate, 100, fox, angle, rssi);
+        })(Math.random() * 360, Math.random() * 360, -70 + Math.random() * 30);
       }
     });
 
