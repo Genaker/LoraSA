@@ -160,14 +160,17 @@
         ctx.stroke();
       }
 
+      // rotate everything relative to angleOffset, in radians
+      const angleOffset = -Math.round(currentPoint.angle / 5) * 5 * Math.PI / 180;
+
       // Compass lines
       for (let angle = 0; angle < 360; angle += 45) {
         const rad = (angle * Math.PI) / 180;
         ctx.beginPath();
         ctx.moveTo(centerX, centerY);
-        ctx.lineTo(centerX + radius * Math.cos(rad), centerY + radius * Math.sin(rad));
-        ctx.strokeStyle = "#e0ffe0";
-        ctx.lineWidth = 1;
+        ctx.lineTo(centerX + radius * Math.sin(rad + angleOffset), centerY - radius * Math.cos(rad + angleOffset));
+        ctx.strokeStyle = angle % 90 == 0 ? "white" : "green";
+        ctx.lineWidth = angle == 0 ? 3 : 1;
         ctx.stroke();
       }
 
@@ -180,9 +183,9 @@
         if (length > radius) {
           length = radius;
         }
-        console.log("Length: " + length);
-        const x = centerX + length * Math.cos(rad);
-        const y = centerY + length * Math.sin(rad);
+        //console.log("Length: " + length);
+        const x = centerX + length * Math.sin(rad + angleOffset);
+        const y = centerY - length * Math.cos(rad + angleOffset);
 
         ctx.beginPath();
         ctx.moveTo(centerX, centerY);
@@ -198,8 +201,8 @@
       headingDisplayMAX.textContent = `${maxPoint.angle.toFixed(1)}°`;
       rssiDisplayMAX.textContent = `${maxPoint.rssi.toFixed(1)} dBm`;
 
-      const maxX = centerX + maxLength * Math.cos(maxRad);
-      const maxY = centerY + maxLength * Math.sin(maxRad);
+      const maxX = centerX + maxLength * Math.sin(maxRad + angleOffset);
+      const maxY = centerY - maxLength * Math.cos(maxRad + angleOffset);
 
       ctx.beginPath();
       ctx.moveTo(centerX, centerY);
@@ -212,11 +215,11 @@
       const arrowHeadLength = 10;
       const arrowAngle = Math.PI / 6; // 30 degrees for the arrowhead
 
-      const arrowX1 = maxX - arrowHeadLength * Math.cos(maxRad - arrowAngle);
-      const arrowY1 = maxY - arrowHeadLength * Math.sin(maxRad - arrowAngle);
+      const arrowX1 = maxX - arrowHeadLength * Math.sin(maxRad - arrowAngle + angleOffset);
+      const arrowY1 = maxY + arrowHeadLength * Math.cos(maxRad - arrowAngle + angleOffset);
 
-      const arrowX2 = maxX - arrowHeadLength * Math.cos(maxRad + arrowAngle);
-      const arrowY2 = maxY - arrowHeadLength * Math.sin(maxRad + arrowAngle);
+      const arrowX2 = maxX - arrowHeadLength * Math.sin(maxRad + arrowAngle + angleOffset);
+      const arrowY2 = maxY + arrowHeadLength * Math.cos(maxRad + arrowAngle + angleOffset);
 
       ctx.beginPath();
       ctx.moveTo(maxX, maxY);
@@ -231,8 +234,8 @@
       const currentRad = (currentPoint.angle * Math.PI) / 180;
       const currentLength = ((120 + currentPoint.rssi) / (radius / 2)) * radius * 1.2;
 
-      const currentX = centerX + currentLength * Math.cos(currentRad);
-      const currentY = centerY + currentLength * Math.sin(currentRad);
+      const currentX = centerX + currentLength * Math.sin(currentRad + angleOffset);
+      const currentY = centerY - currentLength * Math.cos(currentRad + angleOffset);
 
       ctx.beginPath();
       ctx.moveTo(centerX, centerY);
@@ -240,6 +243,27 @@
       ctx.strokeStyle = "yellow";
       ctx.lineWidth = 3;
       ctx.stroke();
+
+      const headingString = `${currentPoint.angle.toFixed(1)}°`;
+      const rssiString = `${currentPoint.rssi.toFixed(1)} dBm`;
+      ctx.fillStyle = "white";
+      ctx.font = "20px Arial";
+
+      const m = ctx.measureText(headingString);
+      ctx.fillText(headingString, centerX - m.width / 2, 30);
+      const m1 = ctx.measureText(rssiString);
+      ctx.fillText(rssiString, centerX - m1.width / 2, 60);
+
+      const maxHeadingString = `${maxPoint.angle.toFixed(1)}°`;
+      const maxRssiString = `${maxPoint.rssi.toFixed(1)} dBm`;
+      ctx.fillStyle = "blue";
+      ctx.font = "20px Arial";
+
+      const maxOffset = Math.max(m.width, m1.width) * ((currentPoint.angle - maxPoint.angle + 360) % 360 > 180 ? -1 : 1);
+      const m2 = ctx.measureText(maxHeadingString);
+      ctx.fillText(maxHeadingString, centerX - m2.width / 2 - maxOffset, 60);
+      const m3 = ctx.measureText(maxRssiString);
+      ctx.fillText(maxRssiString, centerX - m3.width / 2 - maxOffset, 90);
     }
 
     // Handle canvas hover for pointer change
@@ -332,7 +356,7 @@
         return -90;
       }
 
-      return -Math.sin((Math.PI / 2) * fox / 35) * 80 - Math.random() * 3 - 10;
+      return Math.cos((Math.PI / 2) * fox / 35) * 40 - Math.random() * 3 - 90;
     }
 
     // Parse Bluetooth data
@@ -424,7 +448,7 @@
 
         (function simulate(fox, prevAngle, prevRssi) {
           if (!isSimulating) return;
-          const angle = (prevAngle - 12 + Math.random() * 30) % 360; // bias slightly to scan on
+          const angle = (prevAngle - 3 + Math.random() * 7.5) % 360; // bias slightly to scan on
           const rssi = simulateRssi(Math.abs(angle - fox));
 
           const data = "RSSI_HEADING: '{H:" + angle + ",RSSI:" + rssi + "}'"
