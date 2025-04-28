@@ -1,4 +1,108 @@
 #include "heading.h"
+#include <bus.h>
+
+enum MountingOrientation
+{
+    XY,  // X forward, Y right, Z down
+    X_Y, // X forward, Y left, Z up
+    XZ,  // X forward, Z right, Y up
+    X_Z, // X forward, Z left, Y down
+    YX,  // Y forward, X right, Z up
+    Y_X, // Y forward, X left, Z down
+    YZ,  // Y forward, Z right, X down
+    Y_Z, // Y forward, Z left, X up
+    ZX,  // Z forward, X right, Y down
+    Z_X, // Z forward, X left, Y up
+    ZY,  // Z forward, Y right, X down
+    Z_Y  // Z forward, Y left, X up
+};
+
+// Produces CompassXYZ in a canonical mounting orientation: X forward, Y left, Z up
+CompassXYZ _orientation(MountingOrientation o, int16_t x, int16_t y, int16_t z)
+{
+    CompassXYZ res;
+    res.status = 0;
+
+    switch (o)
+    {
+    case XY:
+    case X_Y:
+    case XZ:
+    case X_Z:
+        res.x = x;
+        break;
+    case YX:
+    case Y_X:
+    case YZ:
+    case Y_Z:
+        res.x = y;
+        break;
+    case ZY:
+    case Z_Y:
+    case ZX:
+    case Z_X:
+        res.x = z;
+        break;
+    }
+
+    switch (o)
+    {
+    case X_Y:
+    case Z_Y:
+        res.y = y;
+        break;
+    case XY:
+    case ZY:
+        res.y = -y;
+        break;
+    case Y_X:
+    case Z_X:
+        res.y = x;
+        break;
+    case YX:
+    case ZX:
+        res.y = -x;
+        break;
+    case X_Z:
+    case Y_Z:
+        res.y = z;
+        break;
+    case XZ:
+    case YZ:
+        res.y = -z;
+        break;
+    }
+
+    switch (o)
+    {
+    case X_Y:
+    case YX:
+        res.z = z;
+        break;
+    case XY:
+    case Y_X:
+        res.z = -z;
+        break;
+    case XZ:
+    case Z_X:
+        res.z = y;
+        break;
+    case X_Z:
+    case ZX:
+        res.z = -y;
+        break;
+    case Y_Z:
+    case Z_Y:
+        res.z = x;
+        break;
+    case YZ:
+    case ZY:
+        res.z = -x;
+        break;
+    }
+
+    return res;
+}
 
 /*
  * QMC5883L Registers:
@@ -71,58 +175,6 @@ bool QMC5883LCompass::begin()
     return true;
 }
 
-uint8_t _write_register(TwoWire &wire, uint8_t addr, uint8_t reg, uint8_t value,
-                        bool skipValue = false)
-{
-    wire.beginTransmission(addr);
-    size_t s = wire.write(reg);
-    if (s == 1 && !skipValue)
-    {
-        s = wire.write(value);
-    }
-
-    size_t s1 = wire.endTransmission();
-    if (s != 1 && s1 == 0)
-    {
-        return 1; // "data too long to fit in transmit buffer"
-    }
-
-    return s1;
-}
-
-int8_t _read_registers(TwoWire &wire, uint8_t addr, uint8_t reg, uint8_t *v, size_t sz,
-                       bool skipRegister = false)
-{
-    if (!skipRegister)
-    {
-        uint8_t s = _write_register(wire, addr, reg, 0, true);
-        if (s != 0)
-        {
-            return s;
-        }
-    }
-
-    uint8_t r = wire.requestFrom(addr, sz);
-    for (int i = 0; i < r; i++, v++)
-    {
-        *v = wire.read();
-    }
-
-    return r - sz;
-}
-
-uint8_t _read_register(TwoWire &wire, uint8_t addr, uint8_t reg, uint8_t &v,
-                       bool skipRegister = false)
-{
-    uint8_t r = _read_registers(wire, addr, reg, &v, 1, skipRegister);
-    if (r != 0)
-    {
-        return 1;
-    }
-
-    return 0;
-}
-
 int8_t _read_xyz(TwoWire &wire, CompassXYZ &xyz)
 {
     xyz.status = 0;
@@ -147,7 +199,7 @@ int8_t _read_xyz(TwoWire &wire, CompassXYZ &xyz)
     int8_t r = _read_registers(wire, QMC5883_ADDR, 0, (uint8_t *)&mags, 6);
     xyz.x = mags[0];
     xyz.y = mags[1];
-    xyz.z = mags[1];
+    xyz.z = mags[2];
 
     return r;
 }
@@ -262,7 +314,15 @@ int16_t Compass::heading()
         return -999;
     }
 
+    // heading for canonical mounting orientation: X forward, Y left, Z up
     float heading = atan2(xyz.y, xyz.x);
+
+    // Once you have your heading, you must then add your 'Declination Angle', which
+    // is the 'Error' of the magnetic field in your location. Find yours here:
+    // http://www.magnetic-declination.com/ Mine is: -13* 2' W, which is ~13 Degrees,
+    // or (which we need) 0.22 radians If you cannot find your Declination, comment
+    // out these two lines, your compass will be slightly off.
+
     float declinationAngle = 0.22;
     heading += declinationAngle;
 
@@ -278,4 +338,158 @@ int16_t Compass::heading()
     float headingDegrees = heading * 180 / M_PI;
 
     return headingDegrees;
+}
+
+bool UninitializedCompass::begin()
+{
+    _lastErr = CompassStatus::COMPASS_UNINITIALIZED;
+    return false;
+}
+
+String UninitializedCompass::selfTest() { return "No compass is attached"; }
+
+uint8_t UninitializedCompass::setMode(CompassMode m) { return 4; }
+
+int8_t UninitializedCompass::readXYZ() { return 4; }
+
+#ifdef COMPASS_ENABLED
+Adafruit_HMC5883_Unified _mag = Adafruit_HMC5883_Unified(12345);
+#else
+UninitializedCompass _mag;
+#endif
+
+bool HMC5883LCompass::begin()
+{
+    _lastErr = CompassStatus::COMPASS_UNINITIALIZED;
+
+#ifdef COMPASS_ENABLED
+
+    if (!mag.begin())
+    {
+        return false;
+    }
+
+    String err = selfTest();
+    if (!err.startsWith("OK\n"))
+    {
+        return false;
+    }
+
+    _lastErr = CompassStatus::COMPASS_OK;
+    return true;
+#else
+    return mag.begin();
+#endif
+}
+
+String HMC5883LCompass::selfTest()
+{
+#ifdef COMPASS_ENABLED
+    sensor_t sensor;
+    mag.getSensor(&sensor);
+    return "OK\nSensor:       " + String(sensor.name) +
+           "\nDriver Ver:   " + String(sensor.version) +
+           "\nUnique ID:    " + String(sensor.sensor_id) +
+           "\nMax Value:    " + String(sensor.max_value) + " uT" +
+           "\nMin Value:    " + String(sensor.min_value) + " uT" +
+           "\nResolution:   " + String(sensor.resolution) + " uT";
+#else
+    return mag.selfTest();
+#endif
+}
+
+uint8_t HMC5883LCompass::setMode(CompassMode m)
+{
+#ifdef COMPASS_ENABLED
+    _lastErr = m;
+    return 0;
+#else
+    return 1;
+#endif
+}
+
+int8_t HMC5883LCompass::readXYZ()
+{
+#ifdef COMPASS_ENABLED
+    if (calStart == 0)
+    {
+        calStart = millis();
+    }
+
+    /* Get a new sensor event */
+    sensors_event_t event2;
+    mag.getEvent(&event2);
+    sensors_event_t event3;
+    mag.getEvent(&event3);
+
+#ifdef COMPASS_DEBUG
+    /* Display the results (magnetic vector values are in micro-Tesla (uT)) */
+    Serial.print("X: ");
+    Serial.print(event2.magnetic.x);
+    Serial.print("  ");
+    Serial.print("Y: ");
+    Serial.print(event2.magnetic.y);
+    Serial.print("  ");
+    Serial.print("Z: ");
+    Serial.print(event2.magnetic.z);
+    Serial.print("  ");
+    Serial.println("uT");
+#endif
+
+    // Hold the module so that Z is pointing 'up' and you can measure the heading with
+    // x&y Calculate heading when the magnetometer is level, then correct for signs of
+    // axis. float heading = atan2(event.magnetic.y, event.magnetic.x); Use Y as the
+    // forward axis float heading = atan2(event.magnetic.x, event.magnetic.y);
+    /// If Z-axis is forward and Y-axis points upward:
+    // float heading = atan2(event.magnetic.x, event.magnetic.y);
+    //  If Z-axis is forward and X-axis points upward:
+    //  float heading = atan2(event.magnetic.y, -event.magnetic.x);
+
+    // heading based on the magnetic readings from the Z-axis (forward) and the X-axis
+    // (perpendicular to Z, horizontal).
+    // float heading = atan2(event.magnetic.z, event.magnetic.x);
+
+    // Dynamicly Calibrated out
+
+    // Read raw magnetometer data
+    float x = (event2.magnetic.x + event3.magnetic.x) / 2;
+    float y = (event2.magnetic.y + event3.magnetic.y) / 2;
+    float z = (event2.magnetic.z + event3.magnetic.z) / 2;
+
+    // Doing calibration first 1 minute
+    if (millis() - calStart < 60000)
+    {
+        // Update min/max values dynamically
+        x_min = min(x_min, x);
+        x_max = max(x_max, x);
+        y_min = min(y_min, y);
+        y_max = max(y_max, y);
+        z_min = min(z_min, z);
+        z_max = max(z_max, z);
+    }
+
+#ifdef COMPASS_DEBUG
+    Serial.println("x_min:" + String(x_min) + " x_max: " + String(x_max) +
+                   " y_min: " + String(y_min));
+#endif
+
+    // Calculate offsets and scales in real-time
+    float x_offset = (x_max + x_min) / 2;
+    float y_offset = (y_max + y_min) / 2;
+    float z_offset = (z_max + z_min) / 2;
+
+    float x_scale = (x_max - x_min) / 2;
+    float y_scale = (y_max - y_min) / 2;
+    float z_scale = (z_max - z_min) / 2;
+
+    // Apply calibration to raw data
+    float calibrated_x = (x - x_offset) / x_scale;
+    float calibrated_y = (y - y_offset) / y_scale;
+    float calibrated_z = (z - z_offset) / z_scale;
+
+    xyz = _orientation(ZX, calibrated_x, calibrated_y, calibrated_z);
+    return 0;
+#else
+    return mag.readXYZ();
+#endif
 }

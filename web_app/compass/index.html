@@ -160,36 +160,77 @@
         ctx.stroke();
       }
 
+      // rotate everything relative to angleOffset, in radians
+      const angleOffset = -Math.round(currentPoint.angle / 5) * 5 * Math.PI / 180;
+
       // Compass lines
       for (let angle = 0; angle < 360; angle += 45) {
         const rad = (angle * Math.PI) / 180;
         ctx.beginPath();
         ctx.moveTo(centerX, centerY);
-        ctx.lineTo(centerX + radius * Math.cos(rad), centerY + radius * Math.sin(rad));
-        ctx.strokeStyle = "#e0ffe0";
-        ctx.lineWidth = 1;
+        ctx.lineTo(centerX + radius * Math.sin(rad + angleOffset), centerY - radius * Math.cos(rad + angleOffset));
+        ctx.strokeStyle = angle % 90 == 0 ? "white" : "green";
+        ctx.lineWidth = angle == 0 ? 3 : 1;
         ctx.stroke();
       }
 
       let lineCoef = 2.5;
+
+      var minf = -1, maxf = -1;
+      dataPoints.forEach(({ spectrum }) => {
+        if (!spectrum) return;
+
+        spectrum.forEach(({ F }) => {
+          if (minf < 0 || minf > F) minf = F;
+          maxf = Math.max(maxf, F);
+        });
+      });
+
       // Draw data points
-      dataPoints.forEach(({ angle, rssi }) => {
+      dataPoints.forEach(({ angle, rssi, t0, spectrum }) => {
+        if (!currentPoint.spectrum || !spectrum) return;
+
         const rad = (angle * Math.PI) / 180;
         //const length = (120 + rssi) / (radius / 2) * radius;
-        const length = ((120 - 90) + (rssi + 90)) * lineCoef; // Scale RSSI to fit within radar
-        if (length > radius) {
-          length = radius;
-        }
-        console.log("Length: " + length);
-        const x = centerX + length * Math.cos(rad);
-        const y = centerY + length * Math.sin(rad);
+        if (minf == maxf) {
+          const length = Math.max(radius - 10, ((120 - 90) + (rssi + 90)) * lineCoef); // Scale RSSI to fit within radar
 
-        ctx.beginPath();
-        ctx.moveTo(centerX, centerY);
-        ctx.lineTo(x, y);
-        ctx.strokeStyle = "red";
-        ctx.lineWidth = 2;
-        ctx.stroke();
+          //console.log("Length: " + length);
+          const x = centerX + length * Math.sin(rad + angleOffset);
+          const y = centerY - length * Math.cos(rad + angleOffset);
+
+          ctx.beginPath();
+          ctx.moveTo(centerX, centerY);
+          ctx.lineTo(x, y);
+          // calculating linear decay factor:
+          // for 5000 < dt < 45000 - linear decay from 1.0 to 0.5
+          // for dt outside those - flat 1.0, or flat 0.5
+          const colorDecay = 1 - Math.min(Math.max((currentPoint.t0 - t0 - 5000) / (2 * 40000), 0), 0.5);
+          ctx.strokeStyle = `rgba(${Math.trunc(255 * colorDecay)}, ${Math.trunc((1 - colorDecay) * 255)}, ${Math.trunc((1 - colorDecay) * 255)}, 1)`;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        } else {
+          // now, here's radical new view:
+          // colour: the redder it is, the more recent the reading is
+          // intensity: the more intense it is, the higher the RSSI
+          // radius: the distance from centre represents frequency for which the reading was made
+          // angle: direction
+
+          spectrum.forEach(({ F, R }) => {
+            const length = (F - minf) / (maxf - minf) * (radius - 20 - 10) + 20;
+
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, length, rad + angleOffset - 0.5 * Math.PI / 180 - Math.PI / 2, rad + angleOffset + 0.5 * Math.PI / 180 - Math.PI / 2, false);
+            // calculating linear decay factor:
+            // for 5000 < dt < 45000 - linear decay from 1.0 to 0.5
+            // for dt outside those - flat 1.0, or flat 0.5
+            const colorDecay = 1 - Math.min(Math.max((currentPoint.t0 - t0 - 5000) / (2 * 40000), 0), 0.5);
+            const colorIntensity = 1 + Math.max(-1, Math.min(0, R + 20) / (70 - 20));
+            ctx.strokeStyle = `rgba(${Math.trunc(255 * colorDecay)}, ${Math.trunc((1 - colorDecay) * 255)}, ${Math.trunc((1 - colorDecay) * 255)}, ${colorIntensity})`;
+            ctx.lineWidth = 5;
+            ctx.stroke();
+          });
+        }
       });
 
       const maxPoint = dataPoints.reduce((max, point) => (point.rssi > max.rssi ? point : max), { angle: 0, rssi: -120 });
@@ -198,8 +239,8 @@
       headingDisplayMAX.textContent = `${maxPoint.angle.toFixed(1)}°`;
       rssiDisplayMAX.textContent = `${maxPoint.rssi.toFixed(1)} dBm`;
 
-      const maxX = centerX + maxLength * Math.cos(maxRad);
-      const maxY = centerY + maxLength * Math.sin(maxRad);
+      const maxX = centerX + maxLength * Math.sin(maxRad + angleOffset);
+      const maxY = centerY - maxLength * Math.cos(maxRad + angleOffset);
 
       ctx.beginPath();
       ctx.moveTo(centerX, centerY);
@@ -212,11 +253,11 @@
       const arrowHeadLength = 10;
       const arrowAngle = Math.PI / 6; // 30 degrees for the arrowhead
 
-      const arrowX1 = maxX - arrowHeadLength * Math.cos(maxRad - arrowAngle);
-      const arrowY1 = maxY - arrowHeadLength * Math.sin(maxRad - arrowAngle);
+      const arrowX1 = maxX - arrowHeadLength * Math.sin(maxRad - arrowAngle + angleOffset);
+      const arrowY1 = maxY + arrowHeadLength * Math.cos(maxRad - arrowAngle + angleOffset);
 
-      const arrowX2 = maxX - arrowHeadLength * Math.cos(maxRad + arrowAngle);
-      const arrowY2 = maxY - arrowHeadLength * Math.sin(maxRad + arrowAngle);
+      const arrowX2 = maxX - arrowHeadLength * Math.sin(maxRad + arrowAngle + angleOffset);
+      const arrowY2 = maxY + arrowHeadLength * Math.cos(maxRad + arrowAngle + angleOffset);
 
       ctx.beginPath();
       ctx.moveTo(maxX, maxY);
@@ -231,8 +272,8 @@
       const currentRad = (currentPoint.angle * Math.PI) / 180;
       const currentLength = ((120 + currentPoint.rssi) / (radius / 2)) * radius * 1.2;
 
-      const currentX = centerX + currentLength * Math.cos(currentRad);
-      const currentY = centerY + currentLength * Math.sin(currentRad);
+      const currentX = centerX + currentLength * Math.sin(currentRad + angleOffset);
+      const currentY = centerY - currentLength * Math.cos(currentRad + angleOffset);
 
       ctx.beginPath();
       ctx.moveTo(centerX, centerY);
@@ -240,6 +281,27 @@
       ctx.strokeStyle = "yellow";
       ctx.lineWidth = 3;
       ctx.stroke();
+
+      const headingString = `${currentPoint.angle.toFixed(1)}°`;
+      const rssiString = `${currentPoint.rssi.toFixed(1)} dBm`;
+      ctx.fillStyle = "white";
+      ctx.font = "20px Arial";
+
+      const m = ctx.measureText(headingString);
+      ctx.fillText(headingString, centerX - m.width / 2, 30);
+      const m1 = ctx.measureText(rssiString);
+      ctx.fillText(rssiString, centerX - m1.width / 2, 60);
+
+      const maxHeadingString = `${maxPoint.angle.toFixed(1)}°`;
+      const maxRssiString = `${maxPoint.rssi.toFixed(1)} dBm`;
+      ctx.fillStyle = "blue";
+      ctx.font = "20px Arial";
+
+      const maxOffset = Math.max(m.width, m1.width) * ((currentPoint.angle - maxPoint.angle + 360) % 360 > 180 ? -1 : 1);
+      const m2 = ctx.measureText(maxHeadingString);
+      ctx.fillText(maxHeadingString, centerX - m2.width / 2 - maxOffset, 60);
+      const m3 = ctx.measureText(maxRssiString);
+      ctx.fillText(maxRssiString, centerX - m3.width / 2 - maxOffset, 90);
     }
 
     // Handle canvas hover for pointer change
@@ -327,6 +389,42 @@
       document.body.appendChild(promptDiv);
     }
 
+    function angleDiff(a, b) {
+      a = (a + 360) % 360;
+      b = (b + 360) % 360;
+      if (b < a) {
+        a += b;
+        b = a - b;
+        a -= b;
+      }
+
+      return b - a > 180 ? a + 360 - b : b - a;
+    }
+
+    function simulateRssi(foxes, h_angle) {
+      const rssis = foxes.map(({ angle, f_mhz, rssi }, i) => {
+        const fox = angleDiff(angle, h_angle);
+        return {
+          f_mhz: f_mhz,
+          rssi: Math.max(-90, (fox > 35 ? 0 : Math.cos((Math.PI / 2) * fox / 35) * (rssi + 90)) - Math.random() * 3 - 90)
+        };
+      });
+
+      rssis.sort((a, b) => a.f_mhz - b.f_mhz);
+
+      return rssis.reduce((v, fox) => {
+        if (v.length == 0 || v[v.length - 1].f_mhz != fox.f_mhz) {
+          v.push(fox);
+          return v;
+        }
+
+        const prev = v[v.length - 1];
+        prev.rssi = Math.log(Math.exp(prev.rssi) + Math.exp(fox.rssi));
+
+        return v;
+      }, []);
+    }
+
     // Parse Bluetooth data
     function parseBTData(data) {
       // Match the data format and extract the heading and RSSI values
@@ -336,8 +434,33 @@
         const heading = parseInt(match[1]);
         const rssi = parseFloat(match[2]);
         console.log("H:" + heading + " R:" + rssi);
-        dataPoints[parseInt(heading)] = { angle: parseInt(heading), rssi: rssi };
-        currentPoint = { angle: parseInt(heading), rssi: rssi };
+        data = '{"SCAN_RESULT":{"Hmin":' + match[1] + ',"Hmax":' + match[1] + ',"Spectrum":[{"F":0,"R":' + match[2] + '}]}}';
+      }
+
+      try {
+        data = JSON.parse(data);
+      } catch (e) {
+        console.log("Skipping broken JSON:", e, "in", data);
+        return;
+      }
+
+      if (data["SCAN_RESULT"]) {
+        scanResult = data["SCAN_RESULT"];
+        const spectrum = scanResult["Spectrum"];
+        if (spectrum.length == 0) {
+          console.log("Skipping scan result with no spectrum:", data);
+          return;
+        }
+
+        const headingMin = scanResult.Hmin;
+        const headingMax = scanResult.Hmax;
+
+        const heading = ((headingMax + headingMin + 720 + (headingMax - headingMin > 180 ? 360 : 0)) / 2) % 360;
+        const rssi = spectrum[0]["R"];
+
+        const t0 = Date.now();
+        dataPoints[Math.trunc(heading)] = { angle: heading, rssi: rssi, t0: t0, spectrum: spectrum };
+        currentPoint = { angle: heading, rssi: rssi, t0: t0, spectrum: spectrum };
         //if (dataPoints.length > 50) dataPoints.shift(); // Keep only the last 50 points
         headingDisplay.textContent = `${heading.toFixed(1)}°`;
         rssiDisplay.textContent = `${rssi.toFixed(1)} dBm`;
@@ -385,18 +508,32 @@
         isSimulating = true;
         simulateBtn.textContent = "Stop Simulation";
 
-        (function simulate() {
+        dataPoints = [];
+        for (i = 0; i < 360; i++) {
+          dataPoints[i] = { angle: i, rssi: -120 };
+        }
+
+        const foxes = [
+          { angle: Math.random() * 360, f_mhz: 240, rssi: -60 },
+          { angle: Math.random() * 360, f_mhz: 320, rssi: -45 },
+          { angle: Math.random() * 360, f_mhz: 120, rssi: -20 },
+          { angle: Math.random() * 360, f_mhz: 120, rssi: -35 }
+        ];
+        (function simulate(foxes, prevAngle, prevRssi) {
           if (!isSimulating) return;
-          const angle = Math.random() * 360;
-          const rssi = -70 + Math.random() * 30;
-          dataPoints.push({ angle, rssi });
-          currentPoint = { angle, rssi };
-          if (dataPoints.length > 360 * 5) dataPoints.shift();
-          headingDisplay.textContent = `${angle.toFixed(1)}°`;
-          rssiDisplay.textContent = `${rssi.toFixed(1)} dBm`;
-          drawRadar();
-          setTimeout(simulate, 100);
-        })();
+          const angle = (prevAngle - 3 + Math.random() * 7.5) % 360; // bias slightly to scan on
+          const spectrum = simulateRssi(foxes, angle);
+
+          const data = spectrum.length == 1 ? "RSSI_HEADING: '{H:" + angle + ",RSSI:" + spectrum[0].rssi + "}'" : JSON.stringify({
+            SCAN_RESULT: {
+              Hmin: Math.min(prevAngle, angle),
+              Hmax: Math.max(prevAngle, angle),
+              Spectrum: spectrum.map(({ f_mhz, rssi }) => ({ F: f_mhz, R: rssi }))
+            }
+          });
+          parseBTData(data); // test actual BT data processing
+          setTimeout(simulate, 100, foxes, angle, rssi);
+        })(foxes, Math.random() * 360, -70 + Math.random() * 30);
       }
     });
 

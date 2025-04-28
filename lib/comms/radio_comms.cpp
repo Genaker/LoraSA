@@ -144,6 +144,32 @@ uint8_t *_serialize_scan_max_result(Message &m, size_t &p, uint8_t *msg)
     return msg;
 }
 
+uint8_t *_serialize_scan_heading_max(Message &m, size_t &p, uint8_t *msg)
+{
+    if (m.type != SCAN_HEADING_MAX)
+    {
+        return NULL;
+    }
+
+    size_t written = 0;
+    written = _write(msg, p, 0, (uint8_t *)&m.payload.dump.heading_min, 2);
+    written = _write(msg, p, written, (uint8_t *)&m.payload.dump.heading_max, 2);
+
+    uint8_t *sub_msg = msg + written;
+    p -= written;
+    m.type = SCAN_MAX_RESULT;
+    sub_msg = _serialize_scan_max_result(m, p, sub_msg);
+    p += written;
+    m.type = SCAN_HEADING_MAX;
+
+    if (sub_msg == NULL)
+    {
+        msg = NULL;
+    }
+
+    return msg;
+}
+
 uint8_t *_serialize_config_task(Message &m, size_t &p, uint8_t *msg)
 {
     if (m.type != CONFIG_TASK)
@@ -200,6 +226,10 @@ int16_t RadioComms::send(Message &m)
     else if (m.type == MessageType::SCAN_MAX_RESULT)
     {
         msg = _serialize_scan_max_result(m, p, msg_buf);
+    }
+    else if (m.type == MessageType::SCAN_HEADING_MAX)
+    {
+        msg = _serialize_scan_heading_max(m, p, msg_buf);
     }
     else if (m.type == MessageType::CONFIG_TASK)
     {
@@ -301,6 +331,7 @@ Message *_deserialize_scan_max_result(size_t len, size_t &p, uint8_t *packet)
     message->payload.dump.sz = dump_sz;
     message->payload.dump.freqs_khz = freqs;
     message->payload.dump.rssis = rssis;
+    message->payload.dump.rssis2 = NULL;
 
     uint32_t scale = 0;
     p = _read(packet, len, p, (uint8_t *)&scale);
@@ -315,6 +346,24 @@ Message *_deserialize_scan_max_result(size_t len, size_t &p, uint8_t *packet)
         rssis[i] = ((int16_t)b) - 255;
     }
 
+    return message;
+}
+
+Message *_deserialize_scan_heading_max(size_t len, size_t &p, uint8_t *packet)
+{
+    int16_t heading_min = -999;
+    int16_t heading_max = 0;
+    p = _read(packet, len, p, (uint8_t *)&heading_min, 2);
+    p = _read(packet, len, p, (uint8_t *)&heading_max, 2);
+
+    Message *message = _deserialize_scan_max_result(len, p, packet);
+
+    if (message != NULL)
+    {
+        message->type = SCAN_HEADING_MAX;
+        message->payload.dump.heading_min = heading_min;
+        message->payload.dump.heading_max = heading_max;
+    }
     return message;
 }
 
@@ -438,6 +487,10 @@ Message *RadioComms::receive(uint16_t timeout_ms)
     else if (b == SCAN_MAX_RESULT)
     {
         message = _deserialize_scan_max_result(len, p, packet);
+    }
+    else if (b == SCAN_HEADING_MAX)
+    {
+        message = _deserialize_scan_heading_max(len, p, packet);
     }
     else if (b == CONFIG_TASK)
     {
