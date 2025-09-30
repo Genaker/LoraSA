@@ -468,7 +468,7 @@ Use connector and solder to RPI or similar, I'm using a RPI Zero 2. The targets 
 ### 1. `heltec_wifi_lora_32_V3`
 - **Chip Used**: Heltec WiFi LoRa 32 V3
 - **Frequency**: 150 - 850 MHz
-
+- 
 ### 2. `heltec_wifi_lora_32_V3-OSD`
 - **Chip Used**: Heltec WiFi LoRa 32 V3
 - **Frequency**: Not specified
@@ -477,7 +477,8 @@ Use connector and solder to RPI or similar, I'm using a RPI Zero 2. The targets 
 ### 3. `heltec_wifi_lora_32_V3_433`
 - **Chip Used**: Heltec WiFi LoRa 32 V3
 - **Frequency**: 130 MHz to 180 MHz
-- **Unique Features**: Frequency range specified with `-DFREQ_BEGIN=130` and `-DFREQ_END=180`. 
+- **Unique Features**: Frequency range specified with `-DFREQ_BEGIN=130` and `-DFREQ_END=180`.
+<img width="500" height="498" alt="image" src="https://github.com/user-attachments/assets/2c21bd18-4605-4c58-b83c-300eadbcf75e" />
 
 ### 4. `lilygo-T3S3-v1-2-sx1262`
 - **Chip Used**: LilyGO T3 S3 V1.2 with SX1262
@@ -492,6 +493,7 @@ Use connector and solder to RPI or similar, I'm using a RPI Zero 2. The targets 
 - **Chip Used**: LilyGO T3 S3 V1.2 with SX1280
 - **Frequency**: 2400 MHz to 2500 MHz
 - **Unique Features**: Includes `-DSERIAL_OUT` for serial output.
+<img width="600" height="600" alt="image" src="https://github.com/user-attachments/assets/d6ab9f16-ca04-4931-8637-41616c3dd79f" />
 
 ### 7. `lilygo-T3-v1-6-xs1276`
 - **Chip Used**: LilyGO T3 V1.6 with SX1276
@@ -502,11 +504,14 @@ Use connector and solder to RPI or similar, I'm using a RPI Zero 2. The targets 
 ### 8. `vision-master-e290`
 - **Chip Used**: Heltec WiFi LoRa 32 V3
 - **Frequency**: 150 - 850 MHz
+<img width="1280" height="960" alt="image" src="https://github.com/user-attachments/assets/70631423-7921-48ae-b318-5b1df7d51457" />
 
 ### 9. `vision-master-t190`
 - **Chip Used**: Heltec WiFi LoRa 32 V3
 - **Frequency**: 150 - 850 MHz
 - **Unique Features**: Includes `-DROTATION=1` for display rotation. 1 == normal 3 == upside down
+<img width="800" height="800" alt="image" src="https://github.com/user-attachments/assets/3fd8ffc2-1686-4867-959a-c884b2024194" />
+
 
 ### 10. `seek-on-mavic-sx1280`
 - **Chip Used**: LilyGO T3 S3 V1.2 with SX1280
