@@ -130,7 +130,6 @@ No migration needed. Existing code continues to work. To use new features:
 ## Future Improvements
 
 Tracked in GitHub issues:
-- [ ] Add unit tests for `serial_utils.py` validation functions
 - [ ] Add integration tests for serial communication
 - [ ] Create automated memory leak testing for C++ code
 - [ ] Add configuration file support (YAML/JSON) for complex setups

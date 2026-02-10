@@ -148,17 +148,21 @@ with MSPy(device=DRONE_PORT, loglevel="WARNING", baudrate=115200) as board:
                 c16 = crc16(line, so_far)
                 if checksum != c16:
                     continue
+                
+                # Parse the scan result
                 try:
                     count, data = parse_line(line)
-                    data.sort()
-                    candidate = get_candidates(data)
-                    osd_text = str2osd(f"{candidate[0]}: {candidate[1]}")
-                    board.send_RAW_msg(INAV_KONRAD_SET_PILOT_NAME, osd_text)
-                    heading = get_heading(board)
-                    lora.write(f"HEADING {heading}\n".encode("utf-8"))
                 except json.JSONDecodeError as e:
                     print(f"Error parsing JSON: {e}")
                     continue
                 except Exception as e:
                     print(f"Error processing scan result: {e}")
                     continue
+                
+                # Process successfully parsed data
+                data.sort()
+                candidate = get_candidates(data)
+                osd_text = str2osd(f"{candidate[0]}: {candidate[1]}")
+                board.send_RAW_msg(INAV_KONRAD_SET_PILOT_NAME, osd_text)
+                heading = get_heading(board)
+                lora.write(f"HEADING {heading}\n".encode("utf-8"))

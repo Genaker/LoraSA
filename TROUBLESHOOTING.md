@@ -7,7 +7,7 @@
 #### Error: "Unknown board ID"
 **Symptom**: Build fails with `Error: Unknown board ID 'heltec_wifi_lora_32_V3'`
 
-**Solution**: Update your ESP32 Expressif catalog:
+**Solution**: Update your ESP32 Espressif catalog:
 ```bash
 pio pkg update -g -p espressif32
 ```
