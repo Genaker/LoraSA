@@ -25,6 +25,7 @@
 - [Send Scan Data via Lora](#send-scan-data-via-lora)
 - [Seek on Jam / FPV OSD using Flight controller](#seek-on-jam-fpv-osd-using-flight-controller)
 - [Platformio targets](#platformio-targets)
+- [Troubleshooting](TROUBLESHOOTING.md) 📖 **NEW**
 
 ## Supported boards: 
 
