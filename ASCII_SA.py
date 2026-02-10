@@ -4,7 +4,33 @@ import serial.tools.list_ports
 import time
 import re
 import curses
+import signal
+import sys
+import os
 from collections import defaultdict
+
+# Import shared utilities
+try:
+    from serial_utils import parse_scan_result_regex, DEFAULT_BAUDRATE, DEFAULT_TIMEOUT
+except ImportError:
+    print("Warning: serial_utils module not found, using local definitions", file=sys.stderr)
+    DEFAULT_BAUDRATE = 115200
+    DEFAULT_TIMEOUT = 1
+    
+    def parse_scan_result_regex(scan_result):
+        """Parse SCAN_RESULT data using regex."""
+        if not scan_result or 'SCAN_RESULT' not in scan_result:
+            raise ValueError("Invalid scan result format")
+        pattern = r"\((\d+),\s*(-\d+)\)"
+        matches = re.findall(pattern, scan_result)
+        if not matches:
+            raise ValueError("No valid frequency/RSSI pairs found")
+        return [(int(freq), int(rssi)) for freq, rssi in matches]
+
+# Configuration constants
+DEFAULT_RESOLUTION = 1
+DEFAULT_THRESHOLD = -120
+DEFAULT_DB_PER_HASH = 10
 
 
 def list_serial_ports():
@@ -35,13 +61,14 @@ def select_serial_port():
 
 def parse_scan_result(scan_result):
     """
-    Parse the SCAN_RESULT data from the serial output.
+    Parse the SCAN_RESULT data from the serial output using regex.
+    This is a wrapper around the shared utility function.
+    
     :param scan_result: Raw SCAN_RESULT string.
     :return: List of tuples with (frequency in kHz, RSSI in dB).
+    :raises ValueError: If parsing fails or data is invalid.
     """
-    pattern = r"\((\d+),\s*(-\d+)\)"
-    matches = re.findall(pattern, scan_result)
-    return [(int(freq), int(rssi)) for freq, rssi in matches]
+    return parse_scan_result_regex(scan_result)
 
 
 def group_by_frequency(data, resolution_mhz):
@@ -207,7 +234,8 @@ def display_debug_output(stdscr, data, start_line):
     try:
         stdscr.addstr(start_line, 0, "Frequency (MHz)   Max RSSI (dB)")
         stdscr.addstr(start_line + 1, 0, "-" * max_width)
-    except curses.error:
+    except curses.error as e:
+        # Screen too small or cursor out of bounds - log and continue
         pass
 
     # Format debug data compactly with fixed width: 10 values per row
@@ -238,41 +266,71 @@ def read_serial_data(stdscr, port, baudrate, resolution_mhz, db_threshold, db_pe
     :param use_color: Whether to use colored output.
     :param show_debug: Whether to show debugging information.
     """
+    # Set up signal handler for graceful exit
+    def signal_handler(sig, frame):
+        curses.endwin()
+        print("\nExiting gracefully...")
+        sys.exit(0)
+    
+    signal.signal(signal.SIGINT, signal_handler)
+    
     try:
         initialize_colors()  # Initialize colors for the histogram
         max_height, max_width = stdscr.getmaxyx()
         histogram_start_row = 3  # Move histogram up for more space below
 
-        with serial.Serial(port, baudrate, timeout=1) as ser:
+        with serial.Serial(port, baudrate, timeout=DEFAULT_TIMEOUT) as ser:
             time.sleep(2)  # Allow serial port to stabilize
 
             while True:
-                response = ser.readline().decode("utf-8").strip()
-                if response.startswith("SCAN_RESULT"):
-                    parsed_data = parse_scan_result(response)
-                    grouped_data = group_by_frequency(parsed_data, resolution_mhz)
-                    draw_histogram(
-                        stdscr,
-                        grouped_data,
-                        histogram_start_row,
-                        db_threshold,
-                        db_per_hash,
-                        use_color,
-                        show_debug
-                    )
-                elif response.startswith("LORA_RSSI"):
-                    stdscr.addstr(0, 0, "                               ", curses.color_pair(1)) 
-                    stdscr.addstr(0, 0, response + "dB", curses.color_pair(1)) 
-                else:
-                    stdscr.refresh()
+                try:
+                    response = ser.readline().decode("utf-8").strip()
+                    if not response:
+                        continue
+                        
+                    if response.startswith("SCAN_RESULT"):
+                        parsed_data = parse_scan_result(response)
+                        grouped_data = group_by_frequency(parsed_data, resolution_mhz)
+                        draw_histogram(
+                            stdscr,
+                            grouped_data,
+                            histogram_start_row,
+                            db_threshold,
+                            db_per_hash,
+                            use_color,
+                            show_debug
+                        )
+                    elif response.startswith("LORA_RSSI"):
+                        try:
+                            stdscr.addstr(0, 0, "                               ", curses.color_pair(1)) 
+                            stdscr.addstr(0, 0, response + "dB", curses.color_pair(1))
+                        except curses.error:
+                            pass
+                    else:
+                        stdscr.refresh()
+                except UnicodeDecodeError as e:
+                    # Skip malformed data
+                    continue
+                except ValueError as e:
+                    # Invalid scan result format - skip
+                    continue
     except serial.SerialException as e:
-        stdscr.addstr(0, 0, f"Serial error: {e}")
-        stdscr.refresh()
-        stdscr.getch()
+        try:
+            stdscr.addstr(0, 0, f"Serial error: {e}")
+            stdscr.refresh()
+            stdscr.getch()
+        except:
+            print(f"Serial error: {e}")
+    except KeyboardInterrupt:
+        # Handled by signal handler
+        pass
     except Exception as e:
-        stdscr.addstr(0, 0, f"An unexpected error occurred: {e}")
-        stdscr.refresh()
-        stdscr.getch()
+        try:
+            stdscr.addstr(0, 0, f"An unexpected error occurred: {e}")
+            stdscr.refresh()
+            stdscr.getch()
+        except:
+            print(f"An unexpected error occurred: {e}")
 
 if __name__ == "__main__":
     print("Serial Communication Script: Grouped Histogram with Adjustable Threshold")

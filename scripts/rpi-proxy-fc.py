@@ -7,6 +7,42 @@ import json
 
 from yamspy import MSPy
 
+# Import shared utilities
+try:
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from serial_utils import crc16, parse_scan_result as parse_line, DEFAULT_BAUDRATE
+except ImportError:
+    print("Warning: serial_utils module not found, using local definitions", file=sys.stderr)
+    DEFAULT_BAUDRATE = 115200
+    
+    # Local fallback definitions
+    POLY = 0x1021
+    
+    def crc16(s, c):
+        """Calculate CRC16 CCITT-FALSE checksum."""
+        c = c ^ 0xffff
+        for ch in s:
+            c = c ^ (ord(ch) << 8)
+            for i in range(8):
+                if c & 0x8000:
+                    c = ((c << 1) ^ POLY) & 0xffff
+                else:
+                    c = (c << 1) & 0xffff
+        return c ^ 0xffff
+    
+    def parse_line(line):
+        """Parse a JSON line from the serial input."""
+        if 'SCAN_RESULT ' not in line:
+            raise ValueError("Line does not contain SCAN_RESULT")
+        line = line[line.index('SCAN_RESULT '):]
+        parts = line.split(' ', 2)
+        if len(parts) < 3:
+            raise ValueError(f"Invalid SCAN_RESULT format")
+        _, count_str, rest = parts
+        count = int(count_str)
+        data = json.loads(rest.replace('(', '[').replace(')', ']'))
+        return count, data
+
 ## Constants
 
 # INAV Konrad custom FW
@@ -15,34 +51,16 @@ INAV_KONRAD_MAX_NAME_LENGTH = 16
 INAV_KONRAD_SET_PILOT_NAME = 0x5000
 
 
-LORA_SA_PORT = "/dev/ttyS0"
-DRONE_PORT = "/dev/ttyACM0"
+# Configuration - can be overridden via environment variables
+LORA_SA_PORT = os.getenv("LORA_SA_PORT", "/dev/ttyS0")
+DRONE_PORT = os.getenv("DRONE_PORT", "/dev/ttyACM0")
+SERIAL_BAUDRATE = int(os.getenv("SERIAL_BAUDRATE", DEFAULT_BAUDRATE))
+SERIAL_TIMEOUT = int(os.getenv("SERIAL_TIMEOUT", "5"))
 
 # For testing on Windows:
 # LORA_SA_PORT = "COM6"
 # DRONE_PORT = "COM4"
 
-
-# lifted from SpectrumScan.py
-def parse_line(line):
-    """Parse a JSON line from the serial input."""
-
-    line = line[line.index('SCAN_RESULT '):]  # support garbage interleaving with the string
-    _, count, rest = line.split(' ', 2)
-    return int(count), json.loads(rest.replace('(', '[').replace(')', ']'))
-
-POLY = 0x1021
-def crc16(s, c):
-    c = c ^ 0xffff
-    for ch in s:
-        c = c ^ (ord(ch) << 8)
-        for i in range(8):
-            if c & 0x8000:
-                c = ((c << 1) ^ POLY) & 0xffff
-            else:
-                c = (c << 1) & 0xffff
-
-    return c ^ 0xffff
 
 # use MSP to get the heading
 def get_heading(board: MSPy) -> float:
@@ -76,10 +94,11 @@ with MSPy(device=DRONE_PORT, loglevel="WARNING", baudrate=115200) as board:
         sys.exit(1)
     else:
         try:
-            # Attempt to connect to the Lora ESP SA over serial, use 115200 baudrate
-            lora = serial.Serial(LORA_SA_PORT, 115200, timeout=5)
-        except:
-            # just some basic error display with the FC OSD
+            # Attempt to connect to the Lora ESP SA over serial
+            lora = serial.Serial(LORA_SA_PORT, SERIAL_BAUDRATE, timeout=SERIAL_TIMEOUT)
+        except (serial.SerialException, OSError) as e:
+            # Display error on FC OSD
+            print(f"Error connecting to LoRa board: {e}")
             for _ in range(10):
                 board.send_RAW_msg(
                     INAV_KONRAD_SET_PILOT_NAME, str2osd("err: lora board")
@@ -131,12 +150,15 @@ with MSPy(device=DRONE_PORT, loglevel="WARNING", baudrate=115200) as board:
                     continue
                 try:
                     count, data = parse_line(line)
-                except json.JSONDecodeError:
-                    continue
-                finally:
                     data.sort()
                     candidate = get_candidates(data)
                     osd_text = str2osd(f"{candidate[0]}: {candidate[1]}")
                     board.send_RAW_msg(INAV_KONRAD_SET_PILOT_NAME, osd_text)
                     heading = get_heading(board)
                     lora.write(f"HEADING {heading}\n".encode("utf-8"))
+                except json.JSONDecodeError as e:
+                    print(f"Error parsing JSON: {e}")
+                    continue
+                except Exception as e:
+                    print(f"Error processing scan result: {e}")
+                    continue
