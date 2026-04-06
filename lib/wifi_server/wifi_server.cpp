@@ -1,4 +1,8 @@
-// Search for parameter in HTTP POST request
+#include "wifi_server.h"
+#include "file_io.h"
+#include <LittleFS.h>
+
+// Parameter name constants
 const String SSID = "ssid";
 const String PASS = "pass";
 const String IP = "ip";
@@ -6,32 +10,25 @@ const String GATEWAY = "gateway";
 const String FSTART = "fstart";
 const String FEND = "fend";
 
-// File paths to save input values permanently
-// const char *ssidPath = "/ssid.txt";
-
-// Variables to save values from HTML form
+// WiFi config variables
 String ssid = "LoraSA", pass = "1234567890", ip = "192.168.1.100",
        gateway = "192.168.1.1", fstart = "", fend = "", smpls = "";
 
 #ifdef WEB_SERVER
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
-#include <LittleFS.h>
 #include <WiFi.h>
 
 // Create AsyncWebServer object on port 80
 AsyncWebServer server(80);
 
 IPAddress localIP;
-// Set your Gateway IP address
 IPAddress localGateway;
 IPAddress subnet(255, 255, 0, 0);
 
-// Timer variables
 unsigned long previousMillis = 0;
-const long interval = 10000; // interval to wait for Wi-Fi connection (milliseconds)
+const long interval = 10000;
 
-// Initialize WiFi
 bool initWiFi()
 {
     Serial.println("SSID:" + ssid);
@@ -74,9 +71,8 @@ bool initWiFi()
     return true;
 }
 
-void serverServer()
+static void serverServer()
 {
-    // Route for root / web page
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
               { request->send(LittleFS, "/index.html", "text/html"); });
 
@@ -100,16 +96,16 @@ void serverServer()
                       writeParameterToParameterFile(IP, p);
                   }
 
-                  if (request->hasParam(IP, true))
+                  if (request->hasParam(SSID, true))
                   {
-                      p = request->getParam(IP, true)->value();
-                      writeParameterToParameterFile(IP, p);
+                      p = request->getParam(SSID, true)->value();
+                      writeParameterToParameterFile(SSID, p);
                   }
 
-                  if (request->hasParam(IP, true))
+                  if (request->hasParam(PASS, true))
                   {
-                      p = request->getParam(IP, true)->value();
-                      writeParameterToParameterFile(IP, p);
+                      p = request->getParam(PASS, true)->value();
+                      writeParameterToParameterFile(PASS, p);
                   }
 
                   if (request->hasParam(GATEWAY, true))
@@ -144,23 +140,6 @@ void serverServer()
                   ESP.restart();
               });
 
-    /* // Route to set GPIO state to HIGH
-     server.on("/on", HTTP_GET,
-               [](AsyncWebServerRequest *request)
-               {
-                   digitalWrite(ledPin, HIGH);
-                   request->send(LittleFS, "/index.html", "text/html", false,
-                                 processor);
-               });
-
-     // Route to set GPIO state to LOW
-     server.on("/off", HTTP_GET,
-               [](AsyncWebServerRequest *request)
-               {
-                   digitalWrite(ledPin, LOW);
-                   request->send(LittleFS, "/index.html", "text/html", false,
-                                 processor);
-               });*/
     server.begin();
 }
 
@@ -173,9 +152,7 @@ void serverStart()
     }
     else
     {
-        // Connect to Wi-Fi network with default SSID and password
         Serial.println("Setting AP (Access Point)");
-        // NULL sets an open Access Point
         WiFi.softAP("LoraSA", NULL);
 
         IPAddress IP = WiFi.softAPIP();
@@ -189,14 +166,12 @@ void serverStart()
 
 void writeParameterToFile(String value, String file)
 {
-    // Write file to save value
     writeFile(LittleFS, file.c_str(), value.c_str());
 }
 
 void writeParameterToParameterFile(String param, String value)
 {
     String file = String("/" + param + ".txt");
-    // Write file to save value
     writeParameterToFile(value, file.c_str());
 }
 

@@ -1,20 +1,16 @@
-#pragma once
+#include "bt_wifi_scan.h"
+
+#ifdef OSD_ENABLED
+
+// These globals are defined in main.cpp
+extern long cycleCnt;
+extern bool present;
+extern bool scanFinished;
 
 #ifdef WIFI_SCANNING_ENABLED
 #include "WiFi.h"
-#endif
-#ifdef BT_SCANNING_ENABLED
-#include <BLEAdvertisedDevice.h>
-#include <BLEDevice.h>
-#include <BLEScan.h>
-#include <BLEUtils.h>
-#endif
-#include "DFRobot_OSD.h"
 
-void setOSD() {}
-// TODO: Make Async Scan
-// https://arduino-esp8266.readthedocs.io/en/latest/esp8266wifi/scan-examples.html#async-scan
-void scanWiFi(DFRobot_OSD osd)
+void scanWiFi(DFRobot_OSD &osd)
 {
     osd.clear();
     osd.displayString(14, 2, "Scanning WiFi..");
@@ -34,7 +30,6 @@ void scanWiFi(DFRobot_OSD osd)
 #endif
         for (int i = 0; i < n; ++i)
         {
-// Print SSID and RSSI for each network found
 #ifdef PRINT_DEBUG
             Serial.print(i + 1);
             Serial.print(": ");
@@ -50,13 +45,15 @@ void scanWiFi(DFRobot_OSD osd)
     }
     osd.displayChar(14, 1, 0x10f);
 }
+#endif // WIFI_SCANNING_ENABLED
 
-//**********************
-// BLE devices scan.
-//***********************
-// TODO: Make Async Scan
-// https://github.com/nkolban/esp32-snippets/blob/master/cpp_utils/tests/BLETests/SampleAsyncScan.cpp
-void scanBT(DFRobot_OSD osd)
+#ifdef BT_SCANNING_ENABLED
+#include <BLEAdvertisedDevice.h>
+#include <BLEDevice.h>
+#include <BLEScan.h>
+#include <BLEUtils.h>
+
+void scanBT(DFRobot_OSD &osd)
 {
     osd.clear();
     osd.displayString(14, 2, "Scanning BT...");
@@ -64,9 +61,7 @@ void scanBT(DFRobot_OSD osd)
 
     BLEDevice::init("");
     BLEScan *pBLEScan = BLEDevice::getScan();
-    // active scan uses more power, but get results faster
     pBLEScan->setActiveScan(true);
-    // TODO: adjust interval and window
     pBLEScan->setInterval(0x50);
     pBLEScan->setWindow(0x30);
 
@@ -108,3 +103,6 @@ void scanBT(DFRobot_OSD osd)
     osd.displayChar(14, 1, 0x10f);
     scanFinished = true;
 }
+#endif // BT_SCANNING_ENABLED
+
+#endif // OSD_ENABLED

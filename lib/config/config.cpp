@@ -136,7 +136,7 @@ bool Config::updateConfig(String key, String value)
 
     if (key.equalsIgnoreCase("listen_on_usb"))
     {
-        listen_on_serial0 = value;
+        listen_on_usb = value;
         return true;
     }
 
@@ -828,7 +828,7 @@ BusConfig BusConfig::configure(String cfg)
             continue;
         }
 
-        if (c.bus_type == SERIAL && k.equals("tx") ||
+        if (c.bus_type == UART && k.equals("tx") ||
             c.bus_type == SPI && k.equals("mosi") ||
             c.bus_type == WIRE && k.equals("sda"))
         {
@@ -836,7 +836,7 @@ BusConfig BusConfig::configure(String cfg)
             continue;
         }
 
-        if (c.bus_type == SERIAL && k.equals("rx") ||
+        if (c.bus_type == UART && k.equals("rx") ||
             c.bus_type == SPI && k.equals("miso"))
         {
             c.rx = param.toInt();

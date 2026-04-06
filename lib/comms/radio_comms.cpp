@@ -1,4 +1,5 @@
 #include "comms.h"
+#include <atomic>
 
 int packetRssi = 0;
 
@@ -414,8 +415,8 @@ Message *_deserialize_config_task(size_t len, size_t &p, uint8_t *packet)
     return message;
 }
 
-volatile bool _received = false;
-void _rcv() { _received = true; }
+static std::atomic<bool> _received{false};
+void _rcv() { _received.store(true, std::memory_order_release); }
 
 Message *RadioComms::receive(uint16_t timeout_ms)
 {
@@ -426,7 +427,7 @@ Message *RadioComms::receive(uint16_t timeout_ms)
 #warning Radio Comms not fully supported for LR1121 or SX1276
 #else
     // because of this, receive is single-threaded, single-device
-    _received = false;
+    _received.store(false, std::memory_order_relaxed);
     radio.setDio1Action(_rcv);
     uint32_t timeout_ticks = (uint32_t)timeout_ms * (1000000 / 15625);
 
@@ -438,8 +439,7 @@ Message *RadioComms::receive(uint16_t timeout_ms)
         return NULL;
     }
 
-    // wait on a semaphore
-    while (!_received)
+    while (!_received.load(std::memory_order_acquire))
     {
         yield();
     }

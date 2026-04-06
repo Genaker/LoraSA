@@ -12,6 +12,17 @@ SX1262Module::SX1262Module(RadioModuleSPIConfig radio2) : RadioModule()
     Serial.printf("Initialized Radio2: %s\n", radio2.toStr().c_str());
 }
 
+SX1262Module::~SX1262Module()
+{
+    if (_radio != nullptr)
+    {
+        Module *mod = _radio->getMod();
+        delete _radio;
+        delete mod;
+        _radio = nullptr;
+    }
+}
+
 int16_t SX1262Module::beginScan(float init_freq, float bw, uint8_t shaping)
 {
     int16_t status = _radio->beginFSK(init_freq);

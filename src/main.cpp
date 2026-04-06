@@ -25,27 +25,13 @@
 
 #include "FS.h"
 #include <Arduino.h>
-#ifdef WEB_SERVER
-#include <AsyncTCP.h>
-#include <ESPAsyncWebServer.h>
-#endif
-#include <File.h>
-#include <LittleFS.h>
 #include <Wire.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <unordered_map>
 #include <unordered_set>
 
-#include "WIFI_SERVER.h"
-
 #define FORMAT_LITTLEFS_IF_FAILED true
-
-// HardwareSerial Serial0(0);
-
-// #define OSD_ENABLED true
-// #define WIFI_SCANNING_ENABLED true
-// #define BT_SCANNING_ENABLED true
 
 // Direct access to the low-level SPI communication between RadioLib and the radio module.
 #define RADIOLIB_LOW_LEVEL (1)
@@ -62,288 +48,28 @@
 #include <scan.h>
 #include <stdlib.h>
 
-bool bleDeviceConnected = false;
+#include "bt.h"
+#include "file_io.h"
+#include "radio_init.h"
+#include "wifi_server.h"
 
-#ifdef BT_MOBILE
-#define SERVICE_UUID "00001234-0000-1000-8000-00805f9b34fb"
-#define CHARACTERISTIC_UUID "00001234-0000-1000-8000-00805f9b34ac"
-
-#ifndef BT_NM
-#include <BLE2902.h>
-#include <BLEDevice.h>
-#include <BLEServer.h>
-#include <BLEUtils.h>
-
-BLEServer *pServer = NULL;
-BLECharacteristic *pCharacteristic = NULL;
-BLEAdvertising *pAdvertising = NULL;
-
-class MyServerCallbacks : public BLEServerCallbacks
-{
-    void onConnect(BLEServer *pServer) { bleDeviceConnected = true; };
-
-    void onDisconnect(BLEServer *pServer)
-    {
-        bleDeviceConnected = false;
-        BLEDevice::startAdvertising(); // Restart advertising after disconnect
-    }
-};
-
-#else
-#include <NimBLEDevice.h>
-
-NimBLEServer *pServer = nullptr;
-NimBLECharacteristic *pCharacteristic = nullptr;
-NimBLEAdvertising *pAdvertising = nullptr;
-
-class BTServerCallbacks : public NimBLEServerCallbacks
-{
-  public:
-    void onConnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo) override
-    {
-        bleDeviceConnected = true;
-        Serial.printf("Device Connected | Free Heap: %d kByte\n",
-                      ESP.getFreeHeap() / 1000);
-        Serial.printf("Client address: %s\n", connInfo.getAddress().toString().c_str());
-
-        pServer->updateConnParams(connInfo.getConnHandle(), 24, 48, 0, 180);
-    }
-
-    void onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo,
-                      int reason) override
-    {
-        bleDeviceConnected = false;
-        Serial.println("Device Disconnected");
-        NimBLEDevice::startAdvertising(); // Restart advertising
-    }
-
-    void onMTUChange(uint16_t MTU, NimBLEConnInfo &connInfo) override
-    {
-        Serial.printf("MTU updated: %u for connection ID: %u\n", MTU,
-                      connInfo.getConnHandle());
-    }
-} BTServerCallbacks;
-
-class CharacteristicCallbacks : public NimBLECharacteristicCallbacks
-{
-    void onRead(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo) override
-    {
-        Serial.printf("%s : onRead(), value: %s\n",
-                      pCharacteristic->getUUID().toString().c_str(),
-                      pCharacteristic->getValue().c_str());
-    }
-
-    void onWrite(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo) override
-    {
-        Serial.printf("%s : onWrite(), value: %s\n",
-                      pCharacteristic->getUUID().toString().c_str(),
-                      pCharacteristic->getValue().c_str());
-    }
-
-    void onStatus(NimBLECharacteristic *pCharacteristic, int code) override
-    {
-#ifdef COMPASS_DEBUG
-        Serial.printf("Notification/Indication return code: %d, %s\n", code,
-                      NimBLEUtils::returnCodeToString(code));
-#endif
-    }
-
-    void onSubscribe(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo,
-                     uint16_t subValue) override
-    {
-        std::string str = "Client ID: ";
-        str += connInfo.getConnHandle();
-        str += " Address: ";
-        str += connInfo.getAddress().toString();
-        if (subValue == 0)
-        {
-            str += " Unsubscribed to ";
-        }
-        else if (subValue == 1)
-        {
-            str += " Subscribed to notifications for ";
-        }
-        else if (subValue == 2)
-        {
-            str += " Subscribed to indications for ";
-        }
-        else if (subValue == 3)
-        {
-            str += " Subscribed to notifications and indications for ";
-        }
-        str += std::string(pCharacteristic->getUUID());
-
-        Serial.printf("%s\n", str.c_str());
-    }
-} chrCallbacks;
-
-class DescriptorCallbacks : public NimBLEDescriptorCallbacks
-{
-    void onWrite(NimBLEDescriptor *pDescriptor, NimBLEConnInfo &connInfo) override
-    {
-        std::string dscVal = pDescriptor->getValue();
-        Serial.printf("Descriptor written value: %s\n", dscVal.c_str());
-    }
-
-    void onRead(NimBLEDescriptor *pDescriptor, NimBLEConnInfo &connInfo) override
-    {
-        Serial.printf("%s Descriptor read\n", pDescriptor->getUUID().toString().c_str());
-    }
-} dscCallbacks;
-
-#endif
-
-void initBT()
-{
-#ifdef BT_NM
-    // Initialize BLE device
-    NimBLEDevice::init("RSSI_Radar");
-
-    // Get and print the MAC address
-    String macAddress = NimBLEDevice::getAddress().toString().c_str();
-    Serial.println("Bluetooth MAC Address: " + macAddress);
-
-    // Create BLE server
-    pServer = NimBLEDevice::createServer();
-
-    if (!pServer)
-    {
-        Serial.println("Failed to create BLE Server");
-    }
-
-    pServer->setCallbacks(&BTServerCallbacks);
-
-    // Create a BLE service
-    NimBLEService *pService = pServer->createService(SERVICE_UUID);
-
-    // Create a BLE characteristic
-    pCharacteristic = pService->createCharacteristic(
-        CHARACTERISTIC_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
-    pCharacteristic->setCallbacks(&chrCallbacks);
-
-    // Start the service
-    pService->start();
-
-    // esp_task_wdt_init(20, true); // Increase timeout to 10 seconds
-    // esp_task_wdt_add(NULL);
-
-    // Start advertising
-    pAdvertising = NimBLEDevice::getAdvertising();
-    pAdvertising->addServiceUUID(SERVICE_UUID);
-    pAdvertising->setName("ESP32_RSSI_Radar"); // Set the device name
-    // pAdvertising->setMinInterval(300);
-    // pAdvertising->setMaxInterval(350);
-    pAdvertising->enableScanResponse(true);
-    // pAdvertising->setScanResponse(true); // Allow scan responses
-
-    pAdvertising->start();
-
-    Serial.println("BLE server started.");
-#else
-    BLEDevice::init("ESP32_RADAR");
-    pServer = BLEDevice::createServer();
-    pServer->setCallbacks(new MyServerCallbacks());
-
-    BLEService *pService = pServer->createService(SERVICE_UUID);
-
-    pCharacteristic = pService->createCharacteristic(
-        CHARACTERISTIC_UUID, BLECharacteristic::PROPERTY_READ |
-                                 BLECharacteristic::PROPERTY_WRITE |
-                                 BLECharacteristic::PROPERTY_NOTIFY);
-
-    pCharacteristic->setValue("Hello from ESP32");
-    pService->start();
-
-    pAdvertising = BLEDevice::getAdvertising();
-    pAdvertising->addServiceUUID(SERVICE_UUID);
-    pAdvertising->setScanResponse(true);
-    pAdvertising->setMinInterval(300);
-    pAdvertising->setMaxInterval(350);
-    BLEDevice::startAdvertising();
-
-    Serial.println("BLE server is ready!");
-#endif
-}
-
-#endif
-
-// Function to send RSSI and Heading Data
-void sendBTData(float heading, float rssi)
-{
-    String data =
-        "RSSI_HEADING: '{H:" + String(heading) + ",RSSI:-" + String(rssi) + "}'";
-
-#ifdef COMPASS_DEBUG
-    Serial.println("Sending data: " + data);
-#endif
-#ifdef BT_MOBILE
-    pCharacteristic->setValue(data.c_str()); // Set BLE characteristic value
-    pCharacteristic->notify();               // Notify connected client
-#endif
-}
-
-// Send Scan Result to BLE
-void sendBTData(Message &msg)
-{
-    if (msg.type != SCAN_HEADING_MAX && msg.type != SCAN_MAX_RESULT &&
-        msg.type != SCAN_RESULT)
-    {
-        Serial.println("Unsupported message type: " + String(msg.type));
-        return;
-    }
-
-    String data = "{\"SCAN_RESULT\":{\"Hmin\":" + String(msg.payload.dump.heading_min) +
-                  ",\"Hmax\":" + String(msg.payload.dump.heading_max) + ",\"Spectrum\":[";
-
-    for (int i = 0; i < msg.payload.dump.sz; i++)
-    {
-        data += String(i == 0 ? "" : ",") +
-                "{\"F\":" + String(msg.payload.dump.freqs_khz[i]) +
-                ",\"R\":" + String(msg.payload.dump.rssis[i]) +
-                (msg.payload.dump.rssis2 == NULL
-                     ? ""
-                     : ",\"R2\":" + String(msg.payload.dump.rssis2[i])) +
-                "}";
-    }
-
-    data += "]}}";
-#ifdef COMPASS_DEBUG
-    Serial.println("Sending data: " + data);
-#endif
-#ifdef BT_MOBILE
-    pCharacteristic->setValue(data.c_str()); // Set BLE characteristic value
-    pCharacteristic->notify();               // Notify connected client
-#endif
-}
+// BT module is in lib/bt/
 
 #ifndef LILYGO
 #include <heltec_unofficial.h>
-// This file contains a binary patch for the SX1262
-#include "modules/SX126x/patches/SX126x_patch_scan.h"
-#endif // end ifndef LILYGO
+#endif
 
 #if defined(LILYGO)
-// LiLyGO device does not support the auto download mode, you need to get into the
-// download mode manually. To do so, press and hold the BOOT button and then press the
-// RESET button once. After that release the BOOT button. Or OFF->ON together with BOOT
-
-// Default LilyGO code
 #include <LoRaBoards.h>
-
-// #include "utilities.h"
-//  Our Code
 #include <LiLyGo.h>
-#endif // end LILYGO
+#endif
 
 #include <bus.h>
 #include <heading.h>
-#include <radio.h>
 
 DroneHeading droneHeading;
 Compass *compass = NULL;
 HeadingSensor &headingSensor = droneHeading;
-
-RadioModule *radio2;
 
 #define BT_SCAN_DELAY 60 * 1 * 1000
 #define WF_SCAN_DELAY 60 * 2 * 1000
@@ -351,7 +77,7 @@ long noDevicesMillis = 0, cycleCnt = 0;
 bool present = false;
 bool scanFinished = true;
 
-bool radioIsScan = false;
+// radioIsScan is in lib/radio_init/
 
 // time to scan BT
 #define BT_SCAN_TIME 10
@@ -587,21 +313,8 @@ uint8_t button_pressed_counter = 0;
 // #define JOYSTICK_ENABLED
 #endif
 
-#include "joyStick.h"
-
-// project components
-#if (defined(WIFI_SCANNING_ENABLED) || defined(BT_SCANNING_ENABLED)) &&                  \
-    defined(OSD_ENABLED)
-#include "BT_WIFI_scan.h"
-#endif
-
-#if defined(WIFI_SCANNING_ENABLED) && defined(OSD_ENABLED)
-scanWiFi(osd)
-#endif
-
-#if defined(BT_SCANNING_ENABLED) && defined(OSD_ENABLED)
-    scanBT(osd)
-#endif
+#include "input.h"
+#include "bt_wifi_scan.h"
 
 #ifdef OSD_ENABLED
         unsigned short selectFreqChar(int bin, int start_level = 0)
@@ -869,52 +582,6 @@ void osdProcess()
 
 Config config;
 
-#ifdef USING_LR1121
-void setLRFreq(float freq)
-{
-    // LR1120::setFrequency updates protected freqMHz/highFreq and runs image
-    // calibration when the hop exceeds RADIOLIB_LR11X0_CAL_IMG_FREQ_TRIG_MHZ.
-    state = radio.setFrequency(freq);
-}
-#endif
-
-float getRSSI(void *param)
-{
-    Scan *r = (Scan *)param;
-#if defined(USING_SX1280PA)
-    // TODO: TEST new feature
-    radio.getRSSI(false);
-#elif defined(USING_LR1121)
-    // Try getRssiInst
-    float rssi;
-    radio.getRssiInst(&rssi);
-    // Serial.println("RSSI: " + String(rssi));
-    // pass the replies
-    return rssi;
-#else
-    return radio.getRSSI(false);
-#endif
-}
-
-float getCAD(void *param)
-{
-    Scan *r = (Scan *)param;
-
-    int16_t err = radio.scanChannel();
-    if (err != RADIOLIB_ERR_NONE)
-    {
-        return -999;
-    }
-
-#ifdef USING_LR1121
-    // LR1121 doesn't implement getRSSI(bool), getRSSI always
-    // returns RSSI of the last packet
-    return radio.getRSSI();
-#else
-    return radio.getRSSI(true);
-#endif
-}
-
 Scan r;
 
 #define WATERFALL_SENSITIVITY 0.05
@@ -924,201 +591,7 @@ StackedChart stacked(display, 0, 0, 0, 0);
 
 UptimeClock *uptime;
 
-int16_t initForScan(float freq)
-{
-    int16_t state;
-
-#if defined(USING_SX1280PA)
-    state = radio.beginGFSK(freq);
-#elif defined(USING_LR1121)
-    state = radio.beginGFSK(freq, 4.8F, 5.0F, 156.2F, 10, 16U, 1.6F);
-    // RF Switch info Provided by LilyGo support:
-    // https://github.com/Xinyuan-LilyGO/LilyGo-LoRa-Series/blob/f2d3d995cba03c65a7031c73e212f106b03c95a2/examples/RadioLibExamples/Receive_Interrupt/Receive_Interrupt.ino#L279
-
-    // LR1121
-    // set RF switch configuration for Wio WM1110
-    // Wio WM1110 uses DIO5 and DIO6 for RF switching
-    static const uint32_t rfswitch_dio_pins[] = {RADIOLIB_LR11X0_DIO5,
-                                                 RADIOLIB_LR11X0_DIO6, RADIOLIB_NC,
-                                                 RADIOLIB_NC, RADIOLIB_NC};
-
-    static const Module::RfSwitchMode_t rfswitch_table[] = {
-        // mode                  DIO5  DIO6
-        {LR11x0::MODE_STBY, {LOW, LOW}},  {LR11x0::MODE_RX, {HIGH, LOW}},
-        {LR11x0::MODE_TX, {LOW, HIGH}},   {LR11x0::MODE_TX_HP, {LOW, HIGH}},
-        {LR11x0::MODE_TX_HF, {LOW, LOW}}, {LR11x0::MODE_GNSS, {LOW, LOW}},
-        {LR11x0::MODE_WIFI, {LOW, LOW}},  END_OF_MODE_TABLE,
-    };
-    radio.setRfSwitchTable(rfswitch_dio_pins, rfswitch_table);
-
-    // LR1121 TCXO Voltage 2.85~3.15V
-    radio.setTCXO(3.0);
-    heltec_delay(1000);
-#else
-    state = radio.beginFSK(freq);
-#endif
-
-    int gotoAcounter = 0;
-A:
-#ifdef METHOD_RSSI
-    // TODO: try RADIOLIB_SX126X_RX_TIMEOUT_INF
-#ifdef USING_SX1280PA
-    state = radio.startReceive(RADIOLIB_SX128X_RX_TIMEOUT_NONE);
-#elif USING_LR1121
-    state = radio.startReceive(RADIOLIB_LR11X0_RX_TIMEOUT_NONE);
-#else
-    state = radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_NONE);
-#endif
-
-    if (state != RADIOLIB_ERR_NONE)
-    {
-        Serial.print(F("Failed to start receive mode, error code: "));
-        display.drawString(0, 64 - 10, "E:startReceive");
-        display.display();
-        heltec_delay(2000);
-        Serial.println(state);
-        gotoAcounter++;
-        if (gotoAcounter < 5)
-        {
-            goto A;
-        }
-    }
-
-#endif
-
-    return state;
-}
-
-bool setFrequency(float curr_freq)
-{
-    r.current_frequency = curr_freq;
-    LOG("setFrequency:%f\n", r.current_frequency);
-    // Serial.println("setFrequency:" + String(curr_freq));
-
-    int16_t state;
-#ifdef USING_SX1280PA
-    int16_t state1 =
-        radio.setFrequency(r.current_frequency); // 1280 doesn't have calibration
-
-    state = radio.startReceive(RADIOLIB_SX128X_RX_TIMEOUT_INF);
-    if (state != RADIOLIB_ERR_NONE)
-    {
-        Serial.println("Error:startReceive:" + String(state));
-    }
-
-    state = state1;
-#elif USING_SX1276
-    state = radio.setFrequency(r.current_frequency);
-#elif USING_LR1121
-    // state = radio.setRfFrequency((uint32_t)(r.current_frequency * 1000000.0f));
-    //  TODO: make calibration, DONE!!
-    //  ToDO: check how RF switch works continues scanning when init on low doesn't work
-    //  for high freq
-    setLRFreq(r.current_frequency);
-#else
-    state = radio.setFrequency(r.current_frequency,
-                               true); // false = calibration is needed here
-#endif
-    if (state != RADIOLIB_ERR_NONE)
-    {
-        display.drawString(0, 64 - 10,
-                           "E(" + String(state) +
-                               "):setFrequency:" + String(r.current_frequency));
-        Serial.println("E(" + String(state) +
-                       "):setFrequency:" + String(r.current_frequency));
-        display.display();
-        // delay(2);
-        return false;
-    }
-
-    return true;
-}
-
-void init_radio()
-{
-    // initialize SX1262 FSK modem at the initial frequency
-    both.println("Init radio");
-#ifndef INIT_FREQ
-    state = initForScan(CONF_FREQ_BEGIN);
-#else
-    state = initForScan(INIT_FREQ);
-#endif
-    if (state == RADIOLIB_ERR_NONE)
-    {
-        radioIsScan = true;
-        Serial.println(F("success!"));
-    }
-    else
-    {
-        display.println("Error:" + String(state));
-        Serial.print(F("failed, code "));
-        Serial.println(state);
-        while (true)
-        {
-            delay(5);
-        }
-    }
-
-#ifdef METHOD_SPECTRAL
-    // upload a patch to the SX1262 to enable spectral scan
-    // NOTE: this patch is uploaded into volatile memory,
-    // and must be re-uploaded on every power up
-    both.println("Upload SX1262 patch");
-
-    // Upload binary patch into the SX126x device RAM. Patch is needed to e.g.,
-    // enable spectral scan and must be uploaded again on every power cycle.
-    RADIOLIB_OR_HALT(radio.uploadPatch(sx126x_patch_scan, sizeof(sx126x_patch_scan)));
-    // configure scan bandwidth and disable the data shaping
-#endif
-
-    both.println("Setting up radio");
-#ifdef USING_SX1280PA
-    // RADIOLIB_OR_HALT(radio.setBandwidth(RADIOLIB_SX128X_LORA_BW_406_25));
-#elif USING_SX1276
-    // 	Receiver bandwidth in kHz. Allowed values
-    // are 2.6, 3.1, 3.9, 5.2, 6.3, 7.8, 10.4, 12.5, 15.6, 20.8, 25, 31.3, 41.7,
-    // 50, 62.5, 83.3, 100, 125, 166.7, 200 and 250 kHz.
-    RADIOLIB_OR_HALT(radio.setRxBandwidth(250));
-#else
-    RADIOLIB_OR_HALT(radio.setRxBandwidth(BANDWIDTH));
-#endif
-
-    // and disable the data shaping
-    state = radio.setDataShaping(RADIOLIB_SHAPING_NONE);
-    if (state != RADIOLIB_ERR_NONE)
-    {
-        Serial.println("Error:setDataShaping:" + String(state));
-    }
-    both.println("Starting scanning...");
-
-    // calibrate only once ,,, at startup
-    // TODO: check documentation (9.2.1) if we must calibrate in certain ranges
-    setFrequency(CONF_FREQ_BEGIN);
-
-    delay(100);
-
-#ifdef USING_SX1262
-    if (config.radio2.enabled && config.radio2.module.equalsIgnoreCase("SX1262"))
-    {
-
-        radio2 = new SX1262Module(config.radio2);
-        state = radio2->beginScan(CONF_FREQ_BEGIN, BANDWIDTH, RADIOLIB_SHAPING_NONE);
-        if (state == RADIOLIB_ERR_NONE)
-        {
-            both.println("Initialized additional module OK");
-            radio2->setRxBandwidth(BANDWIDTH);
-        }
-        else
-        {
-            Serial.printf("Error initializing additional module: %d\n", state);
-            if (state == RADIOLIB_ERR_CHIP_NOT_FOUND)
-            {
-                Serial.println("Radio2: CHIP NOT FOUND");
-            }
-        }
-    }
-#endif
-}
+// Radio init functions are in lib/radio_init/
 
 struct frequency_scan_result
 {
@@ -1131,6 +604,8 @@ struct frequency_scan_result
     size_t readings_sz;
 } frequency_scan_result;
 
+static SemaphoreHandle_t scan_result_mutex = xSemaphoreCreateMutex();
+
 TaskHandle_t logToSerial = NULL;
 TaskHandle_t dumpToComms = NULL;
 
@@ -1138,6 +613,7 @@ void eventListenerForReport(void *arg, Event &e)
 {
     if (e.type == EventType::DETECTED)
     {
+        xSemaphoreTake(scan_result_mutex, portMAX_DELAY);
         if (e.epoch != frequency_scan_result.last_epoch)
         {
             frequency_scan_result.dump.sz = 0;
@@ -1203,10 +679,11 @@ void eventListenerForReport(void *arg, Event &e)
                 frequency_scan_result.dump.heading_min =
                     min(frequency_scan_result.dump.heading_min, heading);
                 frequency_scan_result.dump.heading_max =
-                    min(frequency_scan_result.dump.heading_max, heading);
+                    max(frequency_scan_result.dump.heading_max, heading);
             }
         }
 
+        xSemaphoreGive(scan_result_mutex);
         return;
     }
 
@@ -1258,7 +735,9 @@ void dumpToCommsTask(void *parameter)
 
         Message m;
         m.type = MessageType::SCAN_RESULT;
+        xSemaphoreTake(scan_result_mutex, portMAX_DELAY);
         m.payload.dump = frequency_scan_result.dump;
+        xSemaphoreGive(scan_result_mutex);
         if (requested_host)
         {
             HostComms->send(m);
@@ -3207,7 +2686,7 @@ void doScan()
 #ifdef WIFI_SCANNING_ENABLED
     if ((millis() - wf_start) > WF_SCAN_DELAY)
     {
-        scanWiFi();
+        scanWiFi(osd);
         wf_start = millis();
         // prevent BT scanning after scanning WF
         bt_start = millis();
@@ -3217,7 +2696,7 @@ void doScan()
     if ((millis() - bt_start) > BT_SCAN_DELAY)
     {
 
-        scanBT();
+        scanBT(osd);
         bt_start = millis();
     }
 #endif
@@ -3248,7 +2727,7 @@ std::unordered_map<int, int16_t> findMaxRssi(int16_t *rssis, uint32_t *freqs_khz
     return maxRssiPerMHz;
 }
 
-bool lock = false;
+// dead lock variable removed
 Result<int16_t, Message *> checkRadio(RadioComms &comms)
 {
     radioIsScan = false;
@@ -3278,13 +2757,6 @@ int16_t sendMessage(RadioComms &comms, Message &msg)
     {
         Serial.printf("Failed to configure Radio: %d\n", status);
         return status;
-    }
-
-    if (false)
-    {
-        lock = true;
-
-        lock = false;
     }
 
     status = comms.send(msg);
