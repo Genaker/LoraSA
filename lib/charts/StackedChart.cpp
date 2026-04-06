@@ -10,7 +10,7 @@ size_t StackedChart::addChart(Chart *c)
     Chart **cc = new Chart *[charts_sz + 1];
     memcpy(cc, charts, charts_sz * sizeof(Chart *));
     cc[charts_sz] = c;
-    free(charts);
+    delete[] charts;
 
     c->reset(pos_x + c->pos_x, pos_y + c->pos_y, trim_w(c->pos_x, c->width, width),
              c->height);

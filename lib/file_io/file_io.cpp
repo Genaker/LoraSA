@@ -1,7 +1,6 @@
-#include "FS.h"
+#include "file_io.h"
 #include <LittleFS.h>
 
-// Initialize LittleFS
 void initLittleFS()
 {
     if (!LittleFS.begin(true))
@@ -25,7 +24,7 @@ String readFile(fs::FS &fs, const char *path)
     Serial.println("- read from file:");
     while (file.available())
     {
-        content = file.readStringUntil('\n');
+        content += file.readStringUntil('\n') + "\n";
     }
     file.close();
     return content;

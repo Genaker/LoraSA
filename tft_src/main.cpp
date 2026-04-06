@@ -62,8 +62,7 @@ static SPIClass *gspi_lcd = NULL;
 
 char buffer[256];
 
-// Disabling default Heltec lib OLED display
-#define HELTEC_NO_DISPLAY
+// HELTEC_NO_DISPLAY is set in platformio.ini build_flags
 #define DISPLAY_WIDTH 320
 #define DISPLAY_HEIGHT 170
 // Without this line Lora Radio doesn't work with heltec lib
@@ -131,7 +130,7 @@ uint64_t RANGE_PER_PAGE = FREQ_END - FREQ_BEGIN; // FREQ_BEGIN + DISPLAY_WIDTH;
 uint64_t iterations = RANGE / RANGE_PER_PAGE;
 
 // uint64_t range_frequency = FREQ_END - FREQ_BEGIN;
-uint64_t median_frequency = FREQ_BEGIN + FREQ_END - FREQ_BEGIN / 2;
+uint64_t median_frequency = FREQ_BEGIN + (FREQ_END - FREQ_BEGIN) / 2;
 
 // #define DISABLE_PLOT_CHART false   // unused
 
@@ -260,7 +259,7 @@ void setBrightness()
     {
         current_brightness = 255;
     }
-    ledcWrite(st7789_brightness_channel, current_brightness);
+    ledcWrite(st7789_LED_K_Pin, current_brightness);
 }
 
 #ifdef SERIAL_OUT
@@ -588,22 +587,17 @@ void loop()
         st7789->drawPixel(x1, rssiToPix(rssi2) - 4, rssiToColor(abs(rssi2)));
 
 #ifdef SERIAL_OUT
-        frequency_scan_result.dump.freqs_khz[frequency_scan_result.dump.sz] =
-            (int)freq * 1000;
-
-        frequency_scan_result.dump.rssis[frequency_scan_result.dump.sz] = rssi2;
-        frequency_scan_result.dump.sz++;
-        if (frequency_scan_result.dump.sz > 10000)
+        if (frequency_scan_result.dump.sz < 10000)
         {
-            Serial.println("frequency_scan_result overflow 10000");
+            frequency_scan_result.dump.freqs_khz[frequency_scan_result.dump.sz] =
+                (int)freq * 1000;
+            frequency_scan_result.dump.rssis[frequency_scan_result.dump.sz] = rssi2;
+            frequency_scan_result.dump.sz++;
         }
 
 #endif
-        if (true /*draw full line*/)
-        {
             st7789->drawFastVLine(x1, rssiToPix(rssi2), lower_level - rssiToPix(rssi2),
-                                  rssiToColor(abs(rssi2)));
-        }
+                              rssiToColor(abs(rssi2)));
         // Draw Update Cursor
         st7789->drawFastVLine(x1 + 1, lower_level, -lower_level + 11, ST7789_BLACK);
         st7789->drawFastVLine(x1 + 2, lower_level, -lower_level + 11, ST7789_BLACK);
@@ -881,12 +875,9 @@ void downgradeBandwidth()
 
 void setup()
 {
-    uint32_t *f = new uint32_t[10000];
-    int16_t *r = new int16_t[10000];
-
 #ifdef SERIAL_OUT
-    frequency_scan_result.dump.freqs_khz = f;
-    frequency_scan_result.dump.rssis = r;
+    frequency_scan_result.dump.freqs_khz = new uint32_t[10000];
+    frequency_scan_result.dump.rssis = new int16_t[10000];
 #endif
 
     for (int i = 0; i < MAX_MHZ_INTERVAL; i++)
@@ -916,10 +907,8 @@ void setup()
     digitalWrite(st7789_LED_K_Pin, HIGH);
 
     // set brightness:
-    ledcSetup(st7789_brightness_channel, st7789_brightness_freq,
-              st7789_brightness_resolution);
-    ledcAttachPin(st7789_LED_K_Pin, st7789_brightness_channel);
-    ledcWrite(st7789_brightness_channel, current_brightness);
+    ledcAttach(st7789_LED_K_Pin, st7789_brightness_freq, st7789_brightness_resolution);
+    ledcWrite(st7789_LED_K_Pin, current_brightness);
 
     // pinMode(5, OUTPUT);
     // digitalWrite(5, HIGH);
