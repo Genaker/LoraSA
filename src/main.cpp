@@ -872,28 +872,9 @@ Config config;
 #ifdef USING_LR1121
 void setLRFreq(float freq)
 {
-    bool skipCalibration = false;
-    /**
-   if(!(((freq >= 150.0) && (freq <= 960.0)) ||
-     ((freq >= 1900.0) && (freq <= 2200.0)) ||
-     ((freq >= 2400.0) && (freq <= 2500.0)))) {
-       return(RADIOLIB_ERR_INVALID_FREQUENCY);
-   }**/
-
-    // check if we need to recalibrate image
-    // int16_t state;
-
-    if (!true && (fabsf(freq - radio.freqMHz) >= RADIOLIB_LR11X0_CAL_IMG_FREQ_TRIG_MHZ))
-    {
-        state = radio.calibrateImageRejection(freq - 4, freq + 4);
-        // RADIOLIB_ASSERT(state);
-    }
-
-    // set frequency
-    state = radio.setRfFrequency((uint32_t)(freq * 1000000.0f));
-    // RADIOLIB_ASSERT(state);
-    radio.freqMHz = freq;
-    radio.highFreq = (freq > 1000.0);
+    // LR1120::setFrequency updates protected freqMHz/highFreq and runs image
+    // calibration when the hop exceeds RADIOLIB_LR11X0_CAL_IMG_FREQ_TRIG_MHZ.
+    state = radio.setFrequency(freq);
 }
 #endif
 
