@@ -61,8 +61,6 @@ void setupBoards(bool disable_u8g2 = true);
 
 bool beginSDCard();
 
-bool beginDisplay();
-
 void disablePeripherals();
 
 bool beginPower();

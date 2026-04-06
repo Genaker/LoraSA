@@ -528,34 +528,6 @@ void loopPMU()
 #endif
 }
 
-bool beginDisplay()
-{
-    /**
-    Wire.beginTransmission(DISPLAY_ADDR);
-    if (Wire.endTransmission() == 0)
-    {
-        Serial.printf("Found Display model at 0x%X address\n", DISPLAY_ADDR);
-        u8g2 = new DISPLAY_MODEL(U8G2_R0, U8X8_PIN_NONE);
-        u8g2->begin();
-        u8g2->clearBuffer();
-        u8g2->setFont(u8g2_font_inb19_mr);
-        u8g2->drawStr(0, 30, "LilyGo");
-        u8g2->drawHLine(2, 35, 47);
-        u8g2->drawHLine(3, 36, 47);
-        u8g2->drawVLine(45, 32, 12);
-        u8g2->drawVLine(46, 33, 12);
-        u8g2->setFont(u8g2_font_inb19_mf);
-        u8g2->drawStr(58, 60, "LoRa");
-        u8g2->sendBuffer();
-        u8g2->setFont(u8g2_font_fur11_tf);
-        delay(3000);
-        return true;
-    }
-
-    Serial.printf("Warning: Failed to find Display at 0x%0X address\n", DISPLAY_ADDR);
-    return false;*/
-}
-
 bool beginSDCard()
 {
 #ifdef SDCARD_CS
@@ -819,11 +791,6 @@ void setupBoards(bool disable_u8g2)
         }
 
         Serial.printf("SD card %s is ready.\n", card_type);
-    }
-
-    if (!disable_u8g2)
-    {
-        beginDisplay();
     }
 
     beginWiFi();

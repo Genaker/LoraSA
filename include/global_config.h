@@ -32,10 +32,14 @@
 #define BUZZER_PIN 35
 #endif
 
-// REB trigger PIN
-#define REB_PIN 42
-#ifdef T3_V1_6_SX1276
+// REB trigger PIN — default 42, but LILYGO uses 42 for COMPASS_SCL (I2C),
+// so remap to 39 to avoid fighting the I2C peripheral.
+#ifdef LILYGO
+#define REB_PIN 39
+#elif defined(T3_V1_6_SX1276)
 #define REB_PIN 35
+#else
+#define REB_PIN 42
 #endif
 
 #define WATERFALL_ENABLED true
