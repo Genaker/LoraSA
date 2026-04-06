@@ -1,3 +1,4 @@
+#define RADIOLIB_GODMODE (1)
 #include "radio.h"
 #include <LoRaBoards.h>
 #include <bus.h>
