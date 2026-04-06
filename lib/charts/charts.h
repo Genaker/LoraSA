@@ -80,6 +80,13 @@ struct BarChart : ProgressChart, Listener
         memset(changed, 0, w * sizeof(bool));
     };
 
+    ~BarChart()
+    {
+        // Clean up dynamically allocated arrays
+        delete[] ys;
+        delete[] changed;
+    }
+
     void reset(uint16_t x, uint16_t y, uint16_t w, uint16_t h) override;
     void clear();
     int updatePoint(float x, float y) override;
@@ -121,6 +128,15 @@ struct StackedChart : Chart, Listener
 
     StackedChart(Display_t &d, uint16_t x, uint16_t y, uint16_t w, uint16_t h)
         : Chart(d, x, y, w, h), charts(NULL), charts_sz(0) {};
+
+    ~StackedChart()
+    {
+        // Clean up dynamically allocated chart array
+        if (charts != NULL)
+        {
+            delete[] charts;
+        }
+    }
 
     /*
      * addChart adds c to the StackedChart, treats pos_x and pos_y of the chart

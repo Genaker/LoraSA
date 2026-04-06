@@ -11,15 +11,50 @@ import json
 from datetime import datetime
 from argparse import RawTextHelpFormatter
 
+# Import shared utilities
+try:
+    from serial_utils import crc16, parse_scan_result, DEFAULT_BAUDRATE
+except ImportError:
+    # Fallback if serial_utils is not available (backward compatibility)
+    print("Warning: serial_utils module not found, using local definitions", file=sys.stderr)
+    DEFAULT_BAUDRATE = 115200
+    
+    # Local definitions as fallback
+    POLY = 0x1021
+    
+    def crc16(s, c):
+        """Calculate CRC16 CCITT-FALSE checksum."""
+        c = c ^ 0xffff
+        for ch in s:
+            c = c ^ (ord(ch) << 8)
+            for i in range(8):
+                if c & 0x8000:
+                    c = ((c << 1) ^ POLY) & 0xffff
+                else:
+                    c = (c << 1) & 0xffff
+        return c ^ 0xffff
+    
+    def parse_scan_result(line):
+        """Parse a JSON line from the serial input."""
+        if not line or 'SCAN_RESULT ' not in line:
+            raise ValueError("Line does not contain SCAN_RESULT")
+        line = line[line.index('SCAN_RESULT '):]
+        parts = line.split(' ', 2)
+        if len(parts) < 3:
+            raise ValueError(f"Invalid SCAN_RESULT format")
+        _, count_str, rest = parts
+        count = int(count_str)
+        data = json.loads(rest.replace('(', '[').replace(')', ']'))
+        return count, data
+
 # Constants
 SCAN_WIDTH = 33  # number of samples in each scanline
 OUT_PATH = "out"  # output path for saved files
 
 # Default settings
-DEFAULT_BAUDRATE = 115200
 DEFAULT_COLOR_MAP = 'viridis'
 DEFAULT_SCAN_LEN = 200
-DEFAULT_RSSI_OFFSET = -11
+DEFAULT_RSSI_OFFSET = -11  # dBm offset for first power bin
 
 def print_progress_bar(iteration, total, prefix='', suffix='', decimals=1, length=50, fill='█', print_end="\r"):
     """
@@ -41,25 +76,6 @@ def print_progress_bar(iteration, total, prefix='', suffix='', decimals=1, lengt
     if iteration == total: 
         print()
 
-def parse_line(line):
-    """Parse a JSON line from the serial input."""
-
-    line = line[line.index('SCAN_RESULT '):]  # support garbage interleaving with the string
-    _, count, rest = line.split(' ', 2)
-    return int(count), json.loads(rest.replace('(', '[').replace(')', ']'))
-
-POLY = 0x1021
-def crc16(s, c):
-    c = c ^ 0xffff
-    for ch in s:
-        c = c ^ (ord(ch) << 8)
-        for i in range(8):
-            if c & 0x8000:
-                c = ((c << 1) ^ POLY) & 0xffff
-            else:
-                c = (c << 1) & 0xffff
-
-    return c ^ 0xffff
 
 def main():
     parser = argparse.ArgumentParser(formatter_class=RawTextHelpFormatter, description='''\
@@ -138,9 +154,9 @@ def main():
 
                 lines += 1
                 try:
-                    count, data = parse_line(line)
+                    count, data = parse_scan_result(line)
                     data.sort()
-                except json.JSONDecodeError:
+                except (ValueError, json.JSONDecodeError) as e:
                     errors += 1
                     continue
 

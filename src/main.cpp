@@ -89,6 +89,9 @@ class MyServerCallbacks : public BLEServerCallbacks
     }
 };
 
+// Create static instance to avoid memory leak
+MyServerCallbacks serverCallbacks;
+
 #else
 #include <NimBLEDevice.h>
 
@@ -242,7 +245,7 @@ void initBT()
 #else
     BLEDevice::init("ESP32_RADAR");
     pServer = BLEDevice::createServer();
-    pServer->setCallbacks(new MyServerCallbacks());
+    pServer->setCallbacks(&serverCallbacks);  // Use static instance instead of new
 
     BLEService *pService = pServer->createService(SERVICE_UUID);
 
